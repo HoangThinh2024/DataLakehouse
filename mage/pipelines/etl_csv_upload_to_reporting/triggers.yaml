@@ -1,0 +1,16 @@
+triggers:
+- description: null
+  envs: []
+  last_enabled_at: 2026-04-18 09:48:57.724475+00:00
+  name: every_5_minutes_csv_upload
+  pipeline_uuid: etl_csv_upload_to_reporting
+  schedule_interval: '*/5 * * * *'
+  schedule_type: time
+  settings:
+    allow_blocks_to_fail: false
+    skip_if_previous_running: true
+  sla: null
+  start_time: '2024-01-01T00:00:00+00:00'
+  status: active
+  token: ''
+  variables: {}
