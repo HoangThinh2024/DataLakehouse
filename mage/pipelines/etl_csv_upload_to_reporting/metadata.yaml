@@ -1,0 +1,56 @@
+blocks:
+- all_upstream_blocks_executed: true
+  color: null
+  configuration: {}
+  downstream_blocks:
+  - clean_csv_for_reporting
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: Extract CSV From RustFS
+  retry_config: null
+  status: not_executed
+  timeout: null
+  type: data_loader
+  upstream_blocks: []
+  uuid: extract_csv_from_rustfs
+
+- all_upstream_blocks_executed: true
+  color: null
+  configuration: {}
+  downstream_blocks:
+  - load_csv_reporting_clickhouse
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: Clean CSV For Reporting
+  retry_config: null
+  status: not_executed
+  timeout: null
+  type: transformer
+  upstream_blocks:
+  - extract_csv_from_rustfs
+  uuid: clean_csv_for_reporting
+
+- all_upstream_blocks_executed: true
+  color: null
+  configuration: {}
+  downstream_blocks: []
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: Load CSV Reporting ClickHouse
+  retry_config: null
+  status: not_executed
+  timeout: null
+  type: data_exporter
+  upstream_blocks:
+  - clean_csv_for_reporting
+  uuid: load_csv_reporting_clickhouse
+
+name: ETL CSV Upload to Reporting
+type: python
+uuid: etl_csv_upload_to_reporting
