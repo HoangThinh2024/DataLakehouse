@@ -159,6 +159,8 @@ services:
     <<: *dlh-runtime
     image: mageai/mageai:latest
     container_name: dlh-mage
+    env_file:
+      - .env
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
       MAGE_CODE_PATH: /home/src/mage
@@ -169,6 +171,7 @@ services:
       - "${DLH_BIND_IP:-127.0.0.1}:${DLH_MAGE_PORT:-26789}:6789"
     volumes:
       - mage_data:/home/src
+      - ./io_config.yaml:/home/src/io_config.yaml:ro
     depends_on:
       postgres-bootstrap:
         condition: service_completed_successfully
