@@ -135,7 +135,8 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
+# .env is intentionally tracked in this repo (development config only, no real secrets)
+# .env
 .envrc
 .venv
 env/
