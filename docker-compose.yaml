@@ -1,18 +1,20 @@
 # ============================================================
-# DataLakehouse – Docker Compose
-# Services: PostgreSQL 17, RustFS
+# DataLakehouse – Modern Data Stack Architecture
+# Layers: INGEST → STORAGE → PROCESS → SERVING → REPORT
 # ============================================================
 # Usage:
 #   docker compose up -d
 #   docker compose down
-#   docker compose logs -f
+#   docker compose logs -f <service>
 # ============================================================
 
 services:
 
-  # ----------------------------------------------------------
-  # PostgreSQL 17 – relational metadata store
-  # ----------------------------------------------------------
+  # ═════════════════════════════════════════════════════════
+  # LAYER 2: STORAGE
+  # ═════════════════════════════════════════════════════════
+
+  # PostgreSQL 17 – transactional DB + metadata store
   postgres:
     image: postgres:17
     container_name: postgres
@@ -28,7 +30,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
     networks:
-      - web_network
+      - datalake
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
@@ -37,12 +39,7 @@ services:
       retries: 5
       start_period: 10s
 
-  # ----------------------------------------------------------
-  # RustFS – S3-compatible distributed object storage
-  # S3 API : http://localhost:19000
-  # Console : http://localhost:19001  (default: rustfsadmin / rustfsadmin)
-  # Docs    : https://rustfs.com
-  # ----------------------------------------------------------
+  # RustFS – S3-compatible object storage (Bronze/Silver/Gold)
   rustfs:
     image: rustfs/rustfs:latest
     container_name: rustfs
@@ -63,7 +60,7 @@ services:
     volumes:
       - rustfs_data:/data
     networks:
-      - web_network
+      - datalake
     restart: unless-stopped
     healthcheck:
       test:
@@ -76,9 +73,7 @@ services:
       retries: 3
       start_period: 40s
 
-  # ----------------------------------------------------------
-  # RustFS init - create Lakehouse buckets (bronze/silver/gold)
-  # ----------------------------------------------------------
+  # RustFS init – create Bronze/Silver/Gold buckets
   rustfs-init:
     image: minio/mc:latest
     container_name: rustfs-init
@@ -94,21 +89,235 @@ services:
         mc mb --ignore-existing rustfs/silver
         mc mb --ignore-existing rustfs/gold
     networks:
-      - web_network
+      - datalake
     restart: "no"
 
-# --------------------------------------------------------------
-# Named volumes (data persists across container restarts)
-# --------------------------------------------------------------
+  # ClickHouse – OLAP analytics & data warehouse
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-analytics}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "${CLICKHOUSE_TCP_PORT:-9000}:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    networks:
+      - datalake
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8123/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ═════════════════════════════════════════════════════════
+  # LAYER 3: PROCESSING
+  # ═════════════════════════════════════════════════════════
+
+  # Mage.ai – ETL pipeline orchestration & data cleaning
+  mage:
+    image: mageai/mageai:latest
+    container_name: mage
+    environment:
+      MAGE_CODE_PATH: /home/src/mage
+      USER_CODE_PATH: /home/src
+    ports:
+      - "${MAGE_PORT:-6789}:6789"
+    volumes:
+      - mage_data:/home/src
+    networks:
+      - datalake
+    restart: unless-stopped
+    command: mage start
+
+  # dbt Core – transform layer (runs in shared Python environment)
+  # Note: dbt runs via Mage or as scheduled container
+  dbt:
+    image: ghcr.io/dbt-labs/dbt-core:latest
+    container_name: dbt
+    volumes:
+      - ./dbt:/root/.dbt
+      - dbt_data:/dbt
+    networks:
+      - datalake
+    restart: "no"
+    entrypoint: ["dbt", "--version"]
+
+  # Great Expectations – data quality validation
+  great-expectations:
+    image: greatexpectations/great_expectations:latest
+    container_name: great-expectations
+    volumes:
+      - great_expectations_data:/great_expectations
+    networks:
+      - datalake
+    restart: "no"
+    ports:
+      - "${GE_PORT:-8888}:8888"
+    command: ["python", "-m", "great_expectations.cli", "--help"]
+
+  # ═════════════════════════════════════════════════════════
+  # LAYER 4: SERVING & MANAGEMENT
+  # ═════════════════════════════════════════════════════════
+
+  # Adminer – lightweight database admin panel
+  adminer:
+    image: adminer:latest
+    container_name: adminer
+    ports:
+      - "${ADMINER_PORT:-8080}:8080"
+    networks:
+      - datalake
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+
+  # NocoDB – web database UI and API
+  nocodb:
+    image: nocodb/nocodb:latest
+    container_name: nocodb
+    environment:
+      NC_DB: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+      LITESTREAM_S3_BUCKET: ${RUSTFS_BUCKET:-nocodb}
+      LITESTREAM_S3_ENDPOINT: http://rustfs:9000
+      LITESTREAM_S3_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
+      LITESTREAM_S3_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
+    ports:
+      - "${NOCODB_PORT:-8081}:8080"
+    depends_on:
+      - postgres
+    networks:
+      - datalake
+    restart: unless-stopped
+
+  # Metabase – internal BI & data exploration
+  metabase:
+    image: metabase/metabase:latest
+    container_name: metabase
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: ${POSTGRES_DB}
+      MB_DB_PORT: 5432
+      MB_DB_USER: ${POSTGRES_USER}
+      MB_DB_PASS: ${POSTGRES_PASSWORD}
+      MB_DB_HOST: postgres
+    ports:
+      - "${METABASE_PORT:-3000}:3000"
+    depends_on:
+      - postgres
+    networks:
+      - datalake
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ═════════════════════════════════════════════════════════
+  # LAYER 5: REPORTING & VISUALIZATION
+  # ═════════════════════════════════════════════════════════
+
+  # Apache Superset – modern open-source BI dashboard
+  superset:
+    image: apache/superset:latest
+    container_name: superset
+    environment:
+      SUPERSET_LOAD_EXAMPLES: "no"
+      SUPERSET_SECRET_KEY: "${SUPERSET_SECRET_KEY:-your-secret-key-change-in-production}"
+    ports:
+      - "${SUPERSET_PORT:-8088}:8088"
+    volumes:
+      - superset_data:/var/lib/superset
+    depends_on:
+      - postgres
+    networks:
+      - datalake
+    restart: unless-stopped
+    command: |
+      sh -c "superset db upgrade && 
+             superset fab create-admin --username admin --firstname Admin --lastname User --email admin@superset.local --password admin && 
+             superset load_examples && 
+             superset run -h 0.0.0.0 -p 8088 --with-threads"
+
+  # Grafana – operational metrics & monitoring
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: "grafana-piechart-panel"
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - datalake
+    restart: unless-stopped
+    depends_on:
+      - postgres
+
+  # ═════════════════════════════════════════════════════════
+  # INFRASTRUCTURE: REVERSE PROXY & LOAD BALANCING
+  # ═════════════════════════════════════════════════════════
+
+  # Nginx Proxy Manager – reverse proxy, SSL, routing
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: nginx-proxy-manager
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "${NPM_ADMIN_PORT:-81}:81"
+    environment:
+      DB_SQLITE_FILE: /data/database.sqlite
+      DISABLE_IPV6: "true"
+    volumes:
+      - npm_data:/data
+      - npm_letsencrypt:/etc/letsencrypt
+    networks:
+      - datalake
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:81/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+# ═════════════════════════════════════════════════════════
+# VOLUMES (data persistence)
+# ═════════════════════════════════════════════════════════
 volumes:
   postgres_data:
     driver: local
   rustfs_data:
     driver: local
+  clickhouse_data:
+    driver: local
+  mage_data:
+    driver: local
+  dbt_data:
+    driver: local
+  great_expectations_data:
+    driver: local
+  superset_data:
+    driver: local
+  grafana_data:
+    driver: local
+  npm_data:
+    driver: local
+  npm_letsencrypt:
+    driver: local
 
-# --------------------------------------------------------------
-# Network
-# --------------------------------------------------------------
+# ═════════════════════════════════════════════════════════
+# NETWORKS (internal service mesh)
+# ═════════════════════════════════════════════════════════
 networks:
-  web_network:
+  datalake:
     driver: bridge
