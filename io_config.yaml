@@ -1,0 +1,9 @@
+version: 0.1.1
+default:
+  POSTGRES_DBNAME: "{{ env_var('MAGE_DB_NAME') }}"
+  POSTGRES_HOST: dlh-postgres
+  POSTGRES_PASSWORD: "{{ env_var('MAGE_DB_PASSWORD') }}"
+  POSTGRES_PORT: 5432
+  POSTGRES_SCHEMA: public
+  POSTGRES_USER: "{{ env_var('MAGE_DB_USER') }}"
+  POSTGRES_CONNECTION_METHOD: direct

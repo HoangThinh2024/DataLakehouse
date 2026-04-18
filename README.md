@@ -139,3 +139,29 @@ Lưu ý:
 ## Tài liệu kiến trúc
 
 - [docs/ARCHITECTURE_MODERN_STACK.md](docs/ARCHITECTURE_MODERN_STACK.md)
+
+## Demo Pipeline Script
+
+Script mẫu cho quy trình `Postgres -> RustFS bronze -> ClickHouse` nằm ở [scripts/demo_to_lakehouse.py](scripts/demo_to_lakehouse.py).
+
+Chạy từ host:
+
+```bash
+pip install -r scripts/requirements.txt
+SOURCE_DB_HOST=127.0.0.1 RUSTFS_ENDPOINT_URL=http://127.0.0.1:29100 CLICKHOUSE_HTTP_URL=http://127.0.0.1:28123 \
+	python scripts/demo_to_lakehouse.py
+```
+
+Nếu chạy trong Docker network của stack, bạn có thể để mặc định:
+- `SOURCE_DB_HOST=dlh-postgres`
+- `RUSTFS_ENDPOINT_URL=http://dlh-rustfs:9000`
+- `CLICKHOUSE_HTTP_URL=http://dlh-clickhouse:8123`
+
+Biến có thể đổi:
+- `SOURCE_SCHEMA` (mặc định `public`)
+- `SOURCE_TABLE` (mặc định `Demo`)
+- `SOURCE_QUERY` nếu muốn tự viết SQL thay vì đọc toàn bộ table `Demo`
+- `RUSTFS_BRONZE_BUCKET` (mặc định `bronze`)
+- `RUSTFS_PREFIX` (mặc định `demo`)
+- `CLICKHOUSE_DB` (mặc định `analytics`)
+- `CLICKHOUSE_TABLE` (mặc định `demo_raw`)
