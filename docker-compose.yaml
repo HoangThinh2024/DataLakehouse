@@ -23,11 +23,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-55432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - datalakehouse-network
+      - web_network
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
@@ -38,8 +38,8 @@ services:
 
   # ----------------------------------------------------------
   # RustFS – S3-compatible distributed object storage
-  # S3 API : http://localhost:9000
-  # Console : http://localhost:9001  (default: rustfsadmin / rustfsadmin)
+  # S3 API : http://localhost:19000
+  # Console : http://localhost:19001  (default: rustfsadmin / rustfsadmin)
   # Docs    : https://rustfs.com
   # ----------------------------------------------------------
   rustfs:
@@ -52,17 +52,17 @@ services:
       - RUSTFS_ADDRESS=0.0.0.0:9000
       - RUSTFS_CONSOLE_ADDRESS=0.0.0.0:9001
       - RUSTFS_CONSOLE_ENABLE=true
-      - RUSTFS_CORS_ALLOWED_ORIGINS=${RUSTFS_CORS_ALLOWED_ORIGINS:-http://localhost:9000}
-      - RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS=${RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS:-http://localhost:9001}
+      - RUSTFS_CORS_ALLOWED_ORIGINS=${RUSTFS_CORS_ALLOWED_ORIGINS:-http://localhost:19000}
+      - RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS=${RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS:-http://localhost:19001}
       - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY}
       - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY}
     ports:
-      - "${RUSTFS_API_PORT:-9000}:9000"
-      - "${RUSTFS_CONSOLE_PORT:-9001}:9001"
+      - "${RUSTFS_API_PORT:-19000}:9000"
+      - "${RUSTFS_CONSOLE_PORT:-19001}:9001"
     volumes:
       - rustfs_data:/data
     networks:
-      - datalakehouse-network
+      - web_network
     restart: unless-stopped
     healthcheck:
       test:
@@ -88,5 +88,5 @@ volumes:
 # Network
 # --------------------------------------------------------------
 networks:
-  datalakehouse-network:
+  web_network:
     driver: bridge
