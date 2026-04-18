@@ -117,6 +117,7 @@ docker compose --profile bootstrap up -d rustfs-init
 - **Data Lakehouse Compliance:** ALL data flows through RustFS layers (Bronze → Silver → Gold) before ClickHouse ingestion
 
 **📘 For detailed architecture documentation, see [Lakehouse Architecture](docs/LAKEHOUSE_ARCHITECTURE.md)**
+**🧪 To validate the stack from the host machine, run `./.venv/bin/python scripts/verify_lakehouse_architecture.py`**
 
 ---
 

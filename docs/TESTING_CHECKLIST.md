@@ -145,10 +145,12 @@ SELECT COUNT(*) FROM analytics.csv_clean_rows;
 
 ### Step 7: Run Verification Script
 ```bash
-# (Requires boto3 in environment)
-python3 scripts/verify_lakehouse_architecture.py
+# Use the project virtualenv so boto3 is available
+./.venv/bin/python scripts/verify_lakehouse_architecture.py
 # Expected: ✓ All checks pass
 ```
+
+> The validation script is host-aware: it auto-detects the published Docker IP/ports when you run it outside the container network.
 
 ## Performance Baseline
 
