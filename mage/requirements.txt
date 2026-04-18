@@ -1,0 +1,5 @@
+# Additional Python packages for Mage ETL blocks
+boto3>=1.34.0
+psycopg2-binary>=2.9.9
+pyarrow>=14.0.1
+clickhouse-driver>=0.2.9

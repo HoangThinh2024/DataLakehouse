@@ -1,0 +1,30 @@
+version: 0.1.1
+
+# Default profile: Mage internal metadata DB (PostgreSQL)
+default:
+  POSTGRES_DBNAME: "{{ env_var('MAGE_DB_NAME') }}"
+  POSTGRES_HOST: dlh-postgres
+  POSTGRES_PASSWORD: "{{ env_var('MAGE_DB_PASSWORD') }}"
+  POSTGRES_PORT: 5432
+  POSTGRES_SCHEMA: public
+  POSTGRES_USER: "{{ env_var('MAGE_DB_USER') }}"
+  POSTGRES_CONNECTION_METHOD: direct
+
+# Source profile: operational PostgreSQL (data source for ETL)
+source_db:
+  POSTGRES_DBNAME: "{{ env_var('POSTGRES_DB') }}"
+  POSTGRES_HOST: dlh-postgres
+  POSTGRES_PASSWORD: "{{ env_var('POSTGRES_PASSWORD') }}"
+  POSTGRES_PORT: 5432
+  POSTGRES_SCHEMA: public
+  POSTGRES_USER: "{{ env_var('POSTGRES_USER') }}"
+  POSTGRES_CONNECTION_METHOD: direct
+
+# ClickHouse: OLAP serving layer
+clickhouse:
+  CLICKHOUSE_DATABASE: "{{ env_var('CLICKHOUSE_DB') }}"
+  CLICKHOUSE_HOST: dlh-clickhouse
+  CLICKHOUSE_HTTP_PORT: 8123
+  CLICKHOUSE_PASSWORD: "{{ env_var('CLICKHOUSE_PASSWORD') }}"
+  CLICKHOUSE_TCP_PORT: 9000
+  CLICKHOUSE_USERNAME: "{{ env_var('CLICKHOUSE_USER') }}"
