@@ -1,16 +1,25 @@
 """
 Data Exporter – Load Silver and Gold data into ClickHouse.
 
-Loads:
-  - analytics.bronze_demo  (raw, from silver df before cleaning – passed in dict)
-  - analytics.silver_demo  (cleaned typed rows)
-  - analytics.gold_demo_daily, gold_demo_by_region, gold_demo_by_category (aggregations)
-  - analytics.pipeline_runs (run-level metadata for Grafana monitoring)
+PROPER LAKEHOUSE ARCHITECTURE:
+  - Reads Silver data from RustFS silver layer (not in-memory)
+  - Reads Gold data from RustFS gold layer (not in-memory)
+  - Loads into ClickHouse:
+    - analytics.silver_demo
+    - analytics.gold_demo_daily, gold_demo_by_region, gold_demo_by_category
+    - analytics.pipeline_runs (run metadata)
+
+This ensures:
+  - All data transformations are versioned in RustFS
+  - Data lineage is traceable
+  - ClickHouse never queries PostgreSQL directly (lake is single source of truth)
+  - Full recoverability: can always re-read from RustFS
 
 Uses clickhouse-driver for the native TCP protocol (port 9000).
 """
 
 import os
+import sys
 import datetime as dt
 from typing import Any
 
@@ -21,6 +30,10 @@ if 'data_exporter' not in dir():
     from mage_ai.data_preparation.decorators import data_exporter
 if 'test' not in dir():
     from mage_ai.data_preparation.decorators import test
+
+# Import RustFS layer reader
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from utils.rustfs_layer_reader import read_latest_silver, read_all_gold
 
 
 def _ch_client() -> Client:
@@ -190,75 +203,83 @@ def _ensure_clickhouse_objects(client: Client, db: str) -> None:
 
 @data_exporter
 def load_clickhouse(data, *args, **kwargs):
+    """
+    Load the latest Silver and Gold data from RustFS into ClickHouse.
+    
+    NOTE: The 'data' parameter is IGNORED in proper lakehouse architecture.
+    All data reads from RustFS, not from in-memory pipeline state.
+    This ensures immutability and recoverability.
+    """
     started_at = dt.datetime.utcnow()
-    silver_df = pd.DataFrame()
-    gold_daily = pd.DataFrame()
-    gold_region = pd.DataFrame()
-    gold_category = pd.DataFrame()
-    run_id = 'unknown'
-
-    if isinstance(data, dict):
-        silver_df = data.get('silver', pd.DataFrame())
-        gold_daily = data.get('gold_daily', pd.DataFrame())
-        gold_region = data.get('gold_region', pd.DataFrame())
-        gold_category = data.get('gold_category', pd.DataFrame())
-    elif isinstance(data, pd.DataFrame):
-        silver_df = data
-
-    if len(silver_df) > 0 and '_pipeline_run_id' in silver_df.columns:
-        run_id = silver_df['_pipeline_run_id'].iloc[0]
-
+    
     client = _ch_client()
     db = os.getenv('CLICKHOUSE_DB', 'analytics')
     _ensure_clickhouse_objects(client, db)
+    
     rows_silver = rows_daily = rows_region = rows_category = 0
     error_msg = None
-
+    run_id = 'auto-load'
+    
     try:
-        # ── Silver ───────────────────────────────────────────
-        silver_cols = [
-            'id', 'name', 'category', 'value', 'quantity', 'order_date',
-            'region', 'status', 'customer_email', 'notes', 'created_at',
-            '_pipeline_run_id', '_source_table', '_silver_processed_at',
-        ]
-        rows_silver = _insert(client, f'{db}.silver_demo', silver_df, silver_cols)
-        print(f"[load_to_clickhouse] silver_demo ← {rows_silver} rows")
-
-        # ── Gold daily ───────────────────────────────────────
-        gold_daily_cols = [
-            'order_date', 'order_count', 'total_revenue', 'avg_order_value',
-            'total_quantity', 'unique_customers', 'unique_regions', 'unique_categories',
-            '_pipeline_run_id', '_gold_processed_at',
-        ]
-        rows_daily = _insert(client, f'{db}.gold_demo_daily', gold_daily, gold_daily_cols)
-        print(f"[load_to_clickhouse] gold_demo_daily ← {rows_daily} rows")
-
-        # ── Gold by region ───────────────────────────────────
-        gold_region_cols = [
-            'region', 'order_count', 'total_revenue', 'avg_order_value',
-            'total_quantity', 'report_date', '_pipeline_run_id', '_gold_processed_at',
-        ]
-        rows_region = _insert(client, f'{db}.gold_demo_by_region', gold_region, gold_region_cols)
-        print(f"[load_to_clickhouse] gold_demo_by_region ← {rows_region} rows")
-
-        # ── Gold by category ─────────────────────────────────
-        gold_cat_cols = [
-            'category', 'order_count', 'total_revenue', 'avg_order_value',
-            'total_quantity', 'report_date', '_pipeline_run_id', '_gold_processed_at',
-        ]
-        rows_category = _insert(client, f'{db}.gold_demo_by_category', gold_category, gold_cat_cols)
-        print(f"[load_to_clickhouse] gold_demo_by_category ← {rows_category} rows")
-
+        print("[load_to_clickhouse] Reading from RustFS (lakehouse architecture)...")
+        
+        # ── Read Silver from RustFS ────────────────────────────
+        silver_df = read_latest_silver()
+        if len(silver_df) > 0:
+            if '_pipeline_run_id' in silver_df.columns:
+                run_id = silver_df['_pipeline_run_id'].iloc[0]
+            
+            silver_cols = [
+                'id', 'name', 'category', 'value', 'quantity', 'order_date',
+                'region', 'status', 'customer_email', 'notes', 'created_at',
+                '_pipeline_run_id', '_source_table', '_silver_processed_at',
+            ]
+            rows_silver = _insert(client, f'{db}.silver_demo', silver_df, silver_cols)
+            print(f"[load_to_clickhouse] From RustFS Silver → silver_demo: {rows_silver} rows")
+        else:
+            print("[load_to_clickhouse] WARNING: No Silver data found in RustFS")
+        
+        # ── Read Gold tables from RustFS ────────────────────────
+        gold_data = read_all_gold()
+        gold_daily = gold_data.get('gold_daily', pd.DataFrame())
+        gold_region = gold_data.get('gold_region', pd.DataFrame())
+        gold_category = gold_data.get('gold_category', pd.DataFrame())
+        
+        if len(gold_daily) > 0:
+            gold_daily_cols = [
+                'order_date', 'order_count', 'total_revenue', 'avg_order_value',
+                'total_quantity', 'unique_customers', 'unique_regions', 'unique_categories',
+                '_pipeline_run_id', '_gold_processed_at',
+            ]
+            rows_daily = _insert(client, f'{db}.gold_demo_daily', gold_daily, gold_daily_cols)
+            print(f"[load_to_clickhouse] From RustFS Gold → gold_demo_daily: {rows_daily} rows")
+        
+        if len(gold_region) > 0:
+            gold_region_cols = [
+                'region', 'order_count', 'total_revenue', 'avg_order_value',
+                'total_quantity', 'report_date', '_pipeline_run_id', '_gold_processed_at',
+            ]
+            rows_region = _insert(client, f'{db}.gold_demo_by_region', gold_region, gold_region_cols)
+            print(f"[load_to_clickhouse] From RustFS Gold → gold_demo_by_region: {rows_region} rows")
+        
+        if len(gold_category) > 0:
+            gold_cat_cols = [
+                'category', 'order_count', 'total_revenue', 'avg_order_value',
+                'total_quantity', 'report_date', '_pipeline_run_id', '_gold_processed_at',
+            ]
+            rows_category = _insert(client, f'{db}.gold_demo_by_category', gold_category, gold_cat_cols)
+            print(f"[load_to_clickhouse] From RustFS Gold → gold_demo_by_category: {rows_category} rows")
+        
         status = 'success'
-
+    
     except Exception as exc:
         error_msg = str(exc)
         status = 'failed'
         print(f"[load_to_clickhouse] ERROR: {error_msg}")
         raise
-
+    
     finally:
-        # ── Pipeline run record ──────────────────────────────
+        # ── Record pipeline run ──────────────────────────────────
         ended_at = dt.datetime.utcnow()
         run_record = [{
             'run_id': run_id,
@@ -266,7 +287,7 @@ def load_clickhouse(data, *args, **kwargs):
             'status': status,
             'started_at': started_at,
             'ended_at': ended_at,
-            'rows_extracted': len(silver_df),
+            'rows_extracted': rows_silver,
             'rows_silver': rows_silver,
             'rows_gold_daily': rows_daily,
             'rows_gold_region': rows_region,
@@ -283,12 +304,15 @@ def load_clickhouse(data, *args, **kwargs):
             )
         except Exception as log_exc:
             print(f"[load_to_clickhouse] WARNING: could not write pipeline_runs: {log_exc}")
-
+    
     print(
-        f"[load_to_clickhouse] run_id={run_id}  status={status}  "
-        f"silver={rows_silver}  daily={rows_daily}  region={rows_region}  cat={rows_category}"
+        f"[load_to_clickhouse] COMPLETE: run_id={run_id}  status={status}  "
+        f"silver={rows_silver}  daily={rows_daily}  region={rows_region}  category={rows_category} "
+        f"(all data from RustFS lake)"
     )
-    return data
+    
+    # Return empty dict - we don't pass data downstream (lakehouse architecture)
+    return {}
 
 
 @test

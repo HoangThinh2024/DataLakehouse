@@ -20,7 +20,7 @@ blocks:
   color: null
   configuration: {}
   downstream_blocks:
-  - load_csv_reporting_clickhouse
+  - csv_to_rustfs_silver
   executor_config: null
   executor_type: local_python
   has_callback: false
@@ -37,6 +37,24 @@ blocks:
 - all_upstream_blocks_executed: true
   color: null
   configuration: {}
+  downstream_blocks:
+  - load_csv_reporting_clickhouse
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: CSV to RustFS Silver
+  retry_config: null
+  status: not_executed
+  timeout: null
+  type: data_exporter
+  upstream_blocks:
+  - clean_csv_for_reporting
+  uuid: csv_to_rustfs_silver
+
+- all_upstream_blocks_executed: true
+  color: null
+  configuration: {}
   downstream_blocks: []
   executor_config: null
   executor_type: local_python
@@ -48,7 +66,7 @@ blocks:
   timeout: null
   type: data_exporter
   upstream_blocks:
-  - clean_csv_for_reporting
+  - csv_to_rustfs_silver
   uuid: load_csv_reporting_clickhouse
 
 name: ETL CSV Upload to Reporting
