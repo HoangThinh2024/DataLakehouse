@@ -165,3 +165,57 @@ Biến có thể đổi:
 - `RUSTFS_PREFIX` (mặc định `demo`)
 - `CLICKHOUSE_DB` (mặc định `analytics`)
 - `CLICKHOUSE_TABLE` (mặc định `demo_raw`)
+
+## Upload CSV cho user non-tech
+
+Luồng đơn giản nhất cho user không kỹ thuật:
+
+1. Mở RustFS Console trên trình duyệt:
+	- `http://<host>:29101`
+2. Đăng nhập bằng tài khoản trong `.env`:
+	- `RUSTFS_ACCESS_KEY`
+	- `RUSTFS_SECRET_KEY`
+3. Vào bucket `bronze` (hoặc bucket cấu hình qua `CSV_UPLOAD_BUCKET`)
+4. Upload file `.csv` vào prefix:
+	- `csv_upload/` (hoặc prefix cấu hình qua `CSV_UPLOAD_PREFIX`)
+
+Ngoài ra, nếu user upload CSV trực tiếp ở root của bucket `bronze`
+(ví dụ `sales_2026_04.csv`), pipeline vẫn nhận được khi:
+- `CSV_UPLOAD_ALLOW_ANYWHERE=true` (mặc định)
+
+Ví dụ object key hợp lệ:
+- `csv_upload/sales_apr_2026.csv`
+- `csv_upload/project_tasks_2026_04_18.csv`
+- `sales_2026_04.csv`
+
+## Pipeline tự động CSV -> Superset/Grafana
+
+Đã thêm pipeline Mage `etl_csv_upload_to_reporting` với lịch `*/5 * * * *`:
+
+- Block `extract_csv_from_rustfs`: quét file CSV mới (chưa xử lý)
+- Block `clean_csv_for_reporting`: kiểm tra/làm sạch cơ bản (trim, drop empty row, deduplicate, chuẩn hóa header)
+- Block `load_csv_reporting_clickhouse`: ghi dữ liệu sạch + quality metrics vào ClickHouse
+
+Các bảng ClickHouse phục vụ báo cáo:
+- `analytics.csv_clean_rows` (dữ liệu sạch theo từng row, dạng JSON)
+- `analytics.csv_quality_metrics` (chất lượng dữ liệu theo file)
+- `analytics.csv_upload_events` (log thành công/thất bại)
+
+Superset và Grafana đã có kết nối ClickHouse trong stack, nên có thể tạo chart trực tiếp từ các bảng trên.
+
+Để tự động tạo dashboard Superset demo 100k (KPI + bảng chất lượng + event log):
+
+```bash
+# Chạy trong container Superset để không phụ thuộc môi trường local
+cd /home/thinh03/Desktop/DataLakehouse
+docker compose exec -T -e SUPERSET_URL=http://127.0.0.1:8088 superset \
+  /app/.venv/bin/python - < scripts/create_superset_demo_dashboard.py
+```
+
+Dashboard được tạo với title mặc định: `Data Lakehouse CSV Demo 100k`.
+
+Gợi ý nhanh:
+
+- Superset dataset: `analytics.csv_quality_metrics`
+- Grafana panel query:
+  `SELECT processed_at AS time, cleaned_rows, dropped_rows, duplicate_rows FROM analytics.csv_quality_metrics ORDER BY processed_at`
