@@ -1,11 +1,15 @@
 triggers:
-- name: every_6_hours
+- description: null
+  envs: []
+  last_enabled_at: 2026-04-18 10:28:30.722608+00:00
+  name: every_6_hours
   pipeline_uuid: etl_postgres_to_lakehouse
-  schedule_interval: '0 */6 * * *'
+  schedule_interval: 0 */6 * * *
   schedule_type: time
   settings:
-    skip_if_previous_running: false
     allow_blocks_to_fail: false
+    skip_if_previous_running: false
+  sla: null
   start_time: '2024-01-01T00:00:00+00:00'
   status: active
   token: ''
