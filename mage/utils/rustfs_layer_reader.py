@@ -65,9 +65,10 @@ def list_layer_partitions(bucket: str, prefix: str) -> list[str]:
 
 def read_latest_layer(bucket: str, prefix: str, date_str: Optional[str] = None) -> pd.DataFrame:
     """
-    Read all parquet files from a specific date partition or latest date.
-    
-    Returns combined DataFrame from all run_id parquet files in that partition.
+    Read the latest parquet file from a specific date partition or latest date.
+
+    This avoids reloading every historical run in the same date partition when
+    ClickHouse only needs the newest lake snapshot.
     """
     if not date_str:
         # Get latest partition
@@ -84,16 +85,25 @@ def read_latest_layer(bucket: str, prefix: str, date_str: Optional[str] = None) 
         response = client.list_objects_v2(Bucket=bucket, Prefix=layer_path)
         if 'Contents' not in response:
             return pd.DataFrame()
-        
-        for obj in response['Contents']:
-            key = obj['Key']
-            if key.endswith('.parquet'):
-                # Read parquet file
-                obj_response = client.get_object(Bucket=bucket, Key=key)
-                buffer = io.BytesIO(obj_response['Body'].read())
-                df = pd.read_parquet(buffer, engine='pyarrow')
-                dfs.append(df)
-                print(f"[read_latest_layer] Read {len(df)} rows from s3://{bucket}/{key}")
+
+        parquet_objects = [
+            obj for obj in response['Contents']
+            if obj.get('Key', '').endswith('.parquet')
+        ]
+
+        if not parquet_objects:
+            return pd.DataFrame()
+
+        latest_object = max(
+            parquet_objects,
+            key=lambda obj: (obj.get('LastModified') or dt.datetime.min, obj.get('Key', '')),
+        )
+        key = latest_object['Key']
+        obj_response = client.get_object(Bucket=bucket, Key=key)
+        buffer = io.BytesIO(obj_response['Body'].read())
+        df = pd.read_parquet(buffer, engine='pyarrow')
+        dfs.append(df)
+        print(f"[read_latest_layer] Read {len(df)} rows from s3://{bucket}/{key}")
     
     except ClientError as exc:
         print(f"[read_latest_layer] Error reading s3://{bucket}/{layer_path}: {exc}")

@@ -17,7 +17,9 @@ import pandas as pd
 from clickhouse_driver import Client
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+project_root = os.getenv('MAGE_PROJECT_PATH', os.getcwd())
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from utils.rustfs_layer_reader import read_csv_silver_by_run_id
 

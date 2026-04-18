@@ -32,7 +32,9 @@ if 'test' not in dir():
     from mage_ai.data_preparation.decorators import test
 
 # Import RustFS layer reader
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+project_root = os.getenv('MAGE_PROJECT_PATH', os.getcwd())
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 from utils.rustfs_layer_reader import read_latest_silver, read_all_gold
 
 
