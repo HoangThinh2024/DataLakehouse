@@ -1,216 +1,141 @@
 # DataLakehouse – Modern Data Stack
 
-Hướng dẫn triển khai Modern Data Stack (MDS) cho Data Lakehouse trên Docker.
+Stack Data Lakehouse theo hướng gọn, tránh xung đột port, tập trung quản lý metadata/config qua PostgreSQL.
 
-**Kiến trúc**: PostgreSQL + RustFS + ClickHouse + Mage.ai + dbt + Great Expectations + Metabase + Superset + Grafana + Nginx Proxy Manager (10+ services)
+## Thành phần hiện tại
 
-## 1. Kiến trúc tổng quan
+- PostgreSQL 17: metadata/config trung tâm
+- RustFS: data lake S3-compatible (Bronze/Silver/Gold)
+- ClickHouse: lớp OLAP tăng tốc truy vấn trên dữ liệu lake
+- Mage.ai: orchestration/processing
+- NocoDB, Superset, Grafana: serving và reporting
+- Nginx Proxy Manager: reverse proxy (optional, đang để comment)
 
-Xem chi tiết tại [docs/ARCHITECTURE_MODERN_STACK.md](docs/ARCHITECTURE_MODERN_STACK.md).
+Đã loại bỏ theo yêu cầu:
+- dbt Core
+- Great Expectations
+- Adminer
+- Auth/RBAC service riêng
 
-5 tầng:
-- **INGEST**: Upload/API/Manual tools
-- **STORAGE**: PostgreSQL (OLTP) + RustFS (Data Lake) + ClickHouse (OLAP)
-- **PROCESS**: Mage.ai (ETL) + dbt (Transform) + Great Expectations (QA)
-- **SERVING**: Adminer + NocoDB + Metabase (+ Nginx Proxy Manager)
-- **REPORT**: Apache Superset + Grafana
+## Điểm tham chiếu ClickHouse
 
-## 2. Chuẩn bị môi trường
+Theo hướng “data lake ready” của ClickHouse:
+- Object storage (S3) là lớp lưu trữ chính cho dữ liệu lake.
+- ClickHouse đóng vai trò query acceleration/serving cho analytics.
+- Tách lớp lưu trữ (RustFS) và lớp phân tích (ClickHouse) để scale linh hoạt.
 
-### 2.1 Yêu cầu hệ thống
+## Chuẩn bị nhanh
 
-- Docker Engine 20.10+
-- Docker Compose 2.0+
-- 4GB RAM tối thiểu (8GB khuyến nghị)
-- 20GB disk space
-
-### 2.2 Tạo file .env
-
-Copy .env.example và cập nhật:
+1. Tạo `.env` từ mẫu:
 
 ```bash
 cp .env.example .env
 ```
 
-Các biến quan trọng:
-- `POSTGRES_PASSWORD`: Mật khẩu PostgreSQL
-- `RUSTFS_ACCESS_KEY`, `RUSTFS_SECRET_KEY`: Credentials S3
-- `SUPERSET_SECRET_KEY`: Secret key Superset (đổi lại!)
-- `GRAFANA_ADMIN_PASSWORD`: Admin password Grafana
-
-Chi tiết xem trong [.env.example](.env.example)
-
-### 2.3 Cấu trúc thư mục
-
-```
-DataLakehouse/
-├── docker-compose.yaml          # Main stack config
-├── .env.example                 # Mẫu biến môi trường
-├── .env                         # Biến thực tế (gitignore)
-├── postgres/
-│   └── init/
-│       └── 001_lakehouse_metadata.sql
-├── dbt/                         # dbt project (tạo sau)
-├── mage/                        # Mage pipelines (tạo sau)
-└── docs/
-    ├── ARCHITECTURE_MODERN_STACK.md
-    └── architecture.md
-```
-
-## 3. Khởi động hệ thống
-
-### 3.1 Start stack
+2. Khởi động stack:
 
 ```bash
 docker compose up -d
 ```
 
-Các service sẽ khởi động theo thứ tự dependency.
+`rustfs-init` được cấu hình ở profile `bootstrap` (optional), nên sẽ không chạy mặc định.
+Khi mạng ổn định và muốn tự động tạo bucket Bronze/Silver/Gold:
 
-### 3.2 Kiểm tra trạng thái
+```bash
+docker compose --profile bootstrap up -d rustfs-init
+```
+
+3. Kiểm tra trạng thái:
 
 ```bash
 docker compose ps
 ```
 
-Chờ tất cả service có status `Up`.
-
-### 3.3 Xem log
-
-```bash
-docker compose logs -f
-docker compose logs -f postgres
-docker compose logs -f mage
-```
-
-### 3.4 Stop stack
+4. Dừng stack:
 
 ```bash
 docker compose down
 ```
 
-Xóa toàn bộ volume (dữ liệu):
+## Network dùng chung: `web_network`
+
+Project cấu hình dùng network ngoài (`external`) tên `web_network` cho toàn bộ service.
+
+Tạo network một lần trước khi chạy stack:
 
 ```bash
-docker compose down -v
+docker network create web_network
 ```
 
-## 4. Truy cập các dịch vụ
-
-| Service | URL | Mục đích |
-|---------|-----|---------|
-| PostgreSQL | localhost:55432 | OLTP, metadata |
-| RustFS Console | http://localhost:19001 | Quản lý Bronze/Silver/Gold |
-| RustFS S3 API | http://localhost:19000 | S3-API endpoint |
-| ClickHouse | http://localhost:8123 | Query interface |
-| Mage.ai | http://localhost:6789 | ETL pipeline builder |
-| Adminer | http://localhost:8080 | Database admin |
-| NocoDB | http://localhost:8081 | Database UI + API |
-| Metabase | http://localhost:3000 | Internal BI |
-| Superset | http://localhost:8088 | Advanced dashboards |
-| Grafana | http://localhost:3001 | Monitoring |
-| Nginx Proxy Mgr | http://localhost:81 | Proxy config |
-
-### 4.1 Credentials mặc định
-
-```
-PostgreSQL:
-  user: postgres
-  password: postgres (change in .env!)
-
-RustFS:
-  access_key: rustfsadmin
-  secret_key: rustfsadmin
-
-Metabase / Superset / Grafana:
-  user: admin
-  password: admin
-```
-
-## 5. Quy trình làm việc điển hình
-
-### 5.1 Ingest dữ liệu
-
-1. Upload file vào NocoDB hoặc RustFS console
-2. File đặt vào bucket `bronze/<domain>/<dataset>/dt=YYYY-MM-DD/`
-
-### 5.2 Build pipeline
-
-1. Mở Mage.ai tại http://localhost:6789
-2. Tạo pipeline để load từ Bronze
-3. Trigger transformation, trigger Great Expectations checks
-4. Output sang Silver bucket qua S3 API
-
-### 5.3 Transform (dbt)
-
-1. Tạo dbt project trong thư mục `dbt/`
-2. Define model cho Silver → Gold transformation
-3. Chạy `docker exec dbt dbt run --profiles-dir /root/.dbt`
-
-### 5.4 Phân tích & Dashboard
-
-1. Kết nối Metabase/Superset tới PostgreSQL hoặc ClickHouse
-2. Tạo question/chart từ tầng Gold
-3. Publish dashboard để team xem
-
-## 6. Kiểm tra sau startup
-
-### 6.1 PostgreSQL + metadata
+Kiểm tra network:
 
 ```bash
-docker exec -it postgres psql -U postgres -d datalakehouse -c "\dt lakehouse.*"
+docker network ls | grep web_network
 ```
 
-### 6.2 RustFS buckets
+Nếu đã tồn tại, Docker sẽ báo lỗi "already exists" và bạn có thể bỏ qua.
 
-```bash
-docker compose logs rustfs-init | tail -20
+## Timezone toàn dự án
+
+Toàn bộ service dùng chung timezone qua biến môi trường:
+
+```env
+TZ=Asia/Ho_Chi_Minh
 ```
 
-### 6.3 ClickHouse
+Lưu ý: bạn ghi "Asisa/Ho_Chi_Minh" trong yêu cầu, nhưng timezone chuẩn là `Asia/Ho_Chi_Minh`.
 
-```bash
-docker exec -it clickhouse clickhouse-client -q "SELECT version()"
-```
+## Cổng mặc định (đã đổi để hạn chế xung đột)
 
-## 7. Xử lý sự cố
+- PostgreSQL: `25432`
+- RustFS API: `29100`
+- RustFS Console: `29101`
+- ClickHouse HTTP: `28123`
+- ClickHouse TCP: `29000`
+- Mage: `26789`
+- NocoDB: `28082`
+- Superset: `28088`
+- Grafana: `23001`
+- Nginx PM HTTP/HTTPS/Admin: `28080` / `28443` / `28081` (optional)
 
-### 7.1 Port bị chiếm
+## Cách quản lý "đều vào PostgreSQL"
 
-```bash
-METABASE_PORT=3010 docker compose up -d
-```
+Các service đã cấu hình dùng PostgreSQL làm backend metadata/config:
+- Mage.ai
+- NocoDB
+- Superset
+- Grafana
 
-### 7.2 Chạy một service riêng
+PostgreSQL có 1 user admin toàn hệ thống:
+- `POSTGRES_USER` (mặc định trong mẫu: `dlh_admin`)
+- Dùng để quản trị tổng thể và xem toàn bộ database/app
 
-```bash
-docker compose up -d postgres
-docker compose up -d rustfs
-```
+Host nội bộ của PostgreSQL trong stack này là `dlh-postgres`, không phải `postgres`, để tránh đụng với các container/stack khác đang dùng mạng Docker chung.
 
-### 7.3 Reset toàn bộ
+Lưu ý: nếu bạn đổi `POSTGRES_PASSWORD` sau khi volume PostgreSQL đã được khởi tạo, hãy reset volume trước khi chạy lại stack bằng `docker compose down -v && docker compose up -d`. Nếu không, `postgres-bootstrap` sẽ báo lỗi xác thực vì volume cũ vẫn giữ mật khẩu cũ.
 
-```bash
-docker compose down -v
-docker system prune -f a
-docker compose up -d
-```
+Mỗi service dùng một database riêng trong cùng PostgreSQL server:
+- `dlh_mage`
+- `dlh_nocodb`
+- `dlh_superset`
+- `dlh_grafana`
 
-### 7.4 Out of memory
+Mỗi service dùng user riêng với quyền tối thiểu trên database của chính nó:
+- `dlh_mage_user` -> `dlh_mage`
+- `dlh_nocodb_user` -> `dlh_nocodb`
+- `dlh_superset_user` -> `dlh_superset`
+- `dlh_grafana_user` -> `dlh_grafana`
 
-Disable một số service:
+Bootstrap bảo mật được tạo tự động bởi script [postgres/init/000_create_app_security.sh](postgres/init/000_create_app_security.sh) khi khởi tạo volume PostgreSQL lần đầu.
+Script sẽ:
+- Tạo role cho từng app (không có quyền superuser/createdb/createrole)
+- Tạo database riêng cho từng app và gán owner tương ứng
+- Thu hồi quyền public mặc định và chỉ cấp quyền cần thiết cho app user
 
-```bash
-docker compose stop superset grafana
-```
+Lưu ý:
+- Nginx Proxy Manager đang được comment trong [docker-compose.yaml](docker-compose.yaml). Nếu cần, bỏ comment block `nginx-proxy-manager` để bật.
+- Nginx Proxy Manager image mặc định dùng SQLite/MySQL (không hỗ trợ PostgreSQL trực tiếp trong cấu hình hiện tại), nên vẫn để SQLite nội bộ.
 
-## 8. Tiếp theo
+## Tài liệu kiến trúc
 
-1. Tạo dbt project cho transformation logic
-2. Thiết lập Mage pipelines  
-3. Kết nối data sources vào Bronze
-4. Xây dựng BI models trên Gold
-5. Setup data quality rules
-6. Configure data lineage & governance
-
-Chi tiết xem [docs/ARCHITECTURE_MODERN_STACK.md](docs/ARCHITECTURE_MODERN_STACK.md).
+- [docs/ARCHITECTURE_MODERN_STACK.md](docs/ARCHITECTURE_MODERN_STACK.md)
