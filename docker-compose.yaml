@@ -26,6 +26,7 @@ services:
       - "${POSTGRES_PORT:-55432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
     networks:
       - web_network
     restart: unless-stopped
@@ -74,6 +75,27 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # ----------------------------------------------------------
+  # RustFS init - create Lakehouse buckets (bronze/silver/gold)
+  # ----------------------------------------------------------
+  rustfs-init:
+    image: minio/mc:latest
+    container_name: rustfs-init
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        mc alias set rustfs http://rustfs:9000 ${RUSTFS_ACCESS_KEY} ${RUSTFS_SECRET_KEY}
+        mc mb --ignore-existing rustfs/bronze
+        mc mb --ignore-existing rustfs/silver
+        mc mb --ignore-existing rustfs/gold
+    networks:
+      - web_network
+    restart: "no"
 
 # --------------------------------------------------------------
 # Named volumes (data persists across container restarts)
