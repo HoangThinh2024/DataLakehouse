@@ -185,10 +185,13 @@ services:
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
       NC_DB: pg://dlh-postgres:5432?u=${NOCODB_DB_USER:-dlh_nocodb_user}&p=${NOCODB_DB_PASSWORD:-change-me}&d=${NOCODB_DB_NAME:-dlh_nocodb}
+      NC_PUBLIC_URL: ${NOCODB_PUBLIC_URL:-http://${DLH_BIND_IP:-127.0.0.1}:${DLH_NOCODB_PORT:-28082}}
+      NUXT_PUBLIC_NC_BACKEND_URL: ${NOCODB_BACKEND_URL:-http://${DLH_BIND_IP:-127.0.0.1}:${DLH_NOCODB_PORT:-28082}}
       LITESTREAM_S3_BUCKET: ${RUSTFS_BUCKET:-nocodb}
       LITESTREAM_S3_ENDPOINT: http://rustfs:9000
       LITESTREAM_S3_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
       LITESTREAM_S3_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
+      NC_ALLOW_LOCAL_EXTERNAL_DBS: true
     ports:
       - "${DLH_BIND_IP:-127.0.0.1}:${DLH_NOCODB_PORT:-28082}:8080"
     depends_on:
