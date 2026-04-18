@@ -7,3 +7,17 @@ SQLALCHEMY_DATABASE_URI = (
 )
 
 SECRET_KEY = os.getenv('SUPERSET_SECRET_KEY', 'replace-this-secret')
+
+# Allow ClickHouse (via clickhouse-connect) and PostgreSQL connections from the UI
+PREVENT_UNSAFE_DB_CONNECTIONS = False
+
+FEATURE_FLAGS = {
+    "ENABLE_TEMPLATE_PROCESSING": True,
+    "DASHBOARD_NATIVE_FILTERS": True,
+    "DASHBOARD_CROSS_FILTERS": True,
+}
+
+# Pre-register ClickHouse as an allowed database engine
+# Requires: pip install clickhouse-connect (installed in docker-compose command)
+ADDITIONAL_DATABASE_CONFIG_MAP = {}
+
