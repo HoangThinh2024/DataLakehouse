@@ -1,0 +1,9 @@
+# Mage runtime artifacts – not tracked in version control
+__pycache__/
+*.py[cod]
+*.log
+.mage_profile
+mage_config.yaml
+# Mage stores pipeline runs / block outputs here
+.file_versions/
+spark-warehouse/
