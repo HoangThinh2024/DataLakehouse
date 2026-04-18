@@ -130,3 +130,54 @@ CREATE TABLE IF NOT EXISTS analytics.pipeline_runs
 ENGINE = MergeTree
 PARTITION BY toYYYYMM(started_at)
 ORDER BY started_at;
+
+-- =============================================================
+-- CSV REPORTING: cleaned CSV rows and quality metrics
+-- =============================================================
+CREATE TABLE IF NOT EXISTS analytics.csv_clean_rows
+(
+    pipeline_run_id     String,
+    source_key          String,
+    source_etag         String,
+    source_last_modified Nullable(DateTime64(3)),
+    row_number          UInt64,
+    row_json            String,
+    processed_at        DateTime64(3) DEFAULT now64(3)
+)
+ENGINE = MergeTree
+PARTITION BY toYYYYMM(processed_at)
+ORDER BY (processed_at, source_key, row_number);
+
+CREATE TABLE IF NOT EXISTS analytics.csv_quality_metrics
+(
+    pipeline_run_id     String,
+    source_key          String,
+    source_etag         String,
+    raw_rows            Int64,
+    cleaned_rows        Int64,
+    dropped_rows        Int64,
+    duplicate_rows      Int64,
+    null_cells          Int64,
+    processed_at        DateTime64(3)
+)
+ENGINE = MergeTree
+PARTITION BY toYYYYMM(processed_at)
+ORDER BY (processed_at, source_key);
+
+CREATE TABLE IF NOT EXISTS analytics.csv_upload_events
+(
+    source_key          String,
+    etag                String,
+    source_size         Int64,
+    source_last_modified Nullable(DateTime64(3)),
+    status              String,
+    row_count           Int64 DEFAULT 0,
+    duplicate_rows      Int64 DEFAULT 0,
+    dropped_rows        Int64 DEFAULT 0,
+    processed_at        DateTime64(3) DEFAULT now64(3),
+    pipeline_run_id     String DEFAULT '',
+    error_message       Nullable(String)
+)
+ENGINE = MergeTree
+PARTITION BY toYYYYMM(processed_at)
+ORDER BY (source_key, etag, processed_at);
