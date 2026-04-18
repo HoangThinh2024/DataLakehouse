@@ -114,6 +114,9 @@ docker compose --profile bootstrap up -d rustfs-init
 - **Scalability:** Horizontally scalable pipeline & query layers
 - **Non-technical UX:** CSV upload via web console → automatic ingestion → instant dashboards
 - **Minimal Dependencies:** No dbt, dbt Cloud, GX, or external auth services
+- **Data Lakehouse Compliance:** ALL data flows through RustFS layers (Bronze → Silver → Gold) before ClickHouse ingestion
+
+**📘 For detailed architecture documentation, see [Lakehouse Architecture](docs/LAKEHOUSE_ARCHITECTURE.md)**
 
 ---
 
