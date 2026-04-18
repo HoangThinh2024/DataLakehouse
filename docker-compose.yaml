@@ -144,6 +144,7 @@ services:
       - "${DLH_BIND_IP:-127.0.0.1}:${DLH_CLICKHOUSE_TCP_PORT:-29000}:9000"
     volumes:
       - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8123/ping"]
       interval: 20s
@@ -163,18 +164,35 @@ services:
       - .env
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
-      MAGE_CODE_PATH: /home/src/mage
+      MAGE_CODE_PATH: /home/src
       USER_CODE_PATH: /home/src
       DATABASE_CONNECTION_URL: postgresql+psycopg2://${MAGE_DB_USER:-dlh_mage_user}:${MAGE_DB_PASSWORD:-change-me}@dlh-postgres:5432/${MAGE_DB_NAME:-dlh_mage}
       MAGE_DATABASE_CONNECTION_URL: postgresql+psycopg2://${MAGE_DB_USER:-dlh_mage_user}:${MAGE_DB_PASSWORD:-change-me}@dlh-postgres:5432/${MAGE_DB_NAME:-dlh_mage}
+      # Source DB for ETL extraction
+      SOURCE_DB_HOST: dlh-postgres
+      SOURCE_DB_PORT: "5432"
+      SOURCE_SCHEMA: public
+      SOURCE_TABLE: Demo
+      # RustFS endpoints for ETL blocks
+      RUSTFS_ENDPOINT_URL: http://dlh-rustfs:9000
+      RUSTFS_BRONZE_BUCKET: bronze
+      RUSTFS_SILVER_BUCKET: silver
+      RUSTFS_GOLD_BUCKET: gold
+      # ClickHouse for ETL loading
+      CLICKHOUSE_HOST: dlh-clickhouse
+      CLICKHOUSE_HTTP_PORT: "8123"
+      CLICKHOUSE_TCP_PORT: "9000"
     ports:
       - "${DLH_BIND_IP:-127.0.0.1}:${DLH_MAGE_PORT:-26789}:6789"
     volumes:
-      - mage_data:/home/src
-      - ./io_config.yaml:/home/src/io_config.yaml:ro
+      - ./mage:/home/src
     depends_on:
       postgres-bootstrap:
         condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
     command: mage start
 
   # ==========================================================
@@ -229,7 +247,7 @@ services:
     command: >
       /bin/sh -c "
       /app/.venv/bin/python -m ensurepip --upgrade &&
-      /app/.venv/bin/python -m pip install --no-cache-dir psycopg2-binary==2.9.9 &&
+      /app/.venv/bin/python -m pip install --no-cache-dir psycopg2-binary==2.9.9 clickhouse-connect==0.8.3 &&
       superset db upgrade &&
       superset fab create-admin --username ${SUPERSET_ADMIN_USER:-admin} --firstname Admin --lastname User --email ${SUPERSET_ADMIN_EMAIL:-admin@superset.local} --password ${SUPERSET_ADMIN_PASSWORD:-admin} || true &&
       superset init &&
@@ -250,11 +268,19 @@ services:
       GF_DATABASE_NAME: ${GRAFANA_DB_NAME:-dlh_grafana}
       GF_DATABASE_USER: ${GRAFANA_DB_USER:-dlh_grafana_user}
       GF_DATABASE_PASSWORD: ${GRAFANA_DB_PASSWORD:-change-me}
-      GF_INSTALL_PLUGINS: grafana-piechart-panel
+      GF_INSTALL_PLUGINS: grafana-piechart-panel,grafana-clickhouse-datasource
+      # Pass datasource credentials into provisioning templates
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-analytics}
+      POSTGRES_DB: ${POSTGRES_DB:-datalakehouse}
+      POSTGRES_USER: ${POSTGRES_USER:-dlh_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
     ports:
       - "${DLH_BIND_IP:-127.0.0.1}:${DLH_GRAFANA_PORT:-23001}:3000"
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       postgres-bootstrap:
         condition: service_completed_successfully
@@ -291,8 +317,6 @@ volumes:
   rustfs_data:
     driver: local
   clickhouse_data:
-    driver: local
-  mage_data:
     driver: local
   superset_data:
     driver: local
