@@ -16,6 +16,7 @@ Use this checklist to verify the Data Lakehouse architecture is properly impleme
 - [x] `mage/utils/rustfs_layer_reader.py` created with helper functions
 - [x] `mage/utils/__init__.py` created for package structure
 - [x] `load_to_clickhouse.py` refactored to read from RustFS
+- [x] `load_csv_reporting_clickhouse.py` refactored to read cleaned CSV back from RustFS Silver
 - [x] `csv_to_rustfs_silver.py` exporter created
 - [x] CSV pipeline metadata updated with new block
 - [x] All imports and path handling correct

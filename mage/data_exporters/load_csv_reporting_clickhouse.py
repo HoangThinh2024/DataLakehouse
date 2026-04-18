@@ -15,6 +15,11 @@ from typing import Any
 
 import pandas as pd
 from clickhouse_driver import Client
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+from utils.rustfs_layer_reader import read_csv_silver_by_run_id
 
 if 'data_exporter' not in dir():
     from mage_ai.data_preparation.decorators import data_exporter
@@ -140,10 +145,13 @@ def export_data(data, *args, **kwargs):
     source_last_modified = _to_iso_datetime(data.get('source_last_modified'))
 
     metrics = data.get('quality_metrics', {})
-    cleaned_df = data.get('cleaned_dataframe', pd.DataFrame())
     error_msg = None
 
     try:
+        cleaned_df = read_csv_silver_by_run_id(run_id)
+        if cleaned_df is None or len(cleaned_df) == 0:
+            raise RuntimeError(f'No cleaned CSV Silver data found in RustFS for run_id={run_id}')
+
         rows_payload = []
         payload_df = cleaned_df.copy()
         if '_row_number' not in payload_df.columns:
