@@ -211,3 +211,8 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Mage runtime/state artifacts (can contain extracted data)
+mage/metadata.yaml
+mage/mage_data/
+mage/.ssh_tunnel/
