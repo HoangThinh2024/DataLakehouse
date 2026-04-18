@@ -1,6 +1,7 @@
 # ============================================================
-# DataLakehouse – Modern Data Stack Architecture
-# Layers: INGEST → STORAGE → PROCESS → SERVING → REPORT
+# DataLakehouse – Modern Data Stack (Conflict-safe edition)
+# Reference: ClickHouse lake-ready concepts (S3-native lake + fast OLAP serving)
+# Layers: INGEST -> STORAGE -> PROCESS -> SERVING -> REPORT
 # ============================================================
 # Usage:
 #   docker compose up -d
@@ -8,75 +9,107 @@
 #   docker compose logs -f <service>
 # ============================================================
 
+x-dlh-runtime: &dlh-runtime
+  networks:
+    - web_network
+  restart: unless-stopped
+
+x-dlh-timezone: &dlh-timezone
+  TZ: ${TZ:-Asia/Ho_Chi_Minh}
+
 services:
-
-  # ═════════════════════════════════════════════════════════
+  # ==========================================================
   # LAYER 2: STORAGE
-  # ═════════════════════════════════════════════════════════
+  # ==========================================================
 
-  # PostgreSQL 17 – transactional DB + metadata store
-  postgres:
-    image: postgres:17
-    container_name: postgres
+  # PostgreSQL 17 – central metadata/config DB for stack services
+  dlh-postgres:
+    <<: *dlh-runtime
+    image: postgres:17-alpine
+    container_name: dlh-postgres
     env_file:
       - .env
     environment:
+      <<: *dlh-timezone
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGTZ: ${TZ:-Asia/Ho_Chi_Minh}
     ports:
-      - "${POSTGRES_PORT:-55432}:5432"
+      - "${DLH_BIND_IP:-127.0.0.1}:${DLH_POSTGRES_PORT:-25432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
-    networks:
-      - datalake
-    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 30s
-      timeout: 10s
+      interval: 20s
+      timeout: 8s
       retries: 5
-      start_period: 10s
+      start_period: 12s
 
-  # RustFS – S3-compatible object storage (Bronze/Silver/Gold)
-  rustfs:
-    image: rustfs/rustfs:latest
-    container_name: rustfs
+  # PostgreSQL bootstrap – re-sync app roles/passwords on every `docker compose up`
+  # This keeps Grafana/Mage/NocoDB/Superset aligned even if the data volume already exists.
+  postgres-bootstrap:
+    <<: *dlh-runtime
+    image: postgres:17-alpine
+    container_name: dlh-postgres-bootstrap
     env_file:
       - .env
     environment:
-      - RUSTFS_VOLUMES=/data
-      - RUSTFS_ADDRESS=0.0.0.0:9000
-      - RUSTFS_CONSOLE_ADDRESS=0.0.0.0:9001
-      - RUSTFS_CONSOLE_ENABLE=true
-      - RUSTFS_CORS_ALLOWED_ORIGINS=${RUSTFS_CORS_ALLOWED_ORIGINS:-http://localhost:19000}
-      - RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS=${RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS:-http://localhost:19001}
-      - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY}
-      - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY}
+      <<: *dlh-timezone
+      PGHOST: dlh-postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+    volumes:
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    depends_on:
+      dlh-postgres:
+        condition: service_healthy
+    restart: "no"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - /docker-entrypoint-initdb.d/000_create_app_security.sh
+
+  # RustFS – S3-compatible object storage for Bronze/Silver/Gold
+  rustfs:
+    <<: *dlh-runtime
+    image: rustfs/rustfs:latest
+    container_name: dlh-rustfs
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CORS_ALLOWED_ORIGINS: ${RUSTFS_CORS_ALLOWED_ORIGINS:-http://localhost:29100}
+      RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS: ${RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS:-http://localhost:29101}
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
     ports:
-      - "${RUSTFS_API_PORT:-19000}:9000"
-      - "${RUSTFS_CONSOLE_PORT:-19001}:9001"
+      - "${DLH_BIND_IP:-127.0.0.1}:${DLH_RUSTFS_API_PORT:-29100}:9000"
+      - "${DLH_BIND_IP:-127.0.0.1}:${DLH_RUSTFS_CONSOLE_PORT:-29101}:9001"
     volumes:
       - rustfs_data:/data
-    networks:
-      - datalake
-    restart: unless-stopped
     healthcheck:
       test:
         [
           "CMD", "sh", "-c",
           "curl -f http://127.0.0.1:9000/health && curl -f http://127.0.0.1:9001/rustfs/console/health"
         ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      interval: 20s
+      timeout: 8s
+      retries: 4
+      start_period: 35s
 
   # RustFS init – create Bronze/Silver/Gold buckets
   rustfs-init:
     image: minio/mc:latest
-    container_name: rustfs-init
+    container_name: dlh-rustfs-init
     depends_on:
       rustfs:
         condition: service_healthy
@@ -88,211 +121,164 @@ services:
         mc mb --ignore-existing rustfs/bronze
         mc mb --ignore-existing rustfs/silver
         mc mb --ignore-existing rustfs/gold
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
     networks:
-      - datalake
+      - web_network
     restart: "no"
 
-  # ClickHouse – OLAP analytics & data warehouse
+  # ClickHouse – OLAP serving layer for lake data
+  # Lake-ready approach: keep raw data on object storage, use ClickHouse for acceleration/query serving.
   clickhouse:
+    <<: *dlh-runtime
     image: clickhouse/clickhouse-server:latest
-    container_name: clickhouse
+    container_name: dlh-clickhouse
     environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
       CLICKHOUSE_DB: ${CLICKHOUSE_DB:-analytics}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
     ports:
-      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
-      - "${CLICKHOUSE_TCP_PORT:-9000}:9000"
+      - "${DLH_BIND_IP:-127.0.0.1}:${DLH_CLICKHOUSE_HTTP_PORT:-28123}:8123"
+      - "${DLH_BIND_IP:-127.0.0.1}:${DLH_CLICKHOUSE_TCP_PORT:-29000}:9000"
     volumes:
       - clickhouse_data:/var/lib/clickhouse
-    networks:
-      - datalake
-    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8123/ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8123/ping"]
+      interval: 20s
+      timeout: 8s
+      retries: 5
       start_period: 20s
 
-  # ═════════════════════════════════════════════════════════
+  # ==========================================================
   # LAYER 3: PROCESSING
-  # ═════════════════════════════════════════════════════════
+  # ==========================================================
 
-  # Mage.ai – ETL pipeline orchestration & data cleaning
   mage:
+    <<: *dlh-runtime
     image: mageai/mageai:latest
-    container_name: mage
+    container_name: dlh-mage
     environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
       MAGE_CODE_PATH: /home/src/mage
       USER_CODE_PATH: /home/src
+      DATABASE_CONNECTION_URL: postgresql+psycopg2://${MAGE_DB_USER:-dlh_mage_user}:${MAGE_DB_PASSWORD:-change-me}@dlh-postgres:5432/${MAGE_DB_NAME:-dlh_mage}
+      MAGE_DATABASE_CONNECTION_URL: postgresql+psycopg2://${MAGE_DB_USER:-dlh_mage_user}:${MAGE_DB_PASSWORD:-change-me}@dlh-postgres:5432/${MAGE_DB_NAME:-dlh_mage}
     ports:
-      - "${MAGE_PORT:-6789}:6789"
+      - "${DLH_BIND_IP:-127.0.0.1}:${DLH_MAGE_PORT:-26789}:6789"
     volumes:
       - mage_data:/home/src
-    networks:
-      - datalake
-    restart: unless-stopped
+    depends_on:
+      postgres-bootstrap:
+        condition: service_completed_successfully
     command: mage start
 
-  # dbt Core – transform layer (runs in shared Python environment)
-  # Note: dbt runs via Mage or as scheduled container
-  dbt:
-    image: ghcr.io/dbt-labs/dbt-core:latest
-    container_name: dbt
-    volumes:
-      - ./dbt:/root/.dbt
-      - dbt_data:/dbt
-    networks:
-      - datalake
-    restart: "no"
-    entrypoint: ["dbt", "--version"]
+  # ==========================================================
+  # LAYER 4: SERVING
+  # ==========================================================
 
-  # Great Expectations – data quality validation
-  great-expectations:
-    image: greatexpectations/great_expectations:latest
-    container_name: great-expectations
-    volumes:
-      - great_expectations_data:/great_expectations
-    networks:
-      - datalake
-    restart: "no"
-    ports:
-      - "${GE_PORT:-8888}:8888"
-    command: ["python", "-m", "great_expectations.cli", "--help"]
-
-  # ═════════════════════════════════════════════════════════
-  # LAYER 4: SERVING & MANAGEMENT
-  # ═════════════════════════════════════════════════════════
-
-  # Adminer – lightweight database admin panel
-  adminer:
-    image: adminer:latest
-    container_name: adminer
-    ports:
-      - "${ADMINER_PORT:-8080}:8080"
-    networks:
-      - datalake
-    restart: unless-stopped
-    environment:
-      ADMINER_DEFAULT_SERVER: postgres
-
-  # NocoDB – web database UI and API
   nocodb:
+    <<: *dlh-runtime
     image: nocodb/nocodb:latest
-    container_name: nocodb
+    container_name: dlh-nocodb
     environment:
-      NC_DB: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      NC_DB: pg://dlh-postgres:5432?u=${NOCODB_DB_USER:-dlh_nocodb_user}&p=${NOCODB_DB_PASSWORD:-change-me}&d=${NOCODB_DB_NAME:-dlh_nocodb}
       LITESTREAM_S3_BUCKET: ${RUSTFS_BUCKET:-nocodb}
       LITESTREAM_S3_ENDPOINT: http://rustfs:9000
       LITESTREAM_S3_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
       LITESTREAM_S3_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
     ports:
-      - "${NOCODB_PORT:-8081}:8080"
+      - "${DLH_BIND_IP:-127.0.0.1}:${DLH_NOCODB_PORT:-28082}:8080"
     depends_on:
-      - postgres
-    networks:
-      - datalake
-    restart: unless-stopped
+      postgres-bootstrap:
+        condition: service_completed_successfully
 
-  # Metabase – internal BI & data exploration
-  metabase:
-    image: metabase/metabase:latest
-    container_name: metabase
-    environment:
-      MB_DB_TYPE: postgres
-      MB_DB_DBNAME: ${POSTGRES_DB}
-      MB_DB_PORT: 5432
-      MB_DB_USER: ${POSTGRES_USER}
-      MB_DB_PASS: ${POSTGRES_PASSWORD}
-      MB_DB_HOST: postgres
-    ports:
-      - "${METABASE_PORT:-3000}:3000"
-    depends_on:
-      - postgres
-    networks:
-      - datalake
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+  # ==========================================================
+  # LAYER 5: REPORTING
+  # ==========================================================
 
-  # ═════════════════════════════════════════════════════════
-  # LAYER 5: REPORTING & VISUALIZATION
-  # ═════════════════════════════════════════════════════════
-
-  # Apache Superset – modern open-source BI dashboard
   superset:
+    <<: *dlh-runtime
     image: apache/superset:latest
-    container_name: superset
+    container_name: dlh-superset
+    user: root
     environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
       SUPERSET_LOAD_EXAMPLES: "no"
-      SUPERSET_SECRET_KEY: "${SUPERSET_SECRET_KEY:-your-secret-key-change-in-production}"
+      SUPERSET_DB_NAME: ${SUPERSET_DB_NAME:-dlh_superset}
+      SUPERSET_DB_USER: ${SUPERSET_DB_USER:-dlh_superset_user}
+      SUPERSET_DB_PASSWORD: ${SUPERSET_DB_PASSWORD:-change-me}
     ports:
-      - "${SUPERSET_PORT:-8088}:8088"
+      - "${DLH_BIND_IP:-127.0.0.1}:${DLH_SUPERSET_PORT:-28088}:8088"
     volumes:
       - superset_data:/var/lib/superset
+      - ./superset/superset_config.py:/app/pythonpath/superset_config.py:ro
     depends_on:
-      - postgres
-    networks:
-      - datalake
-    restart: unless-stopped
-    command: |
-      sh -c "superset db upgrade && 
-             superset fab create-admin --username admin --firstname Admin --lastname User --email admin@superset.local --password admin && 
-             superset load_examples && 
-             superset run -h 0.0.0.0 -p 8088 --with-threads"
+      postgres-bootstrap:
+        condition: service_completed_successfully
+    command: >
+      /bin/sh -c "
+      /app/.venv/bin/python -m ensurepip --upgrade &&
+      /app/.venv/bin/python -m pip install --no-cache-dir psycopg2-binary==2.9.9 &&
+      superset db upgrade &&
+      superset fab create-admin --username ${SUPERSET_ADMIN_USER:-admin} --firstname Admin --lastname User --email ${SUPERSET_ADMIN_EMAIL:-admin@superset.local} --password ${SUPERSET_ADMIN_PASSWORD:-admin} || true &&
+      superset init &&
+      superset run -h 0.0.0.0 -p 8088 --with-threads
+      "
 
-  # Grafana – operational metrics & monitoring
   grafana:
+    <<: *dlh-runtime
     image: grafana/grafana:latest
-    container_name: grafana
+    container_name: dlh-grafana
     environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_INSTALL_PLUGINS: "grafana-piechart-panel"
+      GF_DATABASE_TYPE: postgres
+      GF_DATABASE_HOST: dlh-postgres:5432
+      GF_DATABASE_NAME: ${GRAFANA_DB_NAME:-dlh_grafana}
+      GF_DATABASE_USER: ${GRAFANA_DB_USER:-dlh_grafana_user}
+      GF_DATABASE_PASSWORD: ${GRAFANA_DB_PASSWORD:-change-me}
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
     ports:
-      - "${GRAFANA_PORT:-3001}:3000"
+      - "${DLH_BIND_IP:-127.0.0.1}:${DLH_GRAFANA_PORT:-23001}:3000"
     volumes:
       - grafana_data:/var/lib/grafana
-    networks:
-      - datalake
-    restart: unless-stopped
     depends_on:
-      - postgres
+      postgres-bootstrap:
+        condition: service_completed_successfully
 
-  # ═════════════════════════════════════════════════════════
-  # INFRASTRUCTURE: REVERSE PROXY & LOAD BALANCING
-  # ═════════════════════════════════════════════════════════
+  # ==========================================================
+  # INFRA: REVERSE PROXY (replaces Traefik; Auth/RBAC removed)
+  # ==========================================================
 
-  # Nginx Proxy Manager – reverse proxy, SSL, routing
-  nginx-proxy-manager:
-    image: jc21/nginx-proxy-manager:latest
-    container_name: nginx-proxy-manager
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "${NPM_ADMIN_PORT:-81}:81"
-    environment:
-      DB_SQLITE_FILE: /data/database.sqlite
-      DISABLE_IPV6: "true"
-    volumes:
-      - npm_data:/data
-      - npm_letsencrypt:/etc/letsencrypt
-    networks:
-      - datalake
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:81/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+  # ----------------------------------------------------------
+  # OPTIONAL: Nginx Proxy Manager
+  # Uncomment this block when you need reverse proxy / SSL.
+  # ----------------------------------------------------------
+  # nginx-proxy-manager:
+  #   image: jc21/nginx-proxy-manager:latest
+  #   container_name: dlh-nginx-proxy-manager
+  #   restart: unless-stopped
+  #   ports:
+  #     - "${DLH_NPM_HTTP_PORT:-28080}:80"
+  #     - "${DLH_NPM_HTTPS_PORT:-28443}:443"
+  #     - "${DLH_NPM_ADMIN_PORT:-28081}:81"
+  #   environment:
+  #     TZ: ${TZ:-Asia/Ho_Chi_Minh}
+  #     DB_SQLITE_FILE: /data/database.sqlite
+  #     DISABLE_IPV6: "true"
+  #   volumes:
+  #     - npm_data:/data
+  #     - npm_letsencrypt:/etc/letsencrypt
+  #   networks:
+  #     - web_network
 
-# ═════════════════════════════════════════════════════════
-# VOLUMES (data persistence)
-# ═════════════════════════════════════════════════════════
 volumes:
   postgres_data:
     driver: local
@@ -301,10 +287,6 @@ volumes:
   clickhouse_data:
     driver: local
   mage_data:
-    driver: local
-  dbt_data:
-    driver: local
-  great_expectations_data:
     driver: local
   superset_data:
     driver: local
@@ -315,9 +297,7 @@ volumes:
   npm_letsencrypt:
     driver: local
 
-# ═════════════════════════════════════════════════════════
-# NETWORKS (internal service mesh)
-# ═════════════════════════════════════════════════════════
 networks:
-  datalake:
-    driver: bridge
+  web_network:
+    external: true
+    name: web_network

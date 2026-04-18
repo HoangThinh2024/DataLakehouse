@@ -42,6 +42,8 @@ docker compose down -v
 docker compose up -d
 ```
 
+Luu y: neu ban doi `POSTGRES_PASSWORD` sau khi PostgreSQL volume da duoc khoi tao, can reset volume bang lenh tren. Neu khong, `postgres-bootstrap` se bao loi xac thuc vi volume cu van giu mat khau cu.
+
 ## Cac Tang Du Lieu
 
 - Bronze: du lieu raw, giu nguyen trang thai goc.
