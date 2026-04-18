@@ -64,7 +64,13 @@ Mẫu tổ chức object key khuyến nghị:
 
 ## 5. Chuẩn bị môi trường
 
-Tạo file .env ở thư mục gốc dự án với nội dung tham khảo:
+Copy file `.env.example` để tạo file `.env` cá nhân:
+
+```bash
+cp .env.example .env
+```
+
+Mở file `.env` và cập nhật giá trị theo nhu cầu của bạn:
 
 ```env
 POSTGRES_DB=datalakehouse
@@ -80,9 +86,11 @@ RUSTFS_CORS_ALLOWED_ORIGINS=http://localhost:19000
 RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS=http://localhost:19001
 ```
 
-Lưu ý:
-- Nên đổi mật khẩu và key trong môi trường thực tế.
-- Không commit file .env chứa thông tin nhạy cảm.
+**Lưu ý bảo mật:**
+- File `.env` được gitignore và sẽ không được commit lên GitHub.
+- Chỉ `.env.example` được commit làm mẫu.
+- Nên đổi mật khẩu và key trong môi trường production.
+- Không bao giờ commit file `.env` thực tế chứa thông tin nhạy cảm.
 
 ## 6. Khởi động hệ thống
 
