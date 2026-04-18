@@ -1,0 +1,92 @@
+# ============================================================
+# DataLakehouse – Docker Compose
+# Services: PostgreSQL 17, RustFS
+# ============================================================
+# Usage:
+#   docker compose up -d
+#   docker compose down
+#   docker compose logs -f
+# ============================================================
+
+services:
+
+  # ----------------------------------------------------------
+  # PostgreSQL 17 – relational metadata store
+  # ----------------------------------------------------------
+  postgres:
+    image: postgres:17
+    container_name: postgres
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - datalakehouse-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+  # ----------------------------------------------------------
+  # RustFS – S3-compatible distributed object storage
+  # S3 API : http://localhost:9000
+  # Console : http://localhost:9001  (default: rustfsadmin / rustfsadmin)
+  # Docs    : https://rustfs.com
+  # ----------------------------------------------------------
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: rustfs
+    env_file:
+      - .env
+    environment:
+      - RUSTFS_VOLUMES=/data
+      - RUSTFS_ADDRESS=0.0.0.0:9000
+      - RUSTFS_CONSOLE_ADDRESS=0.0.0.0:9001
+      - RUSTFS_CONSOLE_ENABLE=true
+      - RUSTFS_CORS_ALLOWED_ORIGINS=${RUSTFS_CORS_ALLOWED_ORIGINS:-http://localhost:9000}
+      - RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS=${RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS:-http://localhost:9001}
+      - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY}
+      - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY}
+    ports:
+      - "${RUSTFS_API_PORT:-9000}:9000"
+      - "${RUSTFS_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - rustfs_data:/data
+    networks:
+      - datalakehouse-network
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD", "sh", "-c",
+          "curl -f http://127.0.0.1:9000/health && curl -f http://127.0.0.1:9001/rustfs/console/health"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# --------------------------------------------------------------
+# Named volumes (data persists across container restarts)
+# --------------------------------------------------------------
+volumes:
+  postgres_data:
+    driver: local
+  rustfs_data:
+    driver: local
+
+# --------------------------------------------------------------
+# Network
+# --------------------------------------------------------------
+networks:
+  datalakehouse-network:
+    driver: bridge
