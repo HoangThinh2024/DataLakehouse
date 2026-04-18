@@ -172,7 +172,8 @@ services:
       SOURCE_DB_HOST: dlh-postgres
       SOURCE_DB_PORT: "5432"
       SOURCE_SCHEMA: public
-      SOURCE_TABLE: Demo
+      SOURCE_TABLE: ${SOURCE_TABLE:-}
+      SOURCE_TABLE_CANDIDATES: ${SOURCE_TABLE_CANDIDATES:-Demo,test_projects}
       # RustFS endpoints for ETL blocks
       RUSTFS_ENDPOINT_URL: http://dlh-rustfs:9000
       RUSTFS_BRONZE_BUCKET: bronze
