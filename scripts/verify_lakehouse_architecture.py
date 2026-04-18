@@ -10,33 +10,99 @@ Validates:
 
 import sys
 import os
+import socket
 
 # Add mage path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import boto3
 from botocore.client import Config as BotoConfig
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, EndpointConnectionError
 
 
-def _s3_client():
+def _s3_client(endpoint_url: str | None = None):
     """Create RustFS S3 client."""
     return boto3.client(
         's3',
-        endpoint_url=os.getenv('RUSTFS_ENDPOINT_URL', 'http://dlh-rustfs:9000'),
+        endpoint_url=endpoint_url or os.getenv('RUSTFS_ENDPOINT_URL', 'http://dlh-rustfs:9000'),
         aws_access_key_id=os.getenv('RUSTFS_ACCESS_KEY', 'rustfsadmin'),
         aws_secret_access_key=os.getenv('RUSTFS_SECRET_KEY', 'rustfsadmin'),
         region_name=os.getenv('RUSTFS_REGION', 'us-east-1'),
         config=BotoConfig(
             signature_version='s3v4',
             s3={'addressing_style': 'path'},
+            connect_timeout=2,
+            read_timeout=2,
+            retries={'max_attempts': 1},
         ),
+    )
+
+
+def _local_ip_candidates() -> list[str]:
+    """Return likely host IPs for reaching Docker-published ports."""
+    candidates = []
+
+    try:
+        hostname_ips = socket.gethostbyname_ex(socket.gethostname())[2]
+        candidates.extend(hostname_ips)
+    except Exception:
+        pass
+
+    try:
+        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            probe.connect(('8.8.8.8', 80))
+            candidates.append(probe.getsockname()[0])
+        finally:
+            probe.close()
+    except Exception:
+        pass
+
+    unique = []
+    for candidate in candidates:
+        if candidate and candidate not in unique:
+            unique.append(candidate)
+    return unique
+
+
+def _connect_s3_client():
+    """Connect to RustFS, falling back to localhost when running on host."""
+    host_ips = _local_ip_candidates()
+
+    endpoints = [
+        os.getenv('RUSTFS_ENDPOINT_URL'),
+        'http://dlh-rustfs:9000',
+        'http://localhost:29100',
+        'http://127.0.0.1:29100',
+    ]
+    endpoints.extend(f'http://{host_ip}:29100' for host_ip in host_ips)
+    seen = set()
+
+    for endpoint in endpoints:
+        if not endpoint or endpoint in seen:
+            continue
+        seen.add(endpoint)
+        client = _s3_client(endpoint)
+        try:
+            client.list_buckets()
+            return client, endpoint
+        except Exception:
+            continue
+
+    raise RuntimeError(
+        'Could not connect to RustFS using any known endpoint. '
+        'Set RUSTFS_ENDPOINT_URL for the current environment.'
     )
 
 
 def check_rusfs_layers():
     """Check that RustFS has proper layer structure."""
-    client = _s3_client()
+    try:
+        client, endpoint = _connect_s3_client()
+        print(f"Using RustFS endpoint: {endpoint}")
+    except Exception as exc:
+        print(f"✗ RustFS connection failed: {exc}")
+        return
     layers = {
         'bronze': os.getenv('RUSTFS_BRONZE_BUCKET', 'bronze'),
         'silver': os.getenv('RUSTFS_SILVER_BUCKET', 'silver'),
@@ -68,7 +134,11 @@ def check_data_lineage():
     print("\n=== Checking Data Lineage (Bronze → Silver → Gold → ClickHouse) ===")
     
     # Check Bronze layer for PostgreSQL data
-    client = _s3_client()
+    try:
+        client, _ = _connect_s3_client()
+    except Exception as exc:
+        print(f"✗ Cannot inspect RustFS lineage: {exc}")
+        return
     bronze_bucket = os.getenv('RUSTFS_BRONZE_BUCKET', 'bronze')
     bronze_prefix = os.getenv('RUSTFS_BRONZE_PREFIX', 'demo')
     
@@ -130,15 +200,47 @@ def check_clickhouse_architecture():
     
     try:
         from clickhouse_driver import Client as CH_Client
-        
-        ch_client = CH_Client(
-            host=os.getenv('CLICKHOUSE_HOST', 'dlh-clickhouse'),
-            port=int(os.getenv('CLICKHOUSE_TCP_PORT', '9000')),
-            database=os.getenv('CLICKHOUSE_DB', 'analytics'),
-            user=os.getenv('CLICKHOUSE_USER', 'default'),
-            password=os.getenv('CLICKHOUSE_PASSWORD', '') or '',
-            connect_timeout=5,
-        )
+
+        host_candidates = [
+            os.getenv('CLICKHOUSE_HOST'),
+            'dlh-clickhouse',
+            'localhost',
+            '127.0.0.1',
+        ]
+        host_candidates.extend(_local_ip_candidates())
+
+        port_candidates = [
+            int(os.getenv('CLICKHOUSE_TCP_PORT', '9000')),
+            29000,
+        ]
+
+        ch_client = None
+        last_error = None
+
+        for host in host_candidates:
+            if not host:
+                continue
+            for port in port_candidates:
+                try:
+                    ch_client = CH_Client(
+                        host=host,
+                        port=port,
+                        database=os.getenv('CLICKHOUSE_DB', 'analytics'),
+                        user=os.getenv('CLICKHOUSE_USER', 'default'),
+                        password=os.getenv('CLICKHOUSE_PASSWORD', '') or '',
+                        connect_timeout=2,
+                    )
+                    ch_client.execute('SELECT 1')
+                    print(f'Using ClickHouse host: {host}:{port}')
+                    break
+                except Exception as exc:
+                    last_error = exc
+                    ch_client = None
+            if ch_client is not None:
+                break
+
+        if ch_client is None:
+            raise RuntimeError(f'Could not connect to ClickHouse: {last_error}')
         
         # Check that tables exist
         result = ch_client.execute("SHOW TABLES IN analytics")
