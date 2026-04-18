@@ -156,3 +156,27 @@ def read_latest_csv_silver(date_str: Optional[str] = None) -> pd.DataFrame:
     bucket = os.getenv('RUSTFS_SILVER_BUCKET', 'silver')
     prefix = os.getenv('RUSTFS_CSV_SILVER_PREFIX', 'csv_upload')
     return read_latest_layer(bucket, prefix, date_str)
+
+
+def read_csv_silver_by_run_id(run_id: str, date_str: Optional[str] = None) -> pd.DataFrame:
+    """Read a specific cleaned CSV Silver file by run_id."""
+    if not run_id:
+        return pd.DataFrame()
+
+    bucket = os.getenv('RUSTFS_SILVER_BUCKET', 'silver')
+    prefix = os.getenv('RUSTFS_CSV_SILVER_PREFIX', 'csv_upload')
+    if not date_str:
+        date_str = dt.date.today().isoformat()
+
+    key = f'{prefix}/dt={date_str}/{run_id}.parquet'
+    client = _s3_client()
+
+    try:
+        obj_response = client.get_object(Bucket=bucket, Key=key)
+        buffer = io.BytesIO(obj_response['Body'].read())
+        df = pd.read_parquet(buffer, engine='pyarrow')
+        print(f"[read_csv_silver_by_run_id] Read {len(df)} rows from s3://{bucket}/{key}")
+        return df
+    except ClientError as exc:
+        print(f"[read_csv_silver_by_run_id] Error reading s3://{bucket}/{key}: {exc}")
+        return pd.DataFrame()
