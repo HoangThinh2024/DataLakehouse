@@ -136,7 +136,7 @@ celerybeat.pid
 
 # Environments
 # .env is intentionally tracked in this repo (development config only, no real secrets)
-# .env
+.env
 .envrc
 .venv
 env/
