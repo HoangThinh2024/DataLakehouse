@@ -25,30 +25,53 @@ def transform_gold(df: pd.DataFrame, *args, **kwargs):
     gold_ts = dt.datetime.utcnow().isoformat() + 'Z'
     report_date = dt.date.today()
 
-    # Work only with completed-ish orders for meaningful aggregations
+    # Work with heterogeneous source schemas (not only Demo).
     df_agg = df.copy()
-    df_agg['value'] = pd.to_numeric(df_agg['value'], errors='coerce').fillna(0)
-    df_agg['quantity'] = pd.to_numeric(df_agg['quantity'], errors='coerce').fillna(0)
+    df_agg['__row_count'] = 1
+
+    if 'value' in df_agg.columns:
+        df_agg['value'] = pd.to_numeric(df_agg['value'], errors='coerce').fillna(0)
+    else:
+        df_agg['value'] = 0.0
+
+    if 'quantity' in df_agg.columns:
+        df_agg['quantity'] = pd.to_numeric(df_agg['quantity'], errors='coerce').fillna(0)
+    else:
+        df_agg['quantity'] = 0
 
     # ── Daily summary ────────────────────────────────────────
-    if 'order_date' in df_agg.columns:
-        df_agg['order_date'] = pd.to_datetime(df_agg['order_date'], errors='coerce').dt.date
-        daily = (
-            df_agg.dropna(subset=['order_date'])
-            .groupby('order_date')
-            .agg(
-                order_count=('id', 'count'),
-                total_revenue=('value', 'sum'),
-                avg_order_value=('value', 'mean'),
-                total_quantity=('quantity', 'sum'),
-                unique_customers=('customer_email', 'nunique'),
-                unique_regions=('region', 'nunique'),
-                unique_categories=('category', 'nunique'),
-            )
-            .reset_index()
-        )
-    else:
-        daily = pd.DataFrame()
+    if 'order_date' not in df_agg.columns:
+        if 'created_at' in df_agg.columns:
+            df_agg['order_date'] = pd.to_datetime(df_agg['created_at'], errors='coerce').dt.date
+        else:
+            df_agg['order_date'] = report_date
+
+    df_agg['order_date'] = pd.to_datetime(df_agg['order_date'], errors='coerce').dt.date
+    daily_agg = {
+        'order_count': ('__row_count', 'sum'),
+        'total_revenue': ('value', 'sum'),
+        'avg_order_value': ('value', 'mean'),
+        'total_quantity': ('quantity', 'sum'),
+    }
+    if 'customer_email' in df_agg.columns:
+        daily_agg['unique_customers'] = ('customer_email', 'nunique')
+    if 'region' in df_agg.columns:
+        daily_agg['unique_regions'] = ('region', 'nunique')
+    if 'category' in df_agg.columns:
+        daily_agg['unique_categories'] = ('category', 'nunique')
+
+    daily = (
+        df_agg.dropna(subset=['order_date'])
+        .groupby('order_date')
+        .agg(**daily_agg)
+        .reset_index()
+    )
+    if 'unique_customers' not in daily.columns:
+        daily['unique_customers'] = 0
+    if 'unique_regions' not in daily.columns:
+        daily['unique_regions'] = 0
+    if 'unique_categories' not in daily.columns:
+        daily['unique_categories'] = 0
 
     daily['_pipeline_run_id'] = run_id
     daily['_gold_processed_at'] = gold_ts
@@ -59,7 +82,7 @@ def transform_gold(df: pd.DataFrame, *args, **kwargs):
             df_agg.dropna(subset=['region'])
             .groupby('region')
             .agg(
-                order_count=('id', 'count'),
+                order_count=('__row_count', 'sum'),
                 total_revenue=('value', 'sum'),
                 avg_order_value=('value', 'mean'),
                 total_quantity=('quantity', 'sum'),
