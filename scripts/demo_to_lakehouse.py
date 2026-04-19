@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Extract the Demo table from the PostgreSQL source behind Superset,
+Extract the configured source table from PostgreSQL,
 archive the raw extract to RustFS (bronze), and load the same rows into
 ClickHouse as a raw staging table.
 
@@ -116,7 +116,14 @@ def fetch_rows() -> Tuple[List[str], List[Dict[str, Any]]]:
         source_db_user = get_env('SOURCE_DB_USER', get_env('POSTGRES_USER', 'dlh_admin'))
         source_db_password = get_env('SOURCE_DB_PASSWORD', get_env('POSTGRES_PASSWORD', ''))
 
-    source_table = get_env('SOURCE_TABLE', 'Demo')
+    source_table = get_env('SOURCE_TABLE')
+    if not source_table:
+        candidates = [
+            name.strip()
+            for name in (get_env('SOURCE_TABLE_CANDIDATES', 'Demo,test_projects,sales_orders') or '').split(',')
+            if name.strip()
+        ]
+        source_table = candidates[0] if candidates else 'sales_orders'
 
     source_db_host = get_env('SOURCE_DB_HOST', 'dlh-postgres')
     source_db_port = int(get_env('SOURCE_DB_PORT', '5432') or '5432')
@@ -281,7 +288,7 @@ def main() -> int:
         'source': {
             'database': effective_db,
             'schema': effective_schema,
-            'table': get_env('SOURCE_TABLE', 'Demo'),
+            'table': get_env('SOURCE_TABLE') or source_table,
             'query': get_env('SOURCE_QUERY'),
         },
         'row_count': len(rows),
@@ -300,7 +307,7 @@ def main() -> int:
     rustfs_key, metadata_key = upload_to_rustfs(csv_text, metadata)
     load_into_clickhouse(columns, csv_text)
 
-    print(f'Extracted {len(rows)} rows from Demo table.')
+    print(f'Extracted {len(rows)} rows from source table {effective_schema}.{source_table}.')
     print(f'Uploaded CSV to RustFS: {rustfs_key}')
     print(f'Uploaded metadata JSON to RustFS: {metadata_key}')
     print(f'Loaded raw rows into ClickHouse: {get_env("CLICKHOUSE_DB", "analytics")}.{get_env("CLICKHOUSE_TABLE", "demo_raw")}')

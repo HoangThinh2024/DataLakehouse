@@ -57,6 +57,11 @@ def _env(name: str, default: str = "") -> str:
     return value if value else default
 
 
+def _host_bind_ip() -> str:
+    ip = _env("DLH_BIND_IP", "127.0.0.1")
+    return "127.0.0.1" if ip in {"0.0.0.0", "::"} else ip
+
+
 # ---------------------------------------------------------------------------
 # Resolve effective source DB credentials
 # ---------------------------------------------------------------------------
@@ -65,15 +70,32 @@ def _effective_source() -> dict[str, Any]:
     Return the DB connection settings that ETL should use.
     Priority: CUSTOM_DB_* > SOURCE_DB_* > POSTGRES_*.
     """
+    source_db = _env("SOURCE_DB_NAME")
+    source_user = _env("SOURCE_DB_USER")
+    source_password = _env("SOURCE_DB_PASSWORD")
+    source_schema = _env("SOURCE_SCHEMA")
+
     custom_db = _env("CUSTOM_DB_NAME")
     custom_user = _env("CUSTOM_DB_USER")
     custom_password = _env("CUSTOM_DB_PASSWORD")
     custom_schema = _env("CUSTOM_SCHEMA")
 
+    # Respect explicit SOURCE_* configuration first.
+    if source_db and source_user and source_password:
+        return {
+            "host": _env("SOURCE_DB_HOST", _env("DLH_BIND_IP", "127.0.0.1")),
+            "port": int(_env("SOURCE_DB_PORT", _env("DLH_POSTGRES_PORT", "25432"))),
+            "dbname": source_db,
+            "user": source_user,
+            "password": source_password,
+            "schema": source_schema or custom_schema or "public",
+            "is_custom": bool(custom_db and source_db == custom_db),
+        }
+
     if custom_db and custom_user and custom_password:
         return {
-            "host": _env("SOURCE_DB_HOST", "localhost"),
-            "port": int(_env("SOURCE_DB_PORT", "25432")),
+            "host": _env("SOURCE_DB_HOST", _env("DLH_BIND_IP", "127.0.0.1")),
+            "port": int(_env("SOURCE_DB_PORT", _env("DLH_POSTGRES_PORT", "25432"))),
             "dbname": custom_db,
             "user": custom_user,
             "password": custom_password,
@@ -83,14 +105,27 @@ def _effective_source() -> dict[str, Any]:
 
     # Fall back to SOURCE_DB_* or POSTGRES_*
     return {
-        "host": _env("SOURCE_DB_HOST", "localhost"),
-        "port": int(_env("SOURCE_DB_PORT", "25432")),
+        "host": _env("SOURCE_DB_HOST", _env("DLH_BIND_IP", "127.0.0.1")),
+        "port": int(_env("SOURCE_DB_PORT", _env("DLH_POSTGRES_PORT", "25432"))),
         "dbname": _env("SOURCE_DB_NAME", _env("POSTGRES_DB", "datalakehouse")),
         "user": _env("SOURCE_DB_USER", _env("POSTGRES_USER", "dlh_admin")),
         "password": _env("SOURCE_DB_PASSWORD", _env("POSTGRES_PASSWORD", "")),
-        "schema": _env("SOURCE_SCHEMA", "public"),
+        "schema": _env("SOURCE_SCHEMA", _env("CUSTOM_SCHEMA", "public")),
         "is_custom": False,
     }
+
+
+def _default_source_table() -> str:
+    explicit = _env("SOURCE_TABLE")
+    if explicit:
+        return explicit
+
+    candidates = [
+        name.strip()
+        for name in _env("SOURCE_TABLE_CANDIDATES", "Demo,test_projects,sales_orders").split(",")
+        if name.strip()
+    ]
+    return candidates[0] if candidates else "sales_orders"
 
 
 # ---------------------------------------------------------------------------
@@ -207,13 +242,13 @@ def run_etl(cfg: dict[str, Any], table_name: str) -> None:
 
     # RustFS (host-side defaults)
     if not os.environ.get("RUSTFS_ENDPOINT_URL"):
-        bind_ip = _env("DLH_BIND_IP", "127.0.0.1")
+        bind_ip = _host_bind_ip()
         rustfs_port = _env("DLH_RUSTFS_API_PORT", "29100")
         os.environ["RUSTFS_ENDPOINT_URL"] = f"http://{bind_ip}:{rustfs_port}"
 
     # ClickHouse (host-side defaults)
     if not os.environ.get("CLICKHOUSE_HTTP_URL"):
-        bind_ip = _env("DLH_BIND_IP", "127.0.0.1")
+        bind_ip = _host_bind_ip()
         ch_port = _env("DLH_CLICKHOUSE_HTTP_PORT", "28123")
         os.environ["CLICKHOUSE_HTTP_URL"] = f"http://{bind_ip}:{ch_port}"
 
@@ -246,7 +281,7 @@ def run_etl(cfg: dict[str, Any], table_name: str) -> None:
 def run_dashboard() -> None:
     """Set host-side Superset URL and call the dashboard creation script."""
     if not os.environ.get("SUPERSET_URL"):
-        bind_ip = _env("DLH_BIND_IP", "127.0.0.1")
+        bind_ip = _host_bind_ip()
         superset_port = _env("DLH_SUPERSET_PORT", "28088")
         os.environ["SUPERSET_URL"] = f"http://{bind_ip}:{superset_port}"
 
@@ -263,6 +298,15 @@ def run_dashboard() -> None:
     module = importlib.util.module_from_spec(spec)
     try:
         spec.loader.exec_module(module)  # type: ignore[attr-defined]
+    except ModuleNotFoundError as exc:
+        missing = getattr(exc, "name", None) or str(exc)
+        print(
+            f"❌  Missing Python package '{missing}' for dashboard module ({dashboard_script})."
+        )
+        print("    Install Python dependencies with:")
+        print("    uv sync --all-groups")
+        print("    (or fallback: pip install boto3 psycopg2-binary requests)")
+        sys.exit(1)
     except Exception as exc:
         print(f"❌  Failed to load dashboard module ({dashboard_script}): {exc}")
         sys.exit(1)
@@ -324,7 +368,7 @@ def main() -> int:
         f"  ❓ Create a sample 'sales_orders' table in schema '{schema}' of '{src_dbname}'? [y/N]: "
     ).strip().lower()
 
-    etl_table = "Demo"  # default ETL table
+    etl_table = _default_source_table()
 
     if answer in ("y", "yes"):
         table_name = input(
@@ -385,7 +429,7 @@ def main() -> int:
 
     print("\n" + "=" * 60)
     print("  All done! Open Superset to view your dashboards.")
-    bind_ip = _env("DLH_BIND_IP", "127.0.0.1")
+    bind_ip = _host_bind_ip()
     superset_port = _env("DLH_SUPERSET_PORT", "28088")
     print(f"  Superset: http://{bind_ip}:{superset_port}")
     print("=" * 60)

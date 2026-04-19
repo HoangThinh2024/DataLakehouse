@@ -58,7 +58,11 @@ def _load_env_file(path: Path) -> None:
 _load_env_file(ENV_FILE)
 
 BIND_IP = os.getenv("DLH_BIND_IP", "127.0.0.1")
+if BIND_IP in {"0.0.0.0", "::"}:
+    BIND_IP = "127.0.0.1"
 CH_HTTP_PORT = os.getenv("DLH_CLICKHOUSE_HTTP_PORT", "28123")
+CH_HOST = os.getenv("CLICKHOUSE_HOST", "dlh-clickhouse")
+CH_PORT = os.getenv("CLICKHOUSE_PORT", "8123")
 CH_USER = os.getenv("CLICKHOUSE_USER", "default") or "default"
 CH_PASSWORD = os.getenv("CLICKHOUSE_PASSWORD", "") or ""
 CH_DB = os.getenv("CLICKHOUSE_DB", "analytics")
@@ -73,9 +77,9 @@ DASHBOARD_SLUG = "datalakehouse-analytics"
 DB_NAME = "ClickHouse Analytics"
 # Build URI from env vars so it reflects user-configured ports and credentials
 if CH_PASSWORD:
-    DB_URI = f"clickhousedb+connect://{CH_USER}:{CH_PASSWORD}@dlh-clickhouse:8123/{CH_DB}"
+    DB_URI = f"clickhousedb+connect://{CH_USER}:{CH_PASSWORD}@{CH_HOST}:{CH_PORT}/{CH_DB}"
 else:
-    DB_URI = f"clickhousedb+connect://{CH_USER}@dlh-clickhouse:8123/{CH_DB}"
+    DB_URI = f"clickhousedb+connect://{CH_USER}@{CH_HOST}:{CH_PORT}/{CH_DB}"
 
 SCHEMA = CH_DB
 
@@ -198,7 +202,17 @@ def ensure_chart(
     items = client.get(f"/api/v1/chart/?q={_query()}").get("result", [])
     for item in items:
         if item.get("slice_name") == slice_name:
-            return int(item["id"])
+            chart_id = int(item["id"])
+            update_payload = {
+                "slice_name": slice_name,
+                "viz_type": viz_type,
+                "datasource_id": dataset_id,
+                "datasource_type": "table",
+                "params": _to_params(params),
+                "dashboards": [dashboard_id],
+            }
+            client.put(f"/api/v1/chart/{chart_id}", update_payload)
+            return chart_id
     payload = {
         "slice_name": slice_name,
         "viz_type": viz_type,
@@ -355,19 +369,18 @@ def main() -> None:
         dashboard_id=dashboard_id,
         dataset_id=ds_category,
         slice_name="DLH – Doanh Thu theo Danh Mục (Revenue by Category)",
-        viz_type="echarts_bar",
+        viz_type="echarts_timeseries_bar",
         params={
             "datasource": f"{ds_category}__table",
-            "viz_type": "echarts_bar",
-            "x_axis": "category",
+            "viz_type": "echarts_timeseries_bar",
+            "orientation": "vertical",
+            "groupby": ["category"],
             "metrics": [_simple_metric("total_revenue", "SUM", "Doanh Thu")],
-            "groupby": [],
             "adhoc_filters": [],
             "row_limit": 50,
             "order_desc": True,
             "show_legend": False,
             "show_bar_value": True,
-            "orientation": "vertical",
         },
     )
 
@@ -443,19 +456,18 @@ def main() -> None:
         dashboard_id=dashboard_id,
         dataset_id=ds_region,
         slice_name="DLH – Doanh Thu theo Vùng (Revenue by Region)",
-        viz_type="echarts_bar",
+        viz_type="echarts_timeseries_bar",
         params={
             "datasource": f"{ds_region}__table",
-            "viz_type": "echarts_bar",
-            "x_axis": "region",
+            "viz_type": "echarts_timeseries_bar",
+            "orientation": "vertical",
+            "groupby": ["region"],
             "metrics": [_simple_metric("total_revenue", "SUM", "Doanh Thu")],
-            "groupby": [],
             "adhoc_filters": [],
             "row_limit": 20,
             "order_desc": True,
             "show_legend": False,
             "show_bar_value": True,
-            "orientation": "vertical",
         },
     )
 
