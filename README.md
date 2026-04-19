@@ -324,7 +324,7 @@ CLICKHOUSE_PASSWORD=<strong-password>
 
 ---
 
-# �� Project Structure
+# 📁 Project Structure
 
 ```
 DataLakehouse/
