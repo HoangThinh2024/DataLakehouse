@@ -1,8 +1,11 @@
 """
 Data Exporter – Upload Gold aggregated data to RustFS.
 
-Saves three Parquet files under:
+Saves six Parquet files under:
   gold/demo_daily/dt=YYYY-MM-DD/<run_id>.parquet
+  gold/demo_weekly/dt=YYYY-MM-DD/<run_id>.parquet
+  gold/demo_monthly/dt=YYYY-MM-DD/<run_id>.parquet
+  gold/demo_yearly/dt=YYYY-MM-DD/<run_id>.parquet
   gold/demo_by_region/dt=YYYY-MM-DD/<run_id>.parquet
   gold/demo_by_category/dt=YYYY-MM-DD/<run_id>.parquet
 """
@@ -74,6 +77,9 @@ def export_gold(data, *args, **kwargs):
     date_str = dt.date.today().isoformat()
 
     gold_daily = data.get('gold_daily', pd.DataFrame()) if isinstance(data, dict) else pd.DataFrame()
+    gold_weekly = data.get('gold_weekly', pd.DataFrame()) if isinstance(data, dict) else pd.DataFrame()
+    gold_monthly = data.get('gold_monthly', pd.DataFrame()) if isinstance(data, dict) else pd.DataFrame()
+    gold_yearly = data.get('gold_yearly', pd.DataFrame()) if isinstance(data, dict) else pd.DataFrame()
     gold_region = data.get('gold_region', pd.DataFrame()) if isinstance(data, dict) else pd.DataFrame()
     gold_category = data.get('gold_category', pd.DataFrame()) if isinstance(data, dict) else pd.DataFrame()
     run_id = (
@@ -86,6 +92,9 @@ def export_gold(data, *args, **kwargs):
     _ensure_bucket(client, bucket)
 
     _upload_df(client, bucket, f'demo_daily/dt={date_str}/{run_id}.parquet', gold_daily)
+    _upload_df(client, bucket, f'demo_weekly/dt={date_str}/{run_id}.parquet', gold_weekly)
+    _upload_df(client, bucket, f'demo_monthly/dt={date_str}/{run_id}.parquet', gold_monthly)
+    _upload_df(client, bucket, f'demo_yearly/dt={date_str}/{run_id}.parquet', gold_yearly)
     _upload_df(client, bucket, f'demo_by_region/dt={date_str}/{run_id}.parquet', gold_region)
     _upload_df(client, bucket, f'demo_by_category/dt={date_str}/{run_id}.parquet', gold_category)
 
