@@ -494,12 +494,12 @@ docker system df -v
 
 ```bash
 # Backup toàn bộ PostgreSQL
-docker compose exec dlh-postgres pg_dumpall \
+docker compose exec -T dlh-postgres pg_dumpall \
   -U dlh_admin \
   > backup/postgres_$(date +%Y%m%d_%H%M%S).sql
 
 # Backup database cụ thể
-docker compose exec dlh-postgres pg_dump \
+docker compose exec -T dlh-postgres pg_dump \
   -U dlh_admin \
   -d datalakehouse \
   > backup/datalakehouse_$(date +%Y%m%d_%H%M%S).sql
