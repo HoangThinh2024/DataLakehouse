@@ -98,14 +98,28 @@ def normalize_value(value: Any) -> str:
 
 def fetch_rows() -> Tuple[List[str], List[Dict[str, Any]]]:
     source_query = get_env('SOURCE_QUERY')
-    source_schema = get_env('SOURCE_SCHEMA', 'public')
+
+    # Prefer CUSTOM_DB_* vars when provided; fall back to SOURCE_DB_* / POSTGRES_* defaults.
+    custom_db = get_env('CUSTOM_DB_NAME')
+    custom_user = get_env('CUSTOM_DB_USER')
+    custom_password = get_env('CUSTOM_DB_PASSWORD')
+    custom_schema = get_env('CUSTOM_SCHEMA')
+
+    if custom_db and custom_user and custom_password:
+        source_db_name = custom_db
+        source_db_user = custom_user
+        source_db_password = custom_password
+        source_schema = custom_schema or get_env('SOURCE_SCHEMA', 'public')
+    else:
+        source_schema = get_env('SOURCE_SCHEMA', 'public')
+        source_db_name = get_env('SOURCE_DB_NAME', get_env('POSTGRES_DB', 'datalakehouse'))
+        source_db_user = get_env('SOURCE_DB_USER', get_env('POSTGRES_USER', 'dlh_admin'))
+        source_db_password = get_env('SOURCE_DB_PASSWORD', get_env('POSTGRES_PASSWORD', ''))
+
     source_table = get_env('SOURCE_TABLE', 'Demo')
 
     source_db_host = get_env('SOURCE_DB_HOST', 'dlh-postgres')
     source_db_port = int(get_env('SOURCE_DB_PORT', '5432') or '5432')
-    source_db_name = get_env('SOURCE_DB_NAME', get_env('POSTGRES_DB', 'datalakehouse'))
-    source_db_user = get_env('SOURCE_DB_USER', get_env('POSTGRES_USER', 'dlh_admin'))
-    source_db_password = get_env('SOURCE_DB_PASSWORD', get_env('POSTGRES_PASSWORD', ''))
 
     connection = psycopg2.connect(
         host=source_db_host,
@@ -254,13 +268,19 @@ FORMAT CSVWithNames
 def main() -> int:
     load_env_file(ENV_FILE)
 
+    custom_db = get_env('CUSTOM_DB_NAME')
+    custom_schema = get_env('CUSTOM_SCHEMA')
+
+    effective_db = custom_db or get_env('SOURCE_DB_NAME', get_env('POSTGRES_DB', 'datalakehouse'))
+    effective_schema = custom_schema or get_env('SOURCE_SCHEMA', 'public')
+
     columns, rows = fetch_rows()
     csv_text, safe_columns = build_csv(columns, rows)
 
     metadata = {
         'source': {
-            'database': get_env('SOURCE_DB_NAME', get_env('POSTGRES_DB', 'datalakehouse')),
-            'schema': get_env('SOURCE_SCHEMA', 'public'),
+            'database': effective_db,
+            'schema': effective_schema,
             'table': get_env('SOURCE_TABLE', 'Demo'),
             'query': get_env('SOURCE_QUERY'),
         },
