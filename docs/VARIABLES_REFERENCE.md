@@ -914,7 +914,7 @@ Chỉ dùng khi bỏ comment block `nginx-proxy-manager` trong `docker-compose.y
 ```bash
 # Tạo tất cả mật khẩu mạnh cùng lúc
 echo "POSTGRES_PASSWORD=$(openssl rand -base64 24)"
-echo "RUSTFS_ACCESS_KEY=rustfs$(openssl rand -hex 8)"
+echo "RUSTFS_ACCESS_KEY=rustfs$(openssl rand -hex 7)"
 echo "RUSTFS_SECRET_KEY=$(openssl rand -base64 24)"
 echo "SUPERSET_SECRET_KEY=$(openssl rand -hex 32)"
 echo "SUPERSET_ADMIN_PASSWORD=$(openssl rand -base64 16)"
