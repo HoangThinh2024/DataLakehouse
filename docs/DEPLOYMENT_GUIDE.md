@@ -1,50 +1,50 @@
-# 🚀 Hướng dẫn Triển khai – DataLakehouse
+# 🚀 Deployment Guide – DataLakehouse
 
-Tài liệu này hướng dẫn chi tiết cách triển khai DataLakehouse trong các môi trường khác nhau: **local development**, **LAN/team**, và **production server**.
-
----
-
-## Mục lục
-
-1. [Yêu cầu hệ thống](#1-yêu-cầu-hệ-thống)
-2. [Triển khai Local (Development)](#2-triển-khai-local-development)
-3. [Triển khai LAN / Team](#3-triển-khai-lan--team)
-4. [Triển khai Production Server](#4-triển-khai-production-server)
-5. [Cấu hình bảo mật](#5-cấu-hình-bảo-mật)
-6. [Quản lý dữ liệu & Backup](#6-quản-lý-dữ-liệu--backup)
-7. [Cập nhật Stack](#7-cập-nhật-stack)
-8. [Giám sát & Khắc phục sự cố](#8-giám-sát--khắc-phục-sự-cố)
-9. [Kiểm tra sau triển khai](#9-kiểm-tra-sau-triển-khai)
+This guide covers how to deploy the DataLakehouse stack in different environments: **local development**, **LAN/team**, and **production server**.
 
 ---
 
-## 1. Yêu cầu hệ thống
+## Table of Contents
 
-### Phần cứng tối thiểu
+1. [System Requirements](#1-system-requirements)
+2. [Local Deployment (Development)](#2-local-deployment-development)
+3. [LAN / Team Deployment](#3-lan--team-deployment)
+4. [Production Server Deployment](#4-production-server-deployment)
+5. [Security Configuration](#5-security-configuration)
+6. [Data Management & Backup](#6-data-management--backup)
+7. [Updating the Stack](#7-updating-the-stack)
+8. [Monitoring & Troubleshooting](#8-monitoring--troubleshooting)
+9. [Post-deployment Verification](#9-post-deployment-verification)
 
-| Tài nguyên | Tối thiểu | Khuyến nghị | Production |
-|-----------|-----------|-------------|-----------|
+---
+
+## 1. System Requirements
+
+### Minimum Hardware
+
+| Resource | Minimum | Recommended | Production |
+|----------|---------|-------------|-----------|
 | RAM | 4 GB | 8 GB | 16 GB+ |
-| CPU | 2 nhân | 4 nhân | 8 nhân+ |
-| Ổ đĩa | 10 GB | 30 GB | 100 GB+ SSD |
-| Mạng | 10 Mbps | 100 Mbps | 1 Gbps |
+| CPU | 2 cores | 4 cores | 8 cores+ |
+| Disk | 10 GB | 30 GB | 100 GB+ SSD |
+| Network | 10 Mbps | 100 Mbps | 1 Gbps |
 
-### Phần mềm cần thiết
+### Required Software
 
 ```bash
-# Kiểm tra Docker
+# Check Docker
 docker --version
-# Cần: Docker Engine 24.0+
+# Required: Docker Engine 24.0+
 
-# Kiểm tra Docker Compose
+# Check Docker Compose
 docker compose version
-# Cần: v2.20+
+# Required: v2.20+
 
-# Kiểm tra curl (dùng để test)
+# Check curl (used for testing)
 curl --version
 ```
 
-### Cài đặt Docker (nếu chưa có)
+### Install Docker (if not already installed)
 
 ```bash
 # Ubuntu/Debian
@@ -56,17 +56,17 @@ newgrp docker
 sudo yum install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 sudo systemctl enable --now docker
 
-# macOS – cài Docker Desktop
+# macOS – install Docker Desktop
 # https://docs.docker.com/desktop/mac/install/
 ```
 
 ---
 
-## 2. Triển khai Local (Development)
+## 2. Local Deployment (Development)
 
-Môi trường local cho phát triển và thử nghiệm. Tất cả services chỉ accessible từ `localhost`.
+Local environment for development and testing. All services are only accessible from `localhost`.
 
-### Bước 1 – Clone và cấu hình
+### Step 1 – Clone and configure
 
 ```bash
 git clone https://github.com/HoangThinh2024/DataLakehouse.git
@@ -74,54 +74,54 @@ cd DataLakehouse
 cp .env.example .env
 ```
 
-### Bước 2 – Cấu hình tối thiểu cho local
+### Step 2 – Minimal local configuration
 
-Chỉnh sửa `.env`:
+Edit `.env`:
 
 ```bash
-# Giữ nguyên bind IP cho local
+# Keep bind IP for local access
 DLH_BIND_IP=127.0.0.1
 
-# Múi giờ
-TZ=Asia/Ho_Chi_Minh
+# Timezone
+TZ=UTC
 
-# Database admin (có thể giữ default cho local)
+# Database admin (can keep defaults for local)
 POSTGRES_PASSWORD=localdev123
 
-# RustFS (có thể giữ default cho local)
+# RustFS (can keep defaults for local)
 RUSTFS_ACCESS_KEY=rustfsadmin
 RUSTFS_SECRET_KEY=rustfsadmin
 
-# Superset (BẮT BUỘC phải set secret key)
+# Superset (REQUIRED: set a secret key)
 SUPERSET_SECRET_KEY=local-dev-secret-key-change-for-prod
 SUPERSET_ADMIN_PASSWORD=admin
 
 # Grafana
 GRAFANA_ADMIN_PASSWORD=admin
 
-# ClickHouse (để trống OK cho local)
+# ClickHouse (empty is OK for local)
 CLICKHOUSE_PASSWORD=
 ```
 
-### Bước 3 – Tạo network và khởi động
+### Step 3 – Create network and start
 
 ```bash
 docker network create web_network
 docker compose up -d
 ```
 
-### Bước 4 – Kiểm tra khởi động
+### Step 4 – Check startup
 
 ```bash
-# Đợi tất cả services healthy
+# Wait for all services to be healthy
 watch docker compose ps
 
-# Hoặc đợi thủ công (khoảng 2-3 phút)
+# Or wait manually (~2-3 minutes)
 sleep 120
 docker compose ps
 ```
 
-**Trạng thái mong muốn:**
+**Expected state:**
 ```
 NAME                   STATUS
 dlh-postgres           healthy
@@ -131,18 +131,18 @@ dlh-mage               running
 dlh-superset           running
 dlh-grafana            running
 dlh-nocodb             running
-dlh-postgres-bootstrap exited (0)   ← OK, chỉ chạy một lần
-dlh-rustfs-init        exited (0)   ← OK, chỉ chạy một lần
+dlh-postgres-bootstrap exited (0)   ← OK, runs once
+dlh-rustfs-init        exited (0)   ← OK, runs once
 ```
 
-### Bước 5 – Tạo dashboard demo (tùy chọn)
+### Step 5 – Create demo dashboard (optional)
 
 ```bash
-# Chạy ETL và tạo Superset dashboard
+# Run ETL and create Superset dashboard
 python3 scripts/run_etl_and_dashboard.py
 ```
 
-### URL truy cập local
+### Local access URLs
 
 | Service | URL |
 |---------|-----|
@@ -154,11 +154,11 @@ python3 scripts/run_etl_and_dashboard.py
 
 ---
 
-## 3. Triển khai LAN / Team
+## 3. LAN / Team Deployment
 
-Cho phép các máy tính trong cùng mạng nội bộ (LAN) truy cập. Không cần SSL nhưng cần IP cố định.
+Allows other computers on the same local network to access the stack. No SSL required but you need a fixed IP.
 
-### Bước 1 – Tìm địa chỉ IP LAN
+### Step 1 – Find your LAN IP address
 
 ```bash
 # Linux
@@ -171,57 +171,57 @@ ifconfig | grep "inet " | grep -v 127.0.0.1
 ipconfig | findstr "IPv4"
 ```
 
-Ví dụ kết quả: `192.168.1.100`
+Example result: `192.168.1.100`
 
-### Bước 2 – Cấu hình .env cho LAN
+### Step 2 – Configure .env for LAN
 
 ```bash
-# Bind IP là địa chỉ LAN
+# Bind IP is the LAN address
 DLH_BIND_IP=192.168.1.100
 
-# PostgreSQL host (dùng bởi các services nội bộ)
+# PostgreSQL host (used by internal services)
 POSTGRES_HOST=dlh-postgres
 
-# NocoDB và Superset URLs
+# NocoDB and Superset URLs
 NOCODB_PUBLIC_URL=http://192.168.1.100:28082
 NOCODB_BACKEND_URL=http://192.168.1.100:28082
 
-# CORS cho RustFS
+# CORS for RustFS
 RUSTFS_CORS_ALLOWED_ORIGINS=http://192.168.1.100:29100
 RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS=http://192.168.1.100:29101
 
-# Mật khẩu (nên đặt mạnh hơn local)
+# Passwords (use stronger ones than local)
 POSTGRES_PASSWORD=team-dev-password-123
 SUPERSET_SECRET_KEY=$(openssl rand -hex 32)
 SUPERSET_ADMIN_PASSWORD=TeamAdmin2024!
 GRAFANA_ADMIN_PASSWORD=TeamGrafana2024!
 ```
 
-### Bước 3 – Khởi động
+### Step 3 – Start
 
 ```bash
 docker network create web_network
 docker compose up -d
 ```
 
-### Bước 4 – Kiểm tra firewall (nếu cần)
+### Step 4 – Configure firewall (if needed)
 
 ```bash
-# Ubuntu/Debian với ufw
+# Ubuntu/Debian with ufw
 sudo ufw allow from 192.168.1.0/24 to any port 23001   # Grafana
 sudo ufw allow from 192.168.1.0/24 to any port 26789   # Mage
 sudo ufw allow from 192.168.1.0/24 to any port 28082   # NocoDB
 sudo ufw allow from 192.168.1.0/24 to any port 28088   # Superset
 sudo ufw allow from 192.168.1.0/24 to any port 29101   # RustFS Console
 
-# CentOS/RHEL với firewalld
+# CentOS/RHEL with firewalld
 sudo firewall-cmd --add-port=28088/tcp --permanent
 sudo firewall-cmd --reload
 ```
 
-### URL truy cập từ LAN
+### LAN access URLs
 
-Thay `192.168.1.100` bằng IP LAN thực tế:
+Replace `192.168.1.100` with your actual LAN IP:
 
 | Service | URL |
 |---------|-----|
@@ -232,11 +232,11 @@ Thay `192.168.1.100` bằng IP LAN thực tế:
 
 ---
 
-## 4. Triển khai Production Server
+## 4. Production Server Deployment
 
-Triển khai trên VPS/cloud server với domain thực, SSL/TLS, và bảo mật đầy đủ.
+Deploy on a VPS/cloud server with a real domain, SSL/TLS, and full security.
 
-### Kiến trúc production khuyến nghị
+### Recommended production architecture
 
 ```
 Internet
@@ -252,37 +252,37 @@ Nginx / Caddy  (port 80, 443)
     └── /storage    → localhost:29101
 ```
 
-### Bước 1 – Chuẩn bị server
+### Step 1 – Prepare the server
 
 ```bash
-# Cập nhật hệ thống
+# Update the system
 sudo apt update && sudo apt upgrade -y
 
-# Cài Docker
+# Install Docker
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER
 newgrp docker
 
-# Tạo user riêng cho DataLakehouse
+# Create a dedicated user for DataLakehouse
 sudo useradd -m -s /bin/bash dlh
 sudo usermod -aG docker dlh
 su - dlh
 
-# Clone repo
+# Clone the repo
 git clone https://github.com/HoangThinh2024/DataLakehouse.git
 cd DataLakehouse
 ```
 
-### Bước 2 – Cấu hình .env production
+### Step 2 – Configure .env for production
 
 ```bash
-# Bind local only (Nginx sẽ proxy từ ngoài vào)
+# Bind local only (Nginx will proxy from outside)
 DLH_BIND_IP=127.0.0.1
 
-# Múi giờ server
+# Server timezone
 TZ=UTC
 
-# Mật khẩu mạnh cho tất cả services
+# Strong passwords for all services
 POSTGRES_PASSWORD=$(openssl rand -base64 32)
 CUSTOM_DB_PASSWORD=$(openssl rand -base64 24)
 
@@ -299,15 +299,15 @@ SUPERSET_ADMIN_PASSWORD=$(openssl rand -base64 16)
 GRAFANA_DB_PASSWORD=$(openssl rand -base64 24)
 GRAFANA_ADMIN_PASSWORD=$(openssl rand -base64 16)
 
-# URLs với domain thực
+# URLs with real domain
 NOCODB_PUBLIC_URL=https://data.yourdomain.com
 NOCODB_BACKEND_URL=https://data.yourdomain.com
 
-# CORS (thay bằng domain thực)
+# CORS (replace with your real domain)
 RUSTFS_CORS_ALLOWED_ORIGINS=https://storage.yourdomain.com
 RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS=https://storage.yourdomain.com
 
-# Ghim image versions (không dùng latest trong production)
+# Pin image versions (do not use latest in production)
 POSTGRES_IMAGE_VERSION=17.2-alpine
 CLICKHOUSE_IMAGE_VERSION=24.3.3.102
 MAGE_IMAGE_VERSION=0.9.73
@@ -315,17 +315,17 @@ GRAFANA_IMAGE_VERSION=10.4.2
 SUPERSET_IMAGE_VERSION=3.1.3
 ```
 
-### Bước 3 – Cài đặt Nginx với SSL (Caddy – dễ nhất)
+### Step 3 – Install Nginx with SSL (Caddy – easiest)
 
 ```bash
-# Cài Caddy
+# Install Caddy
 sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 echo "deb [signed-by=/usr/share/keyrings/caddy-stable-archive-keyring.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main" | sudo tee /etc/apt/sources.list.d/caddy-stable.list
 sudo apt update && sudo apt install caddy
 
-# Tạo Caddyfile
-sudo tee /etc/caddy/Caddyfile << 'EOF'
+# Create Caddyfile
+sudo tee /etc/caddy/Caddyfile << 'CADDYEOF'
 # Analytics Dashboard
 superset.yourdomain.com {
     reverse_proxy localhost:28088
@@ -341,7 +341,7 @@ data.yourdomain.com {
     reverse_proxy localhost:28082
 }
 
-# Object Storage Console (chỉ cho admin, thêm auth)
+# Object Storage Console (admin only, add authentication)
 storage.yourdomain.com {
     basicauth {
         admin $2a$14$...hashed-password...
@@ -349,37 +349,37 @@ storage.yourdomain.com {
     reverse_proxy localhost:29101
 }
 
-# ETL (chỉ cho internal, không public)
+# ETL (internal only, do not expose publicly)
 # mage.yourdomain.com {
 #     basicauth { ... }
 #     reverse_proxy localhost:26789
 # }
-EOF
+CADDYEOF
 
 sudo systemctl reload caddy
 ```
 
-### Bước 4 – Khởi động và verify
+### Step 4 – Start and verify
 
 ```bash
 docker network create web_network
 docker compose up -d
 
-# Kiểm tra services
+# Check services
 docker compose ps
 
-# Kiểm tra logs
+# Check logs
 docker compose logs --tail=50
 
-# Verify toàn bộ stack
+# Validate the full stack
 python3 scripts/verify_lakehouse_architecture.py
 ```
 
-### Bước 5 – Thiết lập systemd service (auto-start)
+### Step 5 – Set up systemd service (auto-start)
 
 ```bash
-# Tạo systemd service
-sudo tee /etc/systemd/system/datalakehouse.service << 'EOF'
+# Create systemd service
+sudo tee /etc/systemd/system/datalakehouse.service << 'SVCEOF'
 [Unit]
 Description=DataLakehouse Stack
 Requires=docker.service
@@ -396,7 +396,7 @@ User=dlh
 
 [Install]
 WantedBy=multi-user.target
-EOF
+SVCEOF
 
 sudo systemctl daemon-reload
 sudo systemctl enable datalakehouse
@@ -405,100 +405,99 @@ sudo systemctl start datalakehouse
 
 ---
 
-## 5. Cấu hình bảo mật
+## 5. Security Configuration
 
-### Bảo mật PostgreSQL
+### PostgreSQL security
 
 ```bash
-# Không expose PostgreSQL ra internet (chỉ localhost)
+# Do not expose PostgreSQL to the internet (localhost only)
 DLH_BIND_IP=127.0.0.1
 DLH_POSTGRES_PORT=25432
 
-# Đặt mật khẩu mạnh cho admin
+# Set a strong admin password
 POSTGRES_PASSWORD=$(openssl rand -base64 32)
 
-# Mỗi service dùng user riêng (đã được cấu hình trong bootstrap)
-# Mage dùng dlh_mage_user
-# Superset dùng dlh_superset_user
-# Grafana dùng dlh_grafana_user
-# NocoDB dùng dlh_nocodb_user
+# Each service uses a dedicated user (configured in bootstrap):
+# Mage → dlh_mage_user
+# Superset → dlh_superset_user
+# Grafana → dlh_grafana_user
+# NocoDB → dlh_nocodb_user
 ```
 
-### Bảo mật ClickHouse
+### ClickHouse security
 
 ```bash
-# Đặt mật khẩu (production)
+# Set a password for production
 CLICKHOUSE_PASSWORD=$(openssl rand -base64 24)
 
-# Chỉ expose ClickHouse cho internal network (không cần expose ra host cho production)
-# Trong docker-compose.yaml, có thể comment out ports: của clickhouse
-# và để Grafana/Mage kết nối qua Docker network
+# For production, you can comment out the ClickHouse port mappings in docker-compose.yaml
+# so that Grafana/Mage connect only via the Docker internal network
 ```
 
-### Bảo mật RustFS
+### RustFS security
 
 ```bash
-# Đặt credentials mạnh
+# Set strong credentials
 RUSTFS_ACCESS_KEY=prod$(openssl rand -hex 8)
 RUSTFS_SECRET_KEY=$(openssl rand -base64 32)
 
-# Giới hạn CORS (không dùng wildcard)
+# Restrict CORS (no wildcards)
 RUSTFS_CORS_ALLOWED_ORIGINS=https://storage.yourdomain.com
 ```
 
-### Bảo mật Superset
+### Superset security
 
 ```bash
-# Secret key quan trọng nhất
+# The most important key
 SUPERSET_SECRET_KEY=$(openssl rand -hex 32)
 
-# Đổi mật khẩu admin ngay sau khi login lần đầu
+# Change the admin password immediately after first login
 # http://yourdomain.com/users/userinfo/
 ```
 
 ### File permissions
 
 ```bash
-# .env không được commit và chỉ chủ sở hữu đọc được
+# .env must not be committed and must be readable only by the owner
 chmod 600 .env
 
-# Đảm bảo .gitignore có .env
-grep ".env" .gitignore  # phải có
+# Ensure .gitignore includes .env
+grep ".env" .gitignore  # must be present
 ```
 
 ---
 
-## 6. Quản lý dữ liệu & Backup
+## 6. Data Management & Backup
 
-### Cấu trúc Docker volumes
+### Docker volumes structure
 
 ```bash
-# Xem volumes hiện có
+# List existing volumes
 docker volume ls | grep DataLakehouse
 
-# Kiểm tra kích thước
+# Check sizes
 docker system df -v
 ```
 
-**Volumes quan trọng:**
+**Important volumes:**
 
-| Volume | Service | Ý nghĩa | Backup priority |
+| Volume | Service | Purpose | Backup Priority |
 |--------|---------|---------|-----------------|
-| `postgres_data` | PostgreSQL | Metadata của Mage, Superset, Grafana, NocoDB | 🔴 Cao |
-| `clickhouse_data` | ClickHouse | Dữ liệu analytics, gold tables | 🔴 Cao |
-| `rustfs_data` | RustFS | Lake storage (raw, silver, gold Parquet) | 🔴 Cao |
-| `grafana_data` | Grafana | Dashboards (nếu không dùng PostgreSQL backend) | 🟡 Trung bình |
-| `superset_data` | Superset | Cache, uploads | 🟢 Thấp |
+| `postgres_data` | PostgreSQL | Mage, Superset, Grafana, NocoDB metadata | 🔴 High |
+| `clickhouse_data` | ClickHouse | Analytics data, gold tables | 🔴 High |
+| `rustfs_data` | RustFS | Lake storage (raw, silver, gold Parquet) | 🔴 High |
+| `grafana_data` | Grafana | Dashboards (if not using PostgreSQL backend) | 🟡 Medium |
+| `superset_data` | Superset | Cache, uploads | 🟢 Low |
 
 ### Backup PostgreSQL
 
 ```bash
-# Backup toàn bộ PostgreSQL
+# Full PostgreSQL backup
 docker compose exec -T dlh-postgres pg_dumpall \
   -U dlh_admin \
   > backup/postgres_$(date +%Y%m%d_%H%M%S).sql
 
-# Backup database cụ thể
+# Backup a specific database
 docker compose exec -T dlh-postgres pg_dump \
   -U dlh_admin \
   -d datalakehouse \
@@ -513,11 +512,11 @@ docker compose exec -T dlh-postgres psql \
 ### Backup ClickHouse
 
 ```bash
-# Backup database analytics
+# Backup the analytics database
 docker compose exec clickhouse clickhouse-client \
   --query "BACKUP DATABASE analytics TO Disk('default', 'backup_$(date +%Y%m%d).zip')"
 
-# Hoặc export bảng ra file
+# Or export a table to a file
 docker compose exec clickhouse clickhouse-client \
   --query "SELECT * FROM analytics.gold_demo_daily FORMAT Parquet" \
   > backup/gold_demo_daily_$(date +%Y%m%d).parquet
@@ -526,29 +525,29 @@ docker compose exec clickhouse clickhouse-client \
 ### Backup RustFS
 
 ```bash
-# Sync toàn bộ RustFS ra ngoài bằng mc (MinIO client)
+# Sync all of RustFS with mc (MinIO client)
 mc alias set local http://localhost:29100 ${RUSTFS_ACCESS_KEY} ${RUSTFS_SECRET_KEY}
 mc mirror local/ backup/rustfs/
 
-# Hoặc backup volume trực tiếp
+# Or back up the volume directly
 docker run --rm \
   -v DataLakehouse_rustfs_data:/data:ro \
   -v $(pwd)/backup:/backup \
   alpine tar czf /backup/rustfs_data_$(date +%Y%m%d).tar.gz /data
 ```
 
-### Lịch backup tự động (crontab)
+### Automated backup schedule (crontab)
 
 ```bash
-# Chỉnh crontab
+# Edit crontab
 crontab -e
 
-# Thêm:
-# Backup hàng ngày lúc 2:00 sáng
+# Add:
+# Daily backup at 2:00 AM
 0 2 * * * /home/dlh/DataLakehouse/scripts/backup.sh >> /var/log/dlh-backup.log 2>&1
 ```
 
-Tạo file `scripts/backup.sh`:
+Create `scripts/backup.sh`:
 
 ```bash
 #!/bin/bash
@@ -560,7 +559,7 @@ mkdir -p "$BACKUP_DIR"
 docker compose exec -T dlh-postgres pg_dumpall -U dlh_admin \
   > "$BACKUP_DIR/postgres.sql"
 
-# Xóa backup cũ hơn 7 ngày
+# Delete backups older than 7 days
 find backup/ -type d -mtime +7 -exec rm -rf {} +
 
 echo "Backup completed: $BACKUP_DIR"
@@ -568,68 +567,68 @@ echo "Backup completed: $BACKUP_DIR"
 
 ---
 
-## 7. Cập nhật Stack
+## 7. Updating the Stack
 
-### Cập nhật image Docker
+### Update Docker images
 
 ```bash
-# Pull images mới
+# Pull new images
 docker compose pull
 
-# Restart với images mới
+# Restart with new images
 docker compose up -d --force-recreate
 ```
 
-### Cập nhật cụ thể một service
+### Update a specific service
 
 ```bash
-# Ví dụ: chỉ cập nhật Mage
+# Example: update only Mage
 docker compose pull mage
 docker compose up -d --no-deps --force-recreate mage
 ```
 
-### Cập nhật code pipeline (không restart)
+### Update pipeline code (no restart needed)
 
 ```bash
-# Code Mage nằm trong ./mage/ được mount trực tiếp
-# Chỉ cần edit file Python, Mage tự reload khi có thay đổi
+# Mage code is in ./mage/ which is mounted directly
+# Just edit the Python files; Mage reloads on changes
 ```
 
-### Rollback về phiên bản cũ
+### Rollback to an older version
 
 ```bash
-# Trong .env, đặt version cụ thể
-MAGE_IMAGE_VERSION=0.9.72  # phiên bản cũ
+# In .env, set a specific version
+MAGE_IMAGE_VERSION=0.9.72  # older version
 
-# Restart service
+# Restart the service
 docker compose up -d --no-deps --force-recreate mage
 ```
 
 ---
 
-## 8. Giám sát & Khắc phục sự cố
+## 8. Monitoring & Troubleshooting
 
-### Lệnh giám sát thường dùng
+### Common monitoring commands
 
 ```bash
-# Trạng thái tất cả services
+# Status of all services
 docker compose ps
 
-# Sử dụng tài nguyên real-time
+# Real-time resource usage
 docker stats
 
-# Log của tất cả services
+# Logs of all services
 docker compose logs -f --tail=100
 
-# Log của service cụ thể
+# Logs of a specific service
 docker compose logs -f mage
 docker compose logs -f clickhouse
 
-# Xem lỗi trong log
+# View errors in logs
 docker compose logs | grep -iE "error|failed|critical"
 ```
 
-### Kiểm tra kết nối
+### Connectivity checks
 
 ```bash
 # PostgreSQL
@@ -647,28 +646,28 @@ curl http://localhost:29100/health
 curl http://localhost:26789/api/status
 ```
 
-### Khắc phục sự cố thường gặp
+### Common issues
 
-#### Service không khởi động sau `up -d`
+#### Service not starting after `up -d`
 
 ```bash
-# Xem log chi tiết
+# View detailed logs
 docker compose logs <service_name>
 
-# Thử khởi động ở chế độ foreground để xem lỗi
+# Start in foreground mode to see errors
 docker compose up <service_name>
 ```
 
 #### PostgreSQL "connection refused"
 
 ```bash
-# Kiểm tra PostgreSQL đang chạy
+# Check PostgreSQL is running
 docker compose exec dlh-postgres pg_isready
 
-# Xem log PostgreSQL
+# View PostgreSQL logs
 docker compose logs dlh-postgres | tail -50
 
-# Reset PostgreSQL (mất dữ liệu!)
+# Reset PostgreSQL (data loss!)
 docker compose stop dlh-postgres
 docker volume rm DataLakehouse_postgres_data
 docker compose up -d dlh-postgres
@@ -677,10 +676,10 @@ docker compose up -d dlh-postgres
 #### Mage "Database connection error"
 
 ```bash
-# Kiểm tra DATABASE_CONNECTION_URL
+# Check DATABASE_CONNECTION_URL
 docker compose exec mage env | grep DATABASE_CONNECTION_URL
 
-# Test kết nối PostgreSQL từ container Mage
+# Test PostgreSQL connection from the Mage container
 docker compose exec mage python3 -c "
 import psycopg2
 conn = psycopg2.connect('postgresql://dlh_mage_user:password@dlh-postgres:5432/dlh_mage')
@@ -691,51 +690,50 @@ print('Connected!')
 #### ClickHouse "Table does not exist"
 
 ```bash
-# Chạy lại init scripts
+# Re-run init scripts
 docker compose exec clickhouse clickhouse-client \
   --multiquery < clickhouse/init/001_analytics_schema.sql
 ```
 
-#### Không có dữ liệu trong Superset
+#### No data in Superset
 
 ```bash
-# 1. Kiểm tra ETL có chạy chưa
+# 1. Check if ETL has run
 docker compose exec clickhouse clickhouse-client \
   --query "SELECT count() FROM analytics.pipeline_runs WHERE status='success'"
 
-# 2. Chạy ETL thủ công
+# 2. Run ETL manually
 docker compose exec mage mage run etl_postgres_to_lakehouse
 
-# 3. Kiểm tra lại dữ liệu
+# 3. Re-check data
 docker compose exec clickhouse clickhouse-client \
   --query "SELECT count() FROM analytics.silver_demo"
 
 # 4. Refresh Superset datasets
-# Vào Superset → Datasets → click "Refresh" trên dataset ClickHouse
+# Go to Superset → Datasets → click "Refresh" on the ClickHouse dataset
 ```
 
 #### Docker network conflict
 
 ```bash
-# Nếu bị lỗi "network web_network not found"
+# If you get "network web_network not found"
 docker network create web_network
 
-# Nếu bị lỗi "network web_network already exists"
-# Không cần làm gì thêm, tiếp tục deploy
+# If you get "network web_network already exists"
+# Nothing to do, proceed with deployment
 ```
 
-#### Không đủ RAM
+#### Not enough RAM
 
 ```bash
-# Xem RAM đang dùng
+# View current RAM usage
 docker stats --no-stream
 
-# Tắt service ít dùng
-docker compose stop nocodb    # ~200MB RAM
-docker compose stop superset  # ~500MB RAM
+# Stop less-used services
+docker compose stop nocodb    # ~200 MB RAM
+docker compose stop superset  # ~500 MB RAM
 
-# Hoặc giới hạn RAM
-# Thêm vào docker-compose.yaml:
+# Or limit RAM in docker-compose.yaml:
 # deploy:
 #   resources:
 #     limits:
@@ -744,68 +742,68 @@ docker compose stop superset  # ~500MB RAM
 
 ---
 
-## 9. Kiểm tra sau triển khai
+## 9. Post-deployment Verification
 
-Chạy các bước sau để xác nhận stack đã deploy thành công:
+Run these steps to confirm the stack is deployed correctly:
 
 ```bash
-# 1. Kiểm tra tất cả services
+# 1. Check all services
 docker compose ps
-# Kết quả mong muốn: dlh-postgres (healthy), dlh-rustfs (healthy), dlh-clickhouse (healthy)
+# Expected: dlh-postgres (healthy), dlh-rustfs (healthy), dlh-clickhouse (healthy)
 
-# 2. Kiểm tra PostgreSQL
+# 2. Check PostgreSQL
 docker compose exec dlh-postgres psql -U dlh_admin -c "\l"
-# Phải thấy: datalakehouse, dlh_mage, dlh_superset, dlh_grafana, dlh_nocodb
+# Should see: datalakehouse, dlh_mage, dlh_superset, dlh_grafana, dlh_nocodb
 
-# 3. Kiểm tra RustFS buckets
+# 3. Check RustFS buckets
 docker compose exec rustfs sh -c "
   curl -s http://localhost:9000/health && echo ' ← API OK'
   curl -s http://localhost:9001/rustfs/console/health && echo ' ← Console OK'
 "
 
-# 4. Kiểm tra ClickHouse databases
+# 4. Check ClickHouse databases
 docker compose exec clickhouse clickhouse-client --query "SHOW DATABASES"
-# Phải thấy: analytics
+# Should see: analytics
 
-# 5. Kiểm tra ClickHouse tables
+# 5. Check ClickHouse tables
 docker compose exec clickhouse clickhouse-client --query "SHOW TABLES FROM analytics"
-# Phải thấy: csv_quality_metrics, csv_upload_events, pipeline_runs, silver_demo, v.v.
+# Should see: csv_quality_metrics, csv_upload_events, pipeline_runs, silver_demo, etc.
 
-# 6. Kiểm tra dữ liệu mẫu PostgreSQL
+# 6. Check sample PostgreSQL data
 docker compose exec dlh-postgres psql -U dlh_admin -d datalakehouse \
   -c "SELECT count(*) FROM public.\"Demo\""
-# Phải thấy: 100000
+# Should see: 100000
 
-# 7. Chạy ETL pipeline
+# 7. Run the ETL pipeline
 docker compose exec mage mage run etl_postgres_to_lakehouse
 
-# 8. Kiểm tra kết quả ETL
+# 8. Check ETL results
 docker compose exec clickhouse clickhouse-client \
   --query "SELECT count() FROM analytics.silver_demo"
-# Phải > 0
+# Should be > 0
 
-# 9. Kiểm tra toàn diện bằng script
+# 9. Full validation with script
 python3 scripts/verify_lakehouse_architecture.py
 
-# 10. Truy cập UI
+# 10. Access UIs
 curl -s http://localhost:28088/health  # Superset
 curl -s http://localhost:23001/api/health  # Grafana
 ```
 
-### Checklist triển khai production
+### Production deployment checklist
 
-- [ ] Tất cả mật khẩu mặc định đã được thay đổi
-- [ ] `SUPERSET_SECRET_KEY` đã được đặt giá trị ngẫu nhiên
-- [ ] `DLH_BIND_IP=127.0.0.1` (hoặc IP phù hợp)
-- [ ] Image versions đã được ghim cụ thể (không dùng `latest`)
-- [ ] SSL/TLS đã được cấu hình cho reverse proxy
-- [ ] Firewall đã được cấu hình
-- [ ] Backup đã được thiết lập và test
-- [ ] Monitoring alerts đã được cấu hình trong Grafana
-- [ ] Test truy cập từ browser thành công
-- [ ] ETL pipeline chạy thành công ít nhất một lần
-- [ ] `docker compose ps` hiển thị tất cả services healthy
+- [ ] All default passwords have been changed
+- [ ] `SUPERSET_SECRET_KEY` has been set to a random value
+- [ ] `DLH_BIND_IP=127.0.0.1` (or appropriate IP)
+- [ ] Image versions have been pinned (no `latest`)
+- [ ] SSL/TLS configured for the reverse proxy
+- [ ] Firewall configured
+- [ ] Backup set up and tested
+- [ ] Monitoring alerts configured in Grafana
+- [ ] Browser access test passed
+- [ ] ETL pipeline ran successfully at least once
+- [ ] `docker compose ps` shows all services healthy
 
 ---
 
-*Xem thêm: [README.md](../README.md) | [VARIABLES_REFERENCE.md](VARIABLES_REFERENCE.md) | [PIPELINE_GUIDE.md](PIPELINE_GUIDE.md)*
+*See also: [README.md](../README.md) | [VARIABLES_REFERENCE.md](VARIABLES_REFERENCE.md) | [PIPELINE_GUIDE.md](PIPELINE_GUIDE.md)*
