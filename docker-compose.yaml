@@ -12,7 +12,7 @@
 x-dlh-runtime: &dlh-runtime
   networks:
     - web_network
-  restart: unless-stopped
+  restart: always
 
 x-dlh-timezone: &dlh-timezone
   TZ: ${TZ:-Asia/Ho_Chi_Minh}
@@ -45,7 +45,7 @@ services:
       interval: 20s
       timeout: 8s
       retries: 5
-      start_period: 12s
+      start_period: 30s
 
   # PostgreSQL bootstrap – re-sync app roles/passwords on every `docker compose up`
   # This keeps Grafana/Mage/NocoDB/Superset aligned even if the data volume already exists.
@@ -57,7 +57,7 @@ services:
       - .env
     environment:
       <<: *dlh-timezone
-      PGHOST: dlh-postgres
+      PGHOST: ${POSTGRES_HOST:-dlh-postgres}
       PGPORT: 5432
       PGUSER: ${POSTGRES_USER}
       PGPASSWORD: ${POSTGRES_PASSWORD}
@@ -87,9 +87,9 @@ services:
       - .env
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
-      RUSTFS_VOLUMES: /data
-      RUSTFS_ADDRESS: 0.0.0.0:9000
-      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_VOLUMES: ${RUSTFS_VOLUMES:-/data}
+      RUSTFS_ADDRESS: ${RUSTFS_ADDRESS:-0.0.0.0:9000}
+      RUSTFS_CONSOLE_ADDRESS: ${RUSTFS_CONSOLE_ADDRESS:-0.0.0.0:9001}
       RUSTFS_CONSOLE_ENABLE: "true"
       RUSTFS_CORS_ALLOWED_ORIGINS: ${RUSTFS_CORS_ALLOWED_ORIGINS:-http://localhost:29100}
       RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS: ${RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS:-http://localhost:29101}
@@ -109,7 +109,7 @@ services:
       interval: 20s
       timeout: 8s
       retries: 4
-      start_period: 35s
+      start_period: 40s
 
   # RustFS init – create Bronze/Silver/Gold buckets
   rustfs-init:
@@ -154,7 +154,7 @@ services:
       interval: 20s
       timeout: 8s
       retries: 5
-      start_period: 20s
+      start_period: 30s
 
   # ==========================================================
   # LAYER 3: PROCESSING
@@ -168,14 +168,17 @@ services:
       - .env
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
-      MAGE_CODE_PATH: /home/src
-      USER_CODE_PATH: /home/src
-      DATABASE_CONNECTION_URL: postgresql+psycopg2://${MAGE_DB_USER:-dlh_mage_user}:${MAGE_DB_PASSWORD:-change-me}@dlh-postgres:5432/${MAGE_DB_NAME:-dlh_mage}
-      MAGE_DATABASE_CONNECTION_URL: postgresql+psycopg2://${MAGE_DB_USER:-dlh_mage_user}:${MAGE_DB_PASSWORD:-change-me}@dlh-postgres:5432/${MAGE_DB_NAME:-dlh_mage}
+      MAGE_CODE_PATH: ${MAGE_CODE_PATH:-/home/src}
+      USER_CODE_PATH: ${USER_CODE_PATH:-/home/src}
+      DATABASE_CONNECTION_URL: postgresql+psycopg2://${MAGE_DB_USER:-dlh_mage_user}:${MAGE_DB_PASSWORD:-change-me}@${POSTGRES_HOST:-dlh-postgres}:5432/${MAGE_DB_NAME:-dlh_mage}
+      MAGE_DATABASE_CONNECTION_URL: postgresql+psycopg2://${MAGE_DB_USER:-dlh_mage_user}:${MAGE_DB_PASSWORD:-change-me}@${POSTGRES_HOST:-dlh-postgres}:5432/${MAGE_DB_NAME:-dlh_mage}
       # Source DB for ETL extraction (uses CUSTOM_DB_* when set)
-      SOURCE_DB_HOST: dlh-postgres
+      SOURCE_DB_HOST: ${POSTGRES_HOST:-dlh-postgres}
       SOURCE_DB_PORT: "5432"
-      SOURCE_SCHEMA: ${CUSTOM_SCHEMA:-public}
+      SOURCE_DB_NAME: ${SOURCE_DB_NAME:-}
+      SOURCE_DB_USER: ${SOURCE_DB_USER:-}
+      SOURCE_DB_PASSWORD: ${SOURCE_DB_PASSWORD:-}
+      SOURCE_SCHEMA: ${SOURCE_SCHEMA:-public}
       SOURCE_TABLE: ${SOURCE_TABLE:-}
       SOURCE_TABLE_CANDIDATES: ${SOURCE_TABLE_CANDIDATES:-Demo,test_projects}
       # Custom workspace credentials forwarded to Mage pipelines
@@ -191,12 +194,12 @@ services:
       CSV_UPLOAD_ENCODING: ${CSV_UPLOAD_ENCODING:-utf-8}
       CSV_UPLOAD_SCAN_LIMIT: ${CSV_UPLOAD_SCAN_LIMIT:-200}
       # RustFS endpoints for ETL blocks
-      RUSTFS_ENDPOINT_URL: http://dlh-rustfs:9000
-      RUSTFS_BRONZE_BUCKET: bronze
-      RUSTFS_SILVER_BUCKET: silver
-      RUSTFS_GOLD_BUCKET: gold
+      RUSTFS_ENDPOINT_URL: ${RUSTFS_ENDPOINT_URL:-http://dlh-rustfs:9000}
+      RUSTFS_BRONZE_BUCKET: ${RUSTFS_BRONZE_BUCKET:-bronze}
+      RUSTFS_SILVER_BUCKET: ${RUSTFS_SILVER_BUCKET:-silver}
+      RUSTFS_GOLD_BUCKET: ${RUSTFS_GOLD_BUCKET:-gold}
       # ClickHouse for ETL loading
-      CLICKHOUSE_HOST: dlh-clickhouse
+      CLICKHOUSE_HOST: ${CLICKHOUSE_HOST:-dlh-clickhouse}
       CLICKHOUSE_HTTP_PORT: "8123"
       CLICKHOUSE_TCP_PORT: "9000"
     ports:
@@ -222,11 +225,11 @@ services:
     container_name: dlh-nocodb
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
-      NC_DB: pg://dlh-postgres:5432?u=${NOCODB_DB_USER:-dlh_nocodb_user}&p=${NOCODB_DB_PASSWORD:-change-me}&d=${NOCODB_DB_NAME:-dlh_nocodb}
+      NC_DB: pg://${POSTGRES_HOST:-dlh-postgres}:5432?u=${NOCODB_DB_USER:-dlh_nocodb_user}&p=${NOCODB_DB_PASSWORD:-change-me}&d=${NOCODB_DB_NAME:-dlh_nocodb}
       NC_PUBLIC_URL: ${NOCODB_PUBLIC_URL:-http://${DLH_BIND_IP:-127.0.0.1}:${DLH_NOCODB_PORT:-28082}}
       NUXT_PUBLIC_NC_BACKEND_URL: ${NOCODB_BACKEND_URL:-http://${DLH_BIND_IP:-127.0.0.1}:${DLH_NOCODB_PORT:-28082}}
       LITESTREAM_S3_BUCKET: ${RUSTFS_BUCKET:-nocodb}
-      LITESTREAM_S3_ENDPOINT: http://rustfs:9000
+      LITESTREAM_S3_ENDPOINT: ${LITESTREAM_S3_ENDPOINT:-http://dlh-rustfs:9000}
       LITESTREAM_S3_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
       LITESTREAM_S3_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
       NC_ALLOW_LOCAL_EXTERNAL_DBS: true
@@ -248,8 +251,8 @@ services:
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
       SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
-      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
-      SUPERSET_LOAD_EXAMPLES: "no"
+      SUPERSET_CONFIG_PATH: ${SUPERSET_CONFIG_PATH:-/app/pythonpath/superset_config.py}
+      SUPERSET_LOAD_EXAMPLES: ${SUPERSET_LOAD_EXAMPLES:-no}
       SUPERSET_DB_NAME: ${SUPERSET_DB_NAME:-dlh_superset}
       SUPERSET_DB_USER: ${SUPERSET_DB_USER:-dlh_superset_user}
       SUPERSET_DB_PASSWORD: ${SUPERSET_DB_PASSWORD:-change-me}
@@ -281,11 +284,11 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_DATABASE_TYPE: postgres
-      GF_DATABASE_HOST: dlh-postgres:5432
+      GF_DATABASE_HOST: ${GF_DATABASE_HOST:-dlh-postgres:5432}
       GF_DATABASE_NAME: ${GRAFANA_DB_NAME:-dlh_grafana}
       GF_DATABASE_USER: ${GRAFANA_DB_USER:-dlh_grafana_user}
       GF_DATABASE_PASSWORD: ${GRAFANA_DB_PASSWORD:-change-me}
-      GF_INSTALL_PLUGINS: grafana-piechart-panel,grafana-clickhouse-datasource
+      GF_INSTALL_PLUGINS: ${GF_INSTALL_PLUGINS:-grafana-piechart-panel,grafana-clickhouse-datasource}
       # Pass datasource credentials into provisioning templates
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
