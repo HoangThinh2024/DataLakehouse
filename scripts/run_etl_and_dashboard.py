@@ -172,6 +172,8 @@ def create_sample_table(conn, schema: str, table_name: str) -> int:
             INSERT INTO "{schema}"."{table_name}"
               (product_name, category, unit_price, quantity, order_date, region, status, customer)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            -- Skip rows that already exist (primary-key conflict on id).
+            -- Safe to re-run: existing data is not modified.
             ON CONFLICT DO NOTHING
             """,
             rows,
@@ -224,10 +226,14 @@ def run_etl(cfg: dict[str, Any], table_name: str) -> None:
     import importlib.util
     spec = importlib.util.spec_from_file_location("demo_to_lakehouse", etl_script)
     if spec is None or spec.loader is None:
-        print("❌  Could not load ETL module.")
+        print(f"❌  Could not load ETL module from {etl_script}")
         sys.exit(1)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)  # type: ignore[attr-defined]
+    try:
+        spec.loader.exec_module(module)  # type: ignore[attr-defined]
+    except Exception as exc:
+        print(f"❌  Failed to load ETL module ({etl_script}): {exc}")
+        sys.exit(1)
     rc = module.main()
     if rc != 0:
         print(f"❌  ETL finished with exit code {rc}")
@@ -252,10 +258,14 @@ def run_dashboard() -> None:
     import importlib.util
     spec = importlib.util.spec_from_file_location("create_superset_demo_dashboard", dashboard_script)
     if spec is None or spec.loader is None:
-        print("❌  Could not load dashboard module.")
+        print(f"❌  Could not load dashboard module from {dashboard_script}")
         sys.exit(1)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)  # type: ignore[attr-defined]
+    try:
+        spec.loader.exec_module(module)  # type: ignore[attr-defined]
+    except Exception as exc:
+        print(f"❌  Failed to load dashboard module ({dashboard_script}): {exc}")
+        sys.exit(1)
     module.main()
 
 
@@ -271,11 +281,19 @@ def main() -> int:
     cfg = _effective_source()
     label = "custom workspace" if cfg["is_custom"] else "default workspace"
 
+    # Extract non-sensitive fields for display – keeps password out of log lines.
+    src_host: str = cfg["host"]
+    src_port: int = cfg["port"]
+    src_dbname: str = cfg["dbname"]
+    src_schema: str = cfg["schema"]
+    src_user: str = cfg["user"]
+
     print(f"\n📦  Source: {label}")
-    print(f"    Host   : {cfg['host']}:{cfg['port']}")
-    print(f"    DB     : {cfg['dbname']}")
-    print(f"    Schema : {cfg['schema']}")
-    print(f"    User   : {cfg['user']}")
+    print(f"    Host   : {src_host}:{src_port}")
+    print(f"    DB     : {src_dbname}")
+    print(f"    Schema : {src_schema}")
+    print(f"    User   : {src_user}")
+    print(f"    Pass   : {'*' * 8}")
 
     # ── Connect ──────────────────────────────────────────────
     print("\n🔌  Connecting to PostgreSQL …")
@@ -292,7 +310,7 @@ def main() -> int:
         return 1
 
     # ── Check / create schema ─────────────────────────────────
-    schema = cfg["schema"]
+    schema = src_schema
     with conn.cursor() as cur:
         cur.execute(
             "SELECT 1 FROM information_schema.schemata WHERE schema_name = %s", (schema,)
@@ -303,7 +321,7 @@ def main() -> int:
     # ── Test table ────────────────────────────────────────────
     print()
     answer = input(
-        f"  ❓ Create a sample 'sales_orders' table in schema '{schema}' of '{cfg['dbname']}'? [y/N]: "
+        f"  ❓ Create a sample 'sales_orders' table in schema '{schema}' of '{src_dbname}'? [y/N]: "
     ).strip().lower()
 
     etl_table = "Demo"  # default ETL table
@@ -345,7 +363,7 @@ def main() -> int:
 
     # ── ETL ───────────────────────────────────────────────────
     print("\n🚀  Running ETL pipeline …")
-    print(f"    Source: {cfg['dbname']}.{schema}.{etl_table}")
+    print(f"    Source: {src_dbname}.{schema}.{etl_table}")
     try:
         run_etl(cfg, etl_table)
         print("  ✅  ETL complete.")
