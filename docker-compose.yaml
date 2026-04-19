@@ -22,10 +22,10 @@ services:
   # LAYER 2: STORAGE
   # ==========================================================
 
-  # PostgreSQL 17 – central metadata/config DB for stack services
+  # PostgreSQL – central metadata/config DB for stack services
   dlh-postgres:
     <<: *dlh-runtime
-    image: postgres:17-alpine
+    image: postgres:${POSTGRES_IMAGE_VERSION:-17-alpine}
     container_name: dlh-postgres
     env_file:
       - .env
@@ -51,7 +51,7 @@ services:
   # This keeps Grafana/Mage/NocoDB/Superset aligned even if the data volume already exists.
   postgres-bootstrap:
     <<: *dlh-runtime
-    image: postgres:17-alpine
+    image: postgres:${POSTGRES_IMAGE_VERSION:-17-alpine}
     container_name: dlh-postgres-bootstrap
     env_file:
       - .env
@@ -62,6 +62,11 @@ services:
       PGUSER: ${POSTGRES_USER}
       PGPASSWORD: ${POSTGRES_PASSWORD}
       PGDATABASE: ${POSTGRES_DB}
+      # Custom workspace DB/user/schema (optional – bootstrap creates these when set)
+      CUSTOM_DB_NAME: ${CUSTOM_DB_NAME:-}
+      CUSTOM_DB_USER: ${CUSTOM_DB_USER:-}
+      CUSTOM_DB_PASSWORD: ${CUSTOM_DB_PASSWORD:-}
+      CUSTOM_SCHEMA: ${CUSTOM_SCHEMA:-}
     volumes:
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
     depends_on:
@@ -76,7 +81,7 @@ services:
   # RustFS – S3-compatible object storage for Bronze/Silver/Gold
   rustfs:
     <<: *dlh-runtime
-    image: rustfs/rustfs:latest
+    image: rustfs/rustfs:${RUSTFS_IMAGE_VERSION:-latest}
     container_name: dlh-rustfs
     env_file:
       - .env
@@ -108,7 +113,7 @@ services:
 
   # RustFS init – create Bronze/Silver/Gold buckets
   rustfs-init:
-    image: minio/mc:latest
+    image: minio/mc:${MINIO_MC_IMAGE_VERSION:-latest}
     container_name: dlh-rustfs-init
     depends_on:
       rustfs:
@@ -128,10 +133,9 @@ services:
     restart: "no"
 
   # ClickHouse – OLAP serving layer for lake data
-  # Lake-ready approach: keep raw data on object storage, use ClickHouse for acceleration/query serving.
   clickhouse:
     <<: *dlh-runtime
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server:${CLICKHOUSE_IMAGE_VERSION:-latest}
     container_name: dlh-clickhouse
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
@@ -158,7 +162,7 @@ services:
 
   mage:
     <<: *dlh-runtime
-    image: mageai/mageai:latest
+    image: mageai/mageai:${MAGE_IMAGE_VERSION:-latest}
     container_name: dlh-mage
     env_file:
       - .env
@@ -168,12 +172,17 @@ services:
       USER_CODE_PATH: /home/src
       DATABASE_CONNECTION_URL: postgresql+psycopg2://${MAGE_DB_USER:-dlh_mage_user}:${MAGE_DB_PASSWORD:-change-me}@dlh-postgres:5432/${MAGE_DB_NAME:-dlh_mage}
       MAGE_DATABASE_CONNECTION_URL: postgresql+psycopg2://${MAGE_DB_USER:-dlh_mage_user}:${MAGE_DB_PASSWORD:-change-me}@dlh-postgres:5432/${MAGE_DB_NAME:-dlh_mage}
-      # Source DB for ETL extraction
+      # Source DB for ETL extraction (uses CUSTOM_DB_* when set)
       SOURCE_DB_HOST: dlh-postgres
       SOURCE_DB_PORT: "5432"
-      SOURCE_SCHEMA: public
+      SOURCE_SCHEMA: ${CUSTOM_SCHEMA:-${SOURCE_SCHEMA:-public}}
       SOURCE_TABLE: ${SOURCE_TABLE:-}
       SOURCE_TABLE_CANDIDATES: ${SOURCE_TABLE_CANDIDATES:-Demo,test_projects}
+      # Custom workspace credentials forwarded to Mage pipelines
+      CUSTOM_DB_NAME: ${CUSTOM_DB_NAME:-}
+      CUSTOM_DB_USER: ${CUSTOM_DB_USER:-}
+      CUSTOM_DB_PASSWORD: ${CUSTOM_DB_PASSWORD:-}
+      CUSTOM_SCHEMA: ${CUSTOM_SCHEMA:-}
       # CSV upload watcher for non-technical users (RustFS console uploads)
       CSV_UPLOAD_BUCKET: ${CSV_UPLOAD_BUCKET:-bronze}
       CSV_UPLOAD_PREFIX: ${CSV_UPLOAD_PREFIX:-csv_upload/}
@@ -209,7 +218,7 @@ services:
 
   nocodb:
     <<: *dlh-runtime
-    image: nocodb/nocodb:latest
+    image: nocodb/nocodb:${NOCODB_IMAGE_VERSION:-latest}
     container_name: dlh-nocodb
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
@@ -233,7 +242,7 @@ services:
 
   superset:
     <<: *dlh-runtime
-    image: apache/superset:latest
+    image: apache/superset:${SUPERSET_IMAGE_VERSION:-latest}
     container_name: dlh-superset
     user: root
     environment:
@@ -264,7 +273,7 @@ services:
 
   grafana:
     <<: *dlh-runtime
-    image: grafana/grafana:latest
+    image: grafana/grafana:${GRAFANA_IMAGE_VERSION:-latest}
     container_name: dlh-grafana
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}

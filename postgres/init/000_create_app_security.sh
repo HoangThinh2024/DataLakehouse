@@ -55,3 +55,73 @@ GRANT USAGE, CREATE ON SCHEMA public TO "${app_user}";
 ALTER SCHEMA public OWNER TO "${app_user}";
 SQL
 done
+
+# ==============================================================
+# Custom workspace: CUSTOM_DB_NAME / CUSTOM_DB_USER / CUSTOM_SCHEMA
+# Created only when CUSTOM_DB_NAME is non-empty.
+# This database/user/schema is completely isolated from the stack
+# service databases above and is intended for user-defined ETL and
+# reporting workflows.
+# ==============================================================
+CUSTOM_DB_NAME="${CUSTOM_DB_NAME:-}"
+CUSTOM_DB_USER="${CUSTOM_DB_USER:-}"
+CUSTOM_DB_PASSWORD="${CUSTOM_DB_PASSWORD:-}"
+CUSTOM_SCHEMA="${CUSTOM_SCHEMA:-}"
+
+if [ -n "$CUSTOM_DB_NAME" ] && [ -n "$CUSTOM_DB_USER" ] && [ -n "$CUSTOM_DB_PASSWORD" ]; then
+  echo "postgres-bootstrap: provisioning custom workspace db='${CUSTOM_DB_NAME}' user='${CUSTOM_DB_USER}' schema='${CUSTOM_SCHEMA:-public}'"
+
+  custom_password_sql=${CUSTOM_DB_PASSWORD//\'/\'\'}
+
+  psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<SQL
+DO
+\$\$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${CUSTOM_DB_USER}') THEN
+    CREATE ROLE "${CUSTOM_DB_USER}" LOGIN PASSWORD '${custom_password_sql}'
+      NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+  ELSE
+    ALTER ROLE "${CUSTOM_DB_USER}" LOGIN PASSWORD '${custom_password_sql}'
+      NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+  END IF;
+END
+\$\$;
+
+SELECT 'CREATE DATABASE "${CUSTOM_DB_NAME}" OWNER "${CUSTOM_DB_USER}"'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${CUSTOM_DB_NAME}')
+\gexec
+
+REVOKE ALL ON DATABASE "${CUSTOM_DB_NAME}" FROM PUBLIC;
+GRANT CONNECT, TEMP ON DATABASE "${CUSTOM_DB_NAME}" TO "${CUSTOM_DB_USER}";
+-- Also allow the admin user full access to the custom DB for ETL and maintenance
+GRANT ALL PRIVILEGES ON DATABASE "${CUSTOM_DB_NAME}" TO "${POSTGRES_USER}";
+SQL
+
+  # Create the custom schema inside the custom database (skip if schema is "public")
+  EFFECTIVE_SCHEMA="${CUSTOM_SCHEMA:-public}"
+
+  psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$CUSTOM_DB_NAME" <<SQL
+-- Ensure the custom schema exists
+DO
+\$\$
+BEGIN
+  IF '${EFFECTIVE_SCHEMA}' <> 'public' THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '${EFFECTIVE_SCHEMA}') THEN
+      CREATE SCHEMA "${EFFECTIVE_SCHEMA}" AUTHORIZATION "${CUSTOM_DB_USER}";
+    ELSE
+      ALTER SCHEMA "${EFFECTIVE_SCHEMA}" OWNER TO "${CUSTOM_DB_USER}";
+    END IF;
+  END IF;
+END
+\$\$;
+
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+GRANT USAGE, CREATE ON SCHEMA public TO "${CUSTOM_DB_USER}";
+GRANT USAGE, CREATE ON SCHEMA "${EFFECTIVE_SCHEMA}" TO "${CUSTOM_DB_USER}";
+ALTER ROLE "${CUSTOM_DB_USER}" SET search_path TO "${EFFECTIVE_SCHEMA}", public;
+SQL
+
+  echo "postgres-bootstrap: custom workspace ready – db='${CUSTOM_DB_NAME}' schema='${EFFECTIVE_SCHEMA}' user='${CUSTOM_DB_USER}'"
+else
+  echo "postgres-bootstrap: CUSTOM_DB_NAME/CUSTOM_DB_USER/CUSTOM_DB_PASSWORD not set – skipping custom workspace creation"
+fi
