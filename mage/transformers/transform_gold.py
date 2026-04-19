@@ -263,3 +263,57 @@ def test_output(output, *args):
     assert 'gold_yearly' in output, 'gold_yearly key missing from gold output'
     assert 'gold_region' in output, 'gold_region key missing from gold output'
     assert 'gold_category' in output, 'gold_category key missing from gold output'
+
+    expected_frames = [
+        'silver',
+        'gold_daily',
+        'gold_weekly',
+        'gold_monthly',
+        'gold_yearly',
+        'gold_region',
+        'gold_category',
+    ]
+    for key in expected_frames:
+        assert isinstance(output[key], pd.DataFrame), f'{key} must be a pandas DataFrame'
+
+    weekly = output['gold_weekly']
+    weekly_required_columns = {'year_week', 'week_start'}
+    missing_weekly_columns = weekly_required_columns.difference(weekly.columns)
+    assert not missing_weekly_columns, (
+        f"gold_weekly missing required columns: {sorted(missing_weekly_columns)}"
+    )
+    if not weekly.empty:
+        week_start = pd.to_datetime(weekly['week_start'], errors='raise')
+        assert (week_start.dt.dayofweek == 0).all(), 'gold_weekly week_start must always be a Monday'
+        iso_calendar = week_start.dt.isocalendar()
+        expected_year_week = (
+            iso_calendar['year'].astype(str)
+            + '-W'
+            + iso_calendar['week'].astype(str).str.zfill(2)
+        )
+        assert weekly['year_week'].astype(str).equals(expected_year_week), (
+            'gold_weekly year_week must match ISO year/week derived from week_start'
+        )
+
+    monthly = output['gold_monthly']
+    monthly_required_columns = {'year_month', 'month_start'}
+    missing_monthly_columns = monthly_required_columns.difference(monthly.columns)
+    assert not missing_monthly_columns, (
+        f"gold_monthly missing required columns: {sorted(missing_monthly_columns)}"
+    )
+    if not monthly.empty:
+        month_start = pd.to_datetime(monthly['month_start'], errors='raise')
+        assert (month_start.dt.day == 1).all(), 'gold_monthly month_start must always be the first day of the month'
+        expected_year_month = month_start.dt.strftime('%Y-%m')
+        assert monthly['year_month'].astype(str).equals(expected_year_month), (
+            'gold_monthly year_month must match month_start'
+        )
+
+    yearly = output['gold_yearly']
+    yearly_required_columns = {'year'}
+    missing_yearly_columns = yearly_required_columns.difference(yearly.columns)
+    assert not missing_yearly_columns, (
+        f"gold_yearly missing required columns: {sorted(missing_yearly_columns)}"
+    )
+    if not yearly.empty:
+        assert yearly['year'].notna().all(), 'gold_yearly year must not contain null values'
