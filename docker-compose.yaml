@@ -176,9 +176,9 @@ services:
       # Source DB for ETL extraction (uses CUSTOM_DB_* when set)
       SOURCE_DB_HOST: ${POSTGRES_HOST:-dlh-postgres}
       SOURCE_DB_PORT: "5432"
-      SOURCE_DB_NAME: ${SOURCE_DB_NAME:-}
-      SOURCE_DB_USER: ${SOURCE_DB_USER:-}
-      SOURCE_DB_PASSWORD: ${SOURCE_DB_PASSWORD:-}
+      SOURCE_DB_NAME: ${SOURCE_DB_NAME:-${POSTGRES_DB:-postgres}}
+      SOURCE_DB_USER: ${SOURCE_DB_USER:-${POSTGRES_USER:-postgres}}
+      SOURCE_DB_PASSWORD: ${SOURCE_DB_PASSWORD:-${POSTGRES_PASSWORD:-postgres}}
       SOURCE_SCHEMA: ${SOURCE_SCHEMA:-public}
       SOURCE_TABLE: ${SOURCE_TABLE:-}
       SOURCE_TABLE_CANDIDATES: ${SOURCE_TABLE_CANDIDATES:-Demo,test_projects}
