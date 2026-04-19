@@ -77,7 +77,7 @@ def _insert(client: Client, table: str, df: pd.DataFrame, columns: list[str]) ->
         'created_at', '_silver_processed_at', '_gold_processed_at',
         'started_at', 'ended_at', '_extracted_at',
     }
-    date_cols = {'order_date', 'report_date'}
+    date_cols = {'order_date', 'report_date', 'week_start', 'month_start'}
 
     # Keep temporal columns as python datetime/date objects for ClickHouse typing.
     for col in [c for c in present if c in datetime_cols]:
@@ -145,6 +145,61 @@ def _ensure_clickhouse_objects(client: Client, db: str) -> None:
         ENGINE = MergeTree
         PARTITION BY toYYYYMM(order_date)
         ORDER BY (order_date, _pipeline_run_id)
+        ''',
+        f'''
+        CREATE TABLE IF NOT EXISTS {db}.gold_demo_weekly
+        (
+            year_week String,
+            week_start Date,
+            order_count Int64,
+            total_revenue Float64,
+            avg_order_value Float64,
+            total_quantity Int64,
+            unique_customers Int64,
+            unique_regions Int64,
+            unique_categories Int64,
+            _pipeline_run_id String DEFAULT '',
+            _gold_processed_at DateTime64(3) DEFAULT now64(3)
+        )
+        ENGINE = MergeTree
+        PARTITION BY toYear(addDays(week_start, 3))
+        ORDER BY (year_week, week_start, _pipeline_run_id)
+        ''',
+        f'''
+        CREATE TABLE IF NOT EXISTS {db}.gold_demo_monthly
+        (
+            year_month String,
+            month_start Date,
+            order_count Int64,
+            total_revenue Float64,
+            avg_order_value Float64,
+            total_quantity Int64,
+            unique_customers Int64,
+            unique_regions Int64,
+            unique_categories Int64,
+            _pipeline_run_id String DEFAULT '',
+            _gold_processed_at DateTime64(3) DEFAULT now64(3)
+        )
+        ENGINE = MergeTree
+        PARTITION BY toYear(month_start)
+        ORDER BY (year_month, month_start, _pipeline_run_id)
+        ''',
+        f'''
+        CREATE TABLE IF NOT EXISTS {db}.gold_demo_yearly
+        (
+            year Int32,
+            order_count Int64,
+            total_revenue Float64,
+            avg_order_value Float64,
+            total_quantity Int64,
+            unique_customers Int64,
+            unique_regions Int64,
+            unique_categories Int64,
+            _pipeline_run_id String DEFAULT '',
+            _gold_processed_at DateTime64(3) DEFAULT now64(3)
+        )
+        ENGINE = MergeTree
+        ORDER BY (year, _pipeline_run_id)
         ''',
         f'''
         CREATE TABLE IF NOT EXISTS {db}.gold_demo_by_region
@@ -218,7 +273,10 @@ def load_clickhouse(data, *args, **kwargs):
     db = os.getenv('CLICKHOUSE_DB', 'analytics')
     _ensure_clickhouse_objects(client, db)
     
-    rows_silver = rows_daily = rows_region = rows_category = 0
+    rows_silver = rows_daily = rows_weekly = rows_monthly = rows_yearly = rows_region = rows_category = 0
+    rows_gold_weekly = rows_weekly
+    rows_gold_monthly = rows_monthly
+    rows_gold_yearly = rows_yearly
     error_msg = None
     run_id = 'auto-load'
     
@@ -244,6 +302,9 @@ def load_clickhouse(data, *args, **kwargs):
         # ── Read Gold tables from RustFS ────────────────────────
         gold_data = read_all_gold()
         gold_daily = gold_data.get('gold_daily', pd.DataFrame())
+        gold_weekly = gold_data.get('gold_weekly', pd.DataFrame())
+        gold_monthly = gold_data.get('gold_monthly', pd.DataFrame())
+        gold_yearly = gold_data.get('gold_yearly', pd.DataFrame())
         gold_region = gold_data.get('gold_region', pd.DataFrame())
         gold_category = gold_data.get('gold_category', pd.DataFrame())
         
@@ -255,6 +316,33 @@ def load_clickhouse(data, *args, **kwargs):
             ]
             rows_daily = _insert(client, f'{db}.gold_demo_daily', gold_daily, gold_daily_cols)
             print(f"[load_to_clickhouse] From RustFS Gold → gold_demo_daily: {rows_daily} rows")
+        
+        if len(gold_weekly) > 0:
+            gold_weekly_cols = [
+                'year_week', 'week_start', 'order_count', 'total_revenue', 'avg_order_value',
+                'total_quantity', 'unique_customers', 'unique_regions', 'unique_categories',
+                '_pipeline_run_id', '_gold_processed_at',
+            ]
+            rows_weekly = _insert(client, f'{db}.gold_demo_weekly', gold_weekly, gold_weekly_cols)
+            print(f"[load_to_clickhouse] From RustFS Gold → gold_demo_weekly: {rows_weekly} rows")
+        
+        if len(gold_monthly) > 0:
+            gold_monthly_cols = [
+                'year_month', 'month_start', 'order_count', 'total_revenue', 'avg_order_value',
+                'total_quantity', 'unique_customers', 'unique_regions', 'unique_categories',
+                '_pipeline_run_id', '_gold_processed_at',
+            ]
+            rows_monthly = _insert(client, f'{db}.gold_demo_monthly', gold_monthly, gold_monthly_cols)
+            print(f"[load_to_clickhouse] From RustFS Gold → gold_demo_monthly: {rows_monthly} rows")
+        
+        if len(gold_yearly) > 0:
+            gold_yearly_cols = [
+                'year', 'order_count', 'total_revenue', 'avg_order_value',
+                'total_quantity', 'unique_customers', 'unique_regions', 'unique_categories',
+                '_pipeline_run_id', '_gold_processed_at',
+            ]
+            rows_yearly = _insert(client, f'{db}.gold_demo_yearly', gold_yearly, gold_yearly_cols)
+            print(f"[load_to_clickhouse] From RustFS Gold → gold_demo_yearly: {rows_yearly} rows")
         
         if len(gold_region) > 0:
             gold_region_cols = [
@@ -309,7 +397,9 @@ def load_clickhouse(data, *args, **kwargs):
     
     print(
         f"[load_to_clickhouse] COMPLETE: run_id={run_id}  status={status}  "
-        f"silver={rows_silver}  daily={rows_daily}  region={rows_region}  category={rows_category} "
+        f"silver={rows_silver}  daily={rows_daily}  weekly={rows_weekly}  "
+        f"monthly={rows_monthly}  yearly={rows_yearly}  "
+        f"region={rows_region}  category={rows_category} "
         f"(all data from RustFS lake)"
     )
     

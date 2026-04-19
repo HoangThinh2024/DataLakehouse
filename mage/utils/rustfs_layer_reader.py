@@ -134,28 +134,46 @@ def read_latest_silver(date_str: Optional[str] = None) -> pd.DataFrame:
 def read_latest_gold_daily(date_str: Optional[str] = None) -> pd.DataFrame:
     """Read latest Gold daily aggregation layer."""
     bucket = os.getenv('RUSTFS_GOLD_BUCKET', 'gold')
-    prefix = os.getenv('RUSTFS_GOLD_PREFIX', 'demo_daily')
-    return read_latest_layer(bucket, prefix, date_str)
+    return read_latest_layer(bucket, 'demo_daily', date_str)
+
+
+def read_latest_gold_weekly(date_str: Optional[str] = None) -> pd.DataFrame:
+    """Read latest Gold weekly aggregation layer."""
+    bucket = os.getenv('RUSTFS_GOLD_BUCKET', 'gold')
+    return read_latest_layer(bucket, 'demo_weekly', date_str)
+
+
+def read_latest_gold_monthly(date_str: Optional[str] = None) -> pd.DataFrame:
+    """Read latest Gold monthly aggregation layer."""
+    bucket = os.getenv('RUSTFS_GOLD_BUCKET', 'gold')
+    return read_latest_layer(bucket, 'demo_monthly', date_str)
+
+
+def read_latest_gold_yearly(date_str: Optional[str] = None) -> pd.DataFrame:
+    """Read latest Gold yearly aggregation layer."""
+    bucket = os.getenv('RUSTFS_GOLD_BUCKET', 'gold')
+    return read_latest_layer(bucket, 'demo_yearly', date_str)
 
 
 def read_latest_gold_region(date_str: Optional[str] = None) -> pd.DataFrame:
     """Read latest Gold by-region aggregation layer."""
     bucket = os.getenv('RUSTFS_GOLD_BUCKET', 'gold')
-    prefix = os.getenv('RUSTFS_GOLD_PREFIX', 'demo_by_region')
-    return read_latest_layer(bucket, prefix, date_str)
+    return read_latest_layer(bucket, 'demo_by_region', date_str)
 
 
 def read_latest_gold_category(date_str: Optional[str] = None) -> pd.DataFrame:
     """Read latest Gold by-category aggregation layer."""
     bucket = os.getenv('RUSTFS_GOLD_BUCKET', 'gold')
-    prefix = os.getenv('RUSTFS_GOLD_PREFIX', 'demo_by_category')
-    return read_latest_layer(bucket, prefix, date_str)
+    return read_latest_layer(bucket, 'demo_by_category', date_str)
 
 
 def read_all_gold() -> dict:
     """Read all Gold layer tables as a dict."""
     return {
         'gold_daily': read_latest_gold_daily(),
+        'gold_weekly': read_latest_gold_weekly(),
+        'gold_monthly': read_latest_gold_monthly(),
+        'gold_yearly': read_latest_gold_yearly(),
         'gold_region': read_latest_gold_region(),
         'gold_category': read_latest_gold_category(),
     }
