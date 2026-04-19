@@ -253,7 +253,7 @@ services:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
       SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
       SUPERSET_CONFIG_PATH: ${SUPERSET_CONFIG_PATH:-/app/pythonpath/superset_config.py}
-      SUPERSET_LOAD_EXAMPLES: ${SUPERSET_LOAD_EXAMPLES:-no}
+      SUPERSET_LOAD_EXAMPLES: "${SUPERSET_LOAD_EXAMPLES:-no}"
       SUPERSET_DB_NAME: ${SUPERSET_DB_NAME:-dlh_superset}
       SUPERSET_DB_USER: ${SUPERSET_DB_USER:-dlh_superset_user}
       SUPERSET_DB_PASSWORD: ${SUPERSET_DB_PASSWORD:-change-me}
