@@ -175,7 +175,7 @@ services:
       # Source DB for ETL extraction (uses CUSTOM_DB_* when set)
       SOURCE_DB_HOST: dlh-postgres
       SOURCE_DB_PORT: "5432"
-      SOURCE_SCHEMA: ${CUSTOM_SCHEMA:-${SOURCE_SCHEMA:-public}}
+      SOURCE_SCHEMA: ${CUSTOM_SCHEMA:-public}
       SOURCE_TABLE: ${SOURCE_TABLE:-}
       SOURCE_TABLE_CANDIDATES: ${SOURCE_TABLE_CANDIDATES:-Demo,test_projects}
       # Custom workspace credentials forwarded to Mage pipelines
