@@ -127,10 +127,11 @@ else:
 | 4 | Lowercase | `status` |
 | 5 | Validate email | `customer_email` |
 | 6 | Validate số không âm | `value`, `quantity` |
-| 7 | Cast kiểu | `id` → Int64, `quantity` → Int64, `value` → Float64 |
+| 7 | Cast kiểu | `id` → Int64, `quantity` → Int32, `value` → Float64 |
 | 8 | Parse date | `order_date` → `date`, `created_at` → `datetime[UTC]` |
 | 9 | Thêm metadata | `_silver_processed_at` |
 
+> Ghi chú: `quantity` được mô tả là `Int32` để đồng bộ với schema ClickHouse `Nullable(Int32)`, tránh mismatch kiểu dữ liệu khi nạp.
 **Metadata column thêm:**
 
 | Column | Kiểu | Mô tả |
