@@ -274,6 +274,9 @@ def load_clickhouse(data, *args, **kwargs):
     _ensure_clickhouse_objects(client, db)
     
     rows_silver = rows_daily = rows_weekly = rows_monthly = rows_yearly = rows_region = rows_category = 0
+    rows_gold_weekly = rows_weekly
+    rows_gold_monthly = rows_monthly
+    rows_gold_yearly = rows_yearly
     error_msg = None
     run_id = 'auto-load'
     
