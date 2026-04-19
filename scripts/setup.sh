@@ -71,16 +71,25 @@ ask_yn() {
 # ── Load existing .env if present ───────────────────────────
 load_existing_env() {
   if [ -f "$ENV_FILE" ]; then
-    while IFS='=' read -r key value; do
-      key="${key%%#*}"   # strip inline comments
-      key="${key// /}"   # trim spaces
-      value="${value%%#*}"
-      value="${value## }"; value="${value%% }"
+    local line key value
+    while IFS= read -r line; do
+      [[ "$line" =~ ^[[:space:]]*$ ]] && continue
+      [[ "$line" =~ ^[[:space:]]*# ]] && continue
+      [[ "$line" != *"="* ]] && continue
+
+      key="${line%%=*}"
+      value="${line#*=}"
+
+      key="${key#"${key%%[![:space:]]*}"}"
+      key="${key%"${key##*[![:space:]]}"}"
+      value="${value#"${value%%[![:space:]]*}"}"
+      value="${value%"${value##*[![:space:]]}"}"
+
       value="${value#\"}"; value="${value%\"}"
       value="${value#\'}"; value="${value%\'}"
       [ -z "$key" ] && continue
       export "$key"="$value" 2>/dev/null || true
-    done < <(grep -v '^\s*#' "$ENV_FILE" | grep '=')
+    done < "$ENV_FILE"
   fi
 }
 
