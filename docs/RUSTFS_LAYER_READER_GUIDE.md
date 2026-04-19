@@ -26,6 +26,9 @@ print(f"Loaded {len(silver_df)} rows from Silver layer")
 # Read all Gold aggregations
 gold = read_all_gold()
 print(f"Daily: {len(gold['gold_daily'])} rows")
+print(f"Weekly: {len(gold['gold_weekly'])} rows")
+print(f"Monthly: {len(gold['gold_monthly'])} rows")
+print(f"Yearly: {len(gold['gold_yearly'])} rows")
 print(f"By Region: {len(gold['gold_region'])} rows")
 print(f"By Category: {len(gold['gold_category'])} rows")
 ```
@@ -63,10 +66,16 @@ gold = read_all_gold()
 # Read specific Gold table
 from utils.rustfs_layer_reader import (
     read_latest_gold_daily,
+    read_latest_gold_weekly,
+    read_latest_gold_monthly,
+    read_latest_gold_yearly,
     read_latest_gold_region,
     read_latest_gold_category,
 )
 daily = read_latest_gold_daily()
+weekly = read_latest_gold_weekly()
+monthly = read_latest_gold_monthly()
+yearly = read_latest_gold_yearly()
 region = read_latest_gold_region()
 category = read_latest_gold_category()
 ```

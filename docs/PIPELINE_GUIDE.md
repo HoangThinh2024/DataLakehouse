@@ -1,34 +1,34 @@
-# ⚙️ Hướng dẫn ETL Pipeline – DataLakehouse
+# ⚙️ ETL Pipeline Guide – DataLakehouse
 
-Tài liệu này mô tả chi tiết hai ETL pipelines trong DataLakehouse, bao gồm từng block, biến sử dụng, và cách tùy chỉnh.
+This document describes the two ETL pipelines in DataLakehouse in detail, including each block, the variables used, and how to customize them.
 
 ---
 
-## Mục lục
+## Table of Contents
 
-1. [Tổng quan kiến trúc Pipeline](#1-tổng-quan-kiến-trúc-pipeline)
+1. [Pipeline Architecture Overview](#1-pipeline-architecture-overview)
 2. [Pipeline 1: etl_postgres_to_lakehouse](#2-pipeline-1-etl_postgres_to_lakehouse)
 3. [Pipeline 2: etl_csv_upload_to_reporting](#3-pipeline-2-etl_csv_upload_to_reporting)
-4. [Cấu hình I/O (io_config.yaml)](#4-cấu-hình-io-io_configyaml)
-5. [Thêm bảng nguồn mới](#5-thêm-bảng-nguồn-mới)
-6. [Tùy chỉnh pipeline](#6-tùy-chỉnh-pipeline)
-7. [Xử lý lỗi và logging](#7-xử-lý-lỗi-và-logging)
-8. [Schema ClickHouse](#8-schema-clickhouse)
+4. [I/O Configuration (io_config.yaml)](#4-io-configuration-io_configyaml)
+5. [Adding a New Source Table](#5-adding-a-new-source-table)
+6. [Customizing the Pipeline](#6-customizing-the-pipeline)
+7. [Error Handling and Logging](#7-error-handling-and-logging)
+8. [ClickHouse Schema](#8-clickhouse-schema)
 
 ---
 
-## 1. Tổng quan kiến trúc Pipeline
+## 1. Pipeline Architecture Overview
 
-### Triết lý thiết kế
+### Design Philosophy
 
-DataLakehouse tuân theo **Lakehouse Architecture** nghiêm ngặt:
+DataLakehouse follows a strict **Lakehouse Architecture**:
 
-1. **Immutability:** Dữ liệu trong RustFS không bao giờ bị xóa hoặc overwrite
-2. **RustFS là Source of Truth:** ClickHouse chỉ là serving layer, đọc từ RustFS
-3. **Traceability:** Mỗi lần chạy pipeline có `run_id` UUID duy nhất
-4. **Recovery:** Có thể rebuild hoàn toàn ClickHouse từ RustFS bất kỳ lúc nào
+1. **Immutability:** Data in RustFS is never deleted or overwritten
+2. **RustFS is the Source of Truth:** ClickHouse is only the serving layer, reading from RustFS
+3. **Traceability:** Every pipeline run has a unique UUID `run_id`
+4. **Recovery:** ClickHouse can be fully rebuilt from RustFS at any time
 
-### Luồng dữ liệu tổng quát
+### Overall Data Flow
 
 ```
 Source (PostgreSQL / CSV)
@@ -37,28 +37,28 @@ Source (PostgreSQL / CSV)
 [Data Loader]
     │ DataFrame + metadata columns
     ▼ TRANSFORM
-[Transformer 1: Silver]  ← Làm sạch: dedup, validate, cast
+[Transformer 1: Silver]  ← Clean: dedup, validate, cast
     │ Silver DataFrame
-    ▼ TRANSFORM  
-[Transformer 2: Gold]    ← Tổng hợp: daily/region/category
-    │ Dict{silver, gold_daily, gold_region, gold_category}
-    ▼ EXPORT (song song)
-[bronze_to_rustfs]       ← Parquet vào bronze/
-[silver_to_rustfs]       ← Parquet vào silver/
-[gold_to_rustfs]         ← Parquet vào gold/
-    │ (hoàn thành)
+    ▼ TRANSFORM
+[Transformer 2: Gold]    ← Aggregate: daily/weekly/monthly/yearly/region/category
+    │ Dict{silver, gold_daily, gold_weekly, gold_monthly, gold_yearly, gold_region, gold_category}
+    ▼ EXPORT (parallel)
+[bronze_to_rustfs]       ← Parquet to bronze/
+[silver_to_rustfs]       ← Parquet to silver/
+[gold_to_rustfs]         ← Parquet to gold/
+    │ (completed)
     ▼ EXPORT
-[load_to_clickhouse]     ← Đọc từ RustFS → INSERT vào ClickHouse
+[load_to_clickhouse]     ← Read from RustFS → INSERT into ClickHouse
 ```
 
 ---
 
 ## 2. Pipeline 1: etl_postgres_to_lakehouse
 
-**File:** `mage/pipelines/etl_postgres_to_lakehouse/`  
-**Lịch chạy:** Mỗi 6 giờ (cron: `0 */6 * * *`)  
-**Nguồn:** PostgreSQL  
-**Đích:** RustFS (Bronze/Silver/Gold) + ClickHouse  
+**File:** `mage/pipelines/etl_postgres_to_lakehouse/`
+**Schedule:** Every 6 hours (cron: `0 */6 * * *`)
+**Source:** PostgreSQL
+**Destination:** RustFS (Bronze/Silver/Gold) + ClickHouse
 
 ---
 
@@ -66,46 +66,46 @@ Source (PostgreSQL / CSV)
 
 **File:** `mage/data_loaders/extract_postgres.py`
 
-**Mô tả:** Kết nối PostgreSQL, tìm bảng nguồn, đọc toàn bộ dữ liệu vào DataFrame.
+**Description:** Connects to PostgreSQL, finds the source table, and reads all data into a DataFrame.
 
-**Biến môi trường sử dụng:**
+**Environment variables used:**
 
-| Biến | Mặc định container | Mô tả |
-|------|-------------------|-------|
-| `SOURCE_DB_HOST` | `dlh-postgres` | Host PostgreSQL nguồn |
-| `SOURCE_DB_PORT` | `5432` | Cổng PostgreSQL nguồn |
-| `SOURCE_DB_NAME` | `datalakehouse` | Database chứa bảng nguồn |
-| `SOURCE_DB_USER` | `dlh_admin` | User đọc dữ liệu |
-| `SOURCE_DB_PASSWORD` | *(theo .env)* | Mật khẩu user |
-| `SOURCE_SCHEMA` | `public` | Schema PostgreSQL |
-| `SOURCE_TABLE` | *(trống)* | Tên bảng cụ thể (nếu đặt) |
-| `SOURCE_TABLE_CANDIDATES` | `Demo,test_projects` | Danh sách bảng ứng viên |
-| `SOURCE_DB_CONNECT_TIMEOUT` | `15` | Timeout kết nối (giây) |
+| Variable | Container Default | Description |
+|----------|-----------------|-------------|
+| `SOURCE_DB_HOST` | `dlh-postgres` | Source PostgreSQL host |
+| `SOURCE_DB_PORT` | `5432` | Source PostgreSQL port |
+| `SOURCE_DB_NAME` | `datalakehouse` | Database containing the source table |
+| `SOURCE_DB_USER` | `dlh_admin` | User for reading data |
+| `SOURCE_DB_PASSWORD` | *(from .env)* | User password |
+| `SOURCE_SCHEMA` | `public` | PostgreSQL schema |
+| `SOURCE_TABLE` | *(empty)* | Specific table name (if set) |
+| `SOURCE_TABLE_CANDIDATES` | `Demo,test_projects` | Candidate table list |
+| `SOURCE_DB_CONNECT_TIMEOUT` | `15` | Connection timeout (seconds) |
 
-**Logic chọn bảng:**
+**Table selection logic:**
 
 ```python
-# Priority 1: SOURCE_TABLE được đặt cụ thể
+# Priority 1: SOURCE_TABLE is explicitly set
 if SOURCE_TABLE:
-    → Tìm bảng này trong information_schema.tables
-    → Nếu không tìm thấy: raise ValueError với danh sách bảng có sẵn
+    → Look for this table in information_schema.tables
+    → If not found: raise ValueError with list of available tables
 
-# Priority 2: Tự động từ SOURCE_TABLE_CANDIDATES
+# Priority 2: Auto-detect from SOURCE_TABLE_CANDIDATES
 else:
-    → Thử từng tên trong SOURCE_TABLE_CANDIDATES (case-insensitive)
-    → Lấy bảng đầu tiên tìm thấy
-    → Nếu không tìm thấy bảng nào: raise ValueError
+    → Try each name in SOURCE_TABLE_CANDIDATES (case-insensitive)
+    → Use the first one found
+    → If none found: raise ValueError
 ```
 
-**Metadata columns thêm vào DataFrame:**
+**Metadata columns added to the DataFrame:**
 
-| Column | Kiểu | Mô tả |
-|--------|------|-------|
-| `_pipeline_run_id` | `str (UUID)` | ID duy nhất của lần chạy pipeline này |
-| `_source_table` | `str` | Tên bảng đã được extract |
-| `_extracted_at` | `str (ISO 8601 UTC)` | Thời điểm extract |
+| Column | Type | Description |
+|--------|------|-------------|
+| `_pipeline_run_id` | `str (UUID)` | Unique ID for this pipeline run |
+| `_source_table` | `str` | Name of the extracted table |
+| `_extracted_at` | `str (ISO 8601 UTC)` | Extraction timestamp |
 
-**Output:** `pd.DataFrame` với tất cả cột từ bảng nguồn + 3 metadata columns.
+**Output:** `pd.DataFrame` with all columns from the source table + 3 metadata columns.
 
 ---
 
@@ -113,32 +113,31 @@ else:
 
 **File:** `mage/transformers/transform_silver.py`
 
-**Mô tả:** Làm sạch và validate dữ liệu raw từ PostgreSQL. Input là DataFrame thô, output là DataFrame đã validate.
+**Description:** Cleans and validates raw data from PostgreSQL. Input is a raw DataFrame; output is a validated DataFrame.
 
-**Không có biến môi trường** – logic hardcoded theo schema của bảng Demo.
+**No environment variables** – logic is hardcoded for the Demo table schema.
 
-**Các bước xử lý:**
+**Processing steps:**
 
-| Bước | Xử lý | Cột áp dụng |
-|------|-------|-------------|
-| 1 | Xóa dòng duplicate | Tất cả cột |
+| Step | Processing | Columns Applied |
+|------|-----------|----------------|
+| 1 | Remove duplicates | All columns |
 | 2 | Trim whitespace | `name`, `notes` |
 | 3 | Title-case | `category`, `region` |
 | 4 | Lowercase | `status` |
 | 5 | Validate email | `customer_email` |
-| 6 | Validate số không âm | `value`, `quantity` |
-| 7 | Cast kiểu | `id` → Int64, `quantity` → Int32, `value` → Float64 |
-| 8 | Parse date | `order_date` → `date`, `created_at` → `datetime[UTC]` |
-| 9 | Thêm metadata | `_silver_processed_at` |
+| 6 | Validate non-negative numbers | `value`, `quantity` |
+| 7 | Cast types | `id` → Int64, `quantity` → Int32, `value` → Float64 |
+| 8 | Parse dates | `order_date` → `date`, `created_at` → `datetime[UTC]` |
+| 9 | Add metadata | `_silver_processed_at` |
 
-> Ghi chú: `quantity` được mô tả là `Int32` để đồng bộ với schema ClickHouse `Nullable(Int32)`, tránh mismatch kiểu dữ liệu khi nạp.
-**Metadata column thêm:**
+**Metadata column added:**
 
-| Column | Kiểu | Mô tả |
-|--------|------|-------|
-| `_silver_processed_at` | `str (ISO 8601 UTC)` | Thời điểm transform silver |
+| Column | Type | Description |
+|--------|------|-------------|
+| `_silver_processed_at` | `str (ISO 8601 UTC)` | Silver transform timestamp |
 
-**Schema cột bảng Demo được xử lý:**
+**Schema of processed Demo columns:**
 
 ```
 id             Int64       (nullable)
@@ -154,7 +153,7 @@ notes          str         (trimmed, nullable)
 created_at     datetime64  (UTC, nullable)
 ```
 
-**Output:** `pd.DataFrame` đã làm sạch.
+**Output:** Cleaned `pd.DataFrame`.
 
 ---
 
@@ -162,24 +161,27 @@ created_at     datetime64  (UTC, nullable)
 
 **File:** `mage/transformers/transform_gold.py`
 
-**Mô tả:** Tổng hợp Silver data thành 3 Gold tables theo các chiều phân tích.
+**Description:** Aggregates Silver data into six Gold tables along different analytical dimensions.
 
-**Input:** DataFrame từ `transform_silver`
+**Input:** DataFrame from `transform_silver`
 
-**Output:** `dict` với 4 keys:
+**Output:** `dict` with 7 keys:
 
 ```python
 {
-    'silver': pd.DataFrame,          # Silver data (truyền qua cho exporters)
-    'gold_daily': pd.DataFrame,      # Tổng hợp theo ngày
-    'gold_region': pd.DataFrame,     # Tổng hợp theo vùng
-    'gold_category': pd.DataFrame,   # Tổng hợp theo danh mục
+    'silver': pd.DataFrame,          # Silver data (passed through to exporters)
+    'gold_daily': pd.DataFrame,      # Daily aggregation
+    'gold_weekly': pd.DataFrame,     # Weekly aggregation (ISO week)
+    'gold_monthly': pd.DataFrame,    # Monthly aggregation
+    'gold_yearly': pd.DataFrame,     # Yearly aggregation
+    'gold_region': pd.DataFrame,     # Regional aggregation
+    'gold_category': pd.DataFrame,   # Category aggregation
 }
 ```
 
-**Schema các Gold DataFrames:**
+**Gold DataFrame schemas:**
 
-**`gold_daily` – Tổng hợp theo ngày:**
+**`gold_daily` – Daily aggregation:**
 ```
 order_date          date
 order_count         int64
@@ -193,7 +195,51 @@ _pipeline_run_id    str
 _gold_processed_at  str
 ```
 
-**`gold_region` – Tổng hợp theo vùng địa lý:**
+**`gold_weekly` – Weekly aggregation (ISO week):**
+```
+year_week           str       (e.g. "2025-W03")
+week_start          date      (Monday of the week)
+order_count         int64
+total_revenue       float64
+avg_order_value     float64
+total_quantity      int64
+unique_customers    int64
+unique_regions      int64
+unique_categories   int64
+_pipeline_run_id    str
+_gold_processed_at  str
+```
+
+**`gold_monthly` – Monthly aggregation:**
+```
+year_month          str       (e.g. "2025-01")
+month_start         date      (first day of month)
+order_count         int64
+total_revenue       float64
+avg_order_value     float64
+total_quantity      int64
+unique_customers    int64
+unique_regions      int64
+unique_categories   int64
+_pipeline_run_id    str
+_gold_processed_at  str
+```
+
+**`gold_yearly` – Yearly aggregation:**
+```
+year                int32
+order_count         int64
+total_revenue       float64
+avg_order_value     float64
+total_quantity      int64
+unique_customers    int64
+unique_regions      int64
+unique_categories   int64
+_pipeline_run_id    str
+_gold_processed_at  str
+```
+
+**`gold_region` – Regional aggregation:**
 ```
 region              str
 order_count         int64
@@ -205,7 +251,7 @@ _pipeline_run_id    str
 _gold_processed_at  str
 ```
 
-**`gold_category` – Tổng hợp theo danh mục:**
+**`gold_category` – Category aggregation:**
 ```
 category            str
 order_count         int64
@@ -217,12 +263,12 @@ _pipeline_run_id    str
 _gold_processed_at  str
 ```
 
-**Logic fallback cho bảng không có `order_date`:**
+**Fallback logic for tables without `order_date`:**
 
 ```python
-# Nếu bảng nguồn không có order_date:
-# 1. Thử dùng created_at (extract date phần)
-# 2. Nếu cũng không có: dùng ngày hiện tại
+# If source table has no order_date:
+# 1. Try using created_at (extract date part)
+# 2. If also missing: use today's date
 ```
 
 ---
@@ -231,21 +277,20 @@ _gold_processed_at  str
 
 **File:** `mage/data_exporters/bronze_to_rustfs.py`
 
-**Mô tả:** Ghi DataFrame thô (từ extract_postgres) vào RustFS bucket bronze dưới dạng Parquet.
+**Description:** Writes the raw DataFrame (from extract_postgres) to RustFS bronze bucket as Parquet.
 
-**Biến môi trường:**
+**Environment variables:**
 
-| Biến | Mặc định | Mô tả |
-|------|---------|-------|
+| Variable | Default | Description |
+|----------|---------|-------------|
 | `RUSTFS_ENDPOINT_URL` | `http://dlh-rustfs:9000` | S3 endpoint |
 | `RUSTFS_ACCESS_KEY` | `rustfsadmin` | S3 credentials |
 | `RUSTFS_SECRET_KEY` | `rustfsadmin` | S3 credentials |
-| `RUSTFS_BRONZE_BUCKET` | `bronze` | Tên bucket |
-| `RUSTFS_REGION` | `us-east-1` | AWS region (dummy cho RustFS) |
+| `RUSTFS_BRONZE_BUCKET` | `bronze` | Bucket name |
 
-**File naming convention:**
+**File path convention:**
 ```
-bronze/raw_<run_id>_<YYYYMMDD_HHMMSS>.parquet
+bronze/demo/dt=YYYY-MM-DD/<run_id>.parquet
 ```
 
 ---
@@ -254,13 +299,13 @@ bronze/raw_<run_id>_<YYYYMMDD_HHMMSS>.parquet
 
 **File:** `mage/data_exporters/silver_to_rustfs.py`
 
-**Mô tả:** Ghi Silver DataFrame vào RustFS bucket silver.
+**Description:** Writes the Silver DataFrame to RustFS silver bucket.
 
-**Biến môi trường:** Tương tự `bronze_to_rustfs.py` nhưng dùng `RUSTFS_SILVER_BUCKET`.
+**Environment variables:** Same as `bronze_to_rustfs.py` but uses `RUSTFS_SILVER_BUCKET`.
 
-**File naming convention:**
+**File path convention:**
 ```
-silver/silver_<run_id>_<YYYYMMDD_HHMMSS>.parquet
+silver/demo/dt=YYYY-MM-DD/<run_id>.parquet
 ```
 
 ---
@@ -269,13 +314,16 @@ silver/silver_<run_id>_<YYYYMMDD_HHMMSS>.parquet
 
 **File:** `mage/data_exporters/gold_to_rustfs.py`
 
-**Mô tả:** Ghi 3 Gold DataFrames vào RustFS bucket gold (3 file riêng biệt).
+**Description:** Writes 6 Gold DataFrames to RustFS gold bucket as separate files.
 
-**File naming convention:**
+**File path convention:**
 ```
-gold/gold_daily_<run_id>_<timestamp>.parquet
-gold/gold_region_<run_id>_<timestamp>.parquet
-gold/gold_category_<run_id>_<timestamp>.parquet
+gold/demo_daily/dt=YYYY-MM-DD/<run_id>.parquet
+gold/demo_weekly/dt=YYYY-MM-DD/<run_id>.parquet
+gold/demo_monthly/dt=YYYY-MM-DD/<run_id>.parquet
+gold/demo_yearly/dt=YYYY-MM-DD/<run_id>.parquet
+gold/demo_by_region/dt=YYYY-MM-DD/<run_id>.parquet
+gold/demo_by_category/dt=YYYY-MM-DD/<run_id>.parquet
 ```
 
 ---
@@ -284,46 +332,46 @@ gold/gold_category_<run_id>_<timestamp>.parquet
 
 **File:** `mage/data_exporters/load_to_clickhouse.py`
 
-**Mô tả:** Đọc dữ liệu từ RustFS (silver + gold) và INSERT vào ClickHouse. **KHÔNG dùng in-memory data từ pipeline** – đây là điểm khác biệt quan trọng của kiến trúc lakehouse.
+**Description:** Reads data from RustFS (silver + gold) and INSERTs into ClickHouse. **Does NOT use in-memory data from the pipeline** – this is a key feature of the lakehouse architecture.
 
-**Biến môi trường:**
+**Environment variables:**
 
-| Biến | Mặc định container | Mô tả |
-|------|-------------------|-------|
+| Variable | Container Default | Description |
+|----------|-----------------|-------------|
 | `CLICKHOUSE_HOST` | `dlh-clickhouse` | ClickHouse hostname |
-| `CLICKHOUSE_TCP_PORT` | `9000` | ClickHouse TCP port (bên trong network) |
+| `CLICKHOUSE_TCP_PORT` | `9000` | ClickHouse TCP port (inside network) |
 | `CLICKHOUSE_DB` | `analytics` | Target database |
 | `CLICKHOUSE_USER` | `default` | ClickHouse user |
-| `CLICKHOUSE_PASSWORD` | *(trống)* | ClickHouse password |
+| `CLICKHOUSE_PASSWORD` | *(empty)* | ClickHouse password |
 
-**Quy trình:**
+**Process:**
 
 ```
-1. Kết nối ClickHouse
-2. Tạo tables nếu chưa tồn tại (idempotent DDL)
-3. Đọc silver Parquet mới nhất từ RustFS
-4. INSERT vào analytics.silver_demo
-5. Đọc 3 gold Parquet mới nhất từ RustFS
-6. INSERT vào analytics.gold_demo_daily/by_region/by_category
-7. INSERT vào analytics.pipeline_runs (run metadata)
+1. Connect to ClickHouse
+2. Create tables if they don't exist (idempotent DDL)
+3. Read latest silver Parquet from RustFS
+4. INSERT into analytics.silver_demo
+5. Read latest 6 gold Parquet files from RustFS
+6. INSERT into analytics.gold_demo_daily/weekly/monthly/yearly/by_region/by_category
+7. INSERT into analytics.pipeline_runs (run metadata)
 ```
 
-**Lưu ý xử lý kiểu dữ liệu:**
-- Datetime columns → Python `datetime` objects (ClickHouse yêu cầu)
+**Data type handling notes:**
+- Datetime columns → Python `datetime` objects (required by ClickHouse)
 - Date columns → Python `date` objects
-- Object columns → `str`, với `None/nan/NaT` → `None`
+- Object columns → `str`, with `None/nan/NaT` → `None`
 - Numpy scalars → Python native types (`.item()`)
 
-**Output:** `{}` (empty dict) – không truyền dữ liệu downstream theo design.
+**Output:** `{}` (empty dict) – by design, no data is passed downstream.
 
 ---
 
 ## 3. Pipeline 2: etl_csv_upload_to_reporting
 
-**File:** `mage/pipelines/etl_csv_upload_to_reporting/`  
-**Lịch chạy:** Mỗi 5 phút (cron: `*/5 * * * *`)  
-**Nguồn:** File CSV trên RustFS bucket bronze  
-**Đích:** RustFS silver + ClickHouse (metrics, events, clean rows)  
+**File:** `mage/pipelines/etl_csv_upload_to_reporting/`
+**Schedule:** Every 5 minutes (cron: `*/5 * * * *`)
+**Source:** CSV files in RustFS bronze bucket
+**Destination:** RustFS silver + ClickHouse (metrics, events, clean rows)
 
 ---
 
@@ -331,61 +379,50 @@ gold/gold_category_<run_id>_<timestamp>.parquet
 
 **File:** `mage/data_loaders/extract_csv_from_rustfs.py`
 
-**Mô tả:** Quét bucket bronze tìm file CSV chưa được xử lý (không có record trong `csv_upload_events` với `status='success'`).
+**Description:** Scans the bronze bucket for unprocessed CSV files (no record in `csv_upload_events` with `status='success'`).
 
-**Biến môi trường:**
+**Environment variables:**
 
-| Biến | Mặc định | Mô tả |
-|------|---------|-------|
+| Variable | Default | Description |
+|----------|---------|-------------|
 | `RUSTFS_ENDPOINT_URL` | `http://dlh-rustfs:9000` | S3 endpoint |
 | `RUSTFS_ACCESS_KEY` | `rustfsadmin` | Credentials |
 | `RUSTFS_SECRET_KEY` | `rustfsadmin` | Credentials |
-| `RUSTFS_REGION` | `us-east-1` | Region |
-| `CSV_UPLOAD_BUCKET` | `bronze` | Bucket để quét |
-| `CSV_UPLOAD_PREFIX` | `csv_upload/` | Prefix ưu tiên |
-| `CSV_UPLOAD_ALLOW_ANYWHERE` | `true` | Quét toàn bucket |
+| `CSV_UPLOAD_BUCKET` | `bronze` | Bucket to scan |
+| `CSV_UPLOAD_PREFIX` | `csv_upload/` | Priority prefix |
+| `CSV_UPLOAD_ALLOW_ANYWHERE` | `true` | Scan entire bucket |
 | `CSV_UPLOAD_SEPARATOR` | `,` | CSV delimiter |
 | `CSV_UPLOAD_ENCODING` | `utf-8` | File encoding |
 | `CSV_UPLOAD_SCAN_LIMIT` | `200` | Max files to scan |
-| `CLICKHOUSE_HOST` | `dlh-clickhouse` | Dùng để check đã xử lý chưa |
+| `CLICKHOUSE_HOST` | `dlh-clickhouse` | Used to check if already processed |
 
-**Logic "đã xử lý":** Query ClickHouse `csv_upload_events` – nếu có record với `source_key + etag + status='success'` thì file đó đã được xử lý, bỏ qua.
+**"Already processed" logic:** Query ClickHouse `csv_upload_events` – if a record with `source_key + etag + status='success'` exists, the file was already processed and is skipped.
 
-**Logic ưu tiên file:**
-1. Files trong `CSV_UPLOAD_PREFIX` (ưu tiên cao)
-2. Files ngoài prefix (nếu `CSV_UPLOAD_ALLOW_ANYWHERE=true`)
-3. Sắp xếp theo `LastModified` (file cũ nhất trước)
-4. Chỉ lấy **1 file** mỗi lần chạy
+**File priority logic:**
+1. Files under `CSV_UPLOAD_PREFIX` (high priority)
+2. Files outside the prefix (if `CSV_UPLOAD_ALLOW_ANYWHERE=true`)
+3. Sorted by `LastModified` (oldest first)
+4. Only **1 file** per run
 
-**Output khi có file mới:**
+**Output when a new file is found:**
 ```python
 {
     'skip': False,
-    'dataframe': pd.DataFrame,           # Dữ liệu CSV đã đọc
+    'dataframe': pd.DataFrame,           # CSV data read
     'bucket': 'bronze',
-    'source_key': 'csv_upload/data.csv', # Đường dẫn trong bucket
-    'source_etag': 'abc123...',          # ETag của file
-    'source_size': 12345,                # Kích thước bytes
+    'source_key': 'csv_upload/data.csv', # Path in bucket
+    'source_etag': 'abc123...',          # File ETag
+    'source_size': 12345,                # Size in bytes
     'source_last_modified': '2024-01-01T00:00:00Z',
     'pipeline_run_id': 'uuid-...',
     'raw_rows': 1000,
 }
 ```
 
-**Output khi không có file mới:**
+**Output when no new files are found:**
 ```python
 {'skip': True, 'message': 'no new csv'}
 ```
-
-**Metadata columns thêm vào DataFrame:**
-
-| Column | Mô tả |
-|--------|-------|
-| `_pipeline_run_id` | UUID của lần chạy |
-| `_source_table` | Luôn là `'csv_upload'` |
-| `_source_file_key` | Đường dẫn S3 (`csv_upload/file.csv`) |
-| `_source_file_etag` | ETag file để dedup |
-| `_extracted_at` | Timestamp UTC |
 
 ---
 
@@ -393,27 +430,27 @@ gold/gold_category_<run_id>_<timestamp>.parquet
 
 **File:** `mage/transformers/clean_csv_for_reporting.py`
 
-**Mô tả:** Làm sạch dữ liệu CSV upload theo quy tắc linh hoạt (không cần biết schema trước).
+**Description:** Cleans CSV upload data using flexible rules (schema-agnostic).
 
-**Không có biến môi trường.**
+**No environment variables.**
 
-**Các bước xử lý:**
+**Processing steps:**
 
-| Bước | Xử lý | Mô tả |
-|------|-------|-------|
-| 1 | Skip check | Nếu `data.get('skip')` là True, trả về data không đổi |
-| 2 | Normalize headers | Lowercase, strip whitespace, thay khoảng trắng bằng `_` |
-| 3 | Drop empty rows | Xóa dòng toàn `NaN` |
-| 4 | Strip string columns | Trim whitespace tất cả cột string |
-| 5 | Drop duplicates | Xóa dòng trùng hoàn toàn |
+| Step | Processing | Description |
+|------|-----------|-------------|
+| 1 | Skip check | If `data.get('skip')` is True, return data unchanged |
+| 2 | Normalize headers | Lowercase, strip whitespace, replace spaces with `_` |
+| 3 | Drop empty rows | Remove rows that are all `NaN` |
+| 4 | Strip string columns | Trim whitespace from all string columns |
+| 5 | Drop duplicates | Remove completely duplicate rows |
 | 6 | Add metadata | `_row_number` (1-indexed) |
 | 7 | Calculate metrics | `raw_rows`, `cleaned_rows`, `dropped_rows`, `duplicate_rows`, `null_cells` |
 
-**Output:** Dict với dữ liệu gốc + thêm `quality_metrics`:
+**Output:** Dict from the extractor + `quality_metrics`:
 ```python
 {
-    **data_from_extractor,    # Tất cả fields từ extractor
-    'dataframe': cleaned_df,  # DataFrame đã làm sạch
+    **data_from_extractor,    # All fields from extractor
+    'dataframe': cleaned_df,  # Cleaned DataFrame
     'quality_metrics': {
         'raw_rows': int,
         'cleaned_rows': int,
@@ -431,13 +468,11 @@ gold/gold_category_<run_id>_<timestamp>.parquet
 
 **File:** `mage/data_exporters/csv_to_rustfs_silver.py`
 
-**Mô tả:** Ghi cleaned CSV DataFrame vào RustFS silver layer dưới dạng Parquet.
+**Description:** Writes the cleaned CSV DataFrame to RustFS silver layer as Parquet.
 
-**Biến môi trường:** Tương tự `silver_to_rustfs.py`.
-
-**File naming convention:**
+**File path convention:**
 ```
-silver/csv_silver/<run_id>/cleaned_<run_id>.parquet
+silver/csv_upload/dt=YYYY-MM-DD/<run_id>.parquet
 ```
 
 ---
@@ -446,33 +481,31 @@ silver/csv_silver/<run_id>/cleaned_<run_id>.parquet
 
 **File:** `mage/data_exporters/load_csv_reporting_clickhouse.py`
 
-**Mô tả:** Đọc cleaned CSV từ RustFS silver và nạp vào 4 ClickHouse tables.
+**Description:** Reads the cleaned CSV from RustFS silver and loads it into 4 ClickHouse tables.
 
-**Biến môi trường:** Tương tự `load_to_clickhouse.py`.
+**Tables updated:**
 
-**Tables được cập nhật:**
+| Table | Data | Description |
+|-------|------|-------------|
+| `analytics.csv_clean_rows` | 1 row per CSV row | JSON of each cleaned row |
+| `analytics.csv_quality_metrics` | 1 row per file | Quality metrics |
+| `analytics.csv_upload_events` | 1 row per run | Processing status (success/failed) |
+| `analytics.pipeline_runs` | 1 row per run | Run history |
 
-| Table | Dữ liệu | Mô tả |
-|-------|---------|-------|
-| `analytics.csv_clean_rows` | 1 dòng/row CSV | JSON của từng dòng đã làm sạch |
-| `analytics.csv_quality_metrics` | 1 dòng/file | Số liệu chất lượng |
-| `analytics.csv_upload_events` | 1 dòng/lần chạy | Trạng thái xử lý (success/failed) |
-| `analytics.pipeline_runs` | 1 dòng/lần chạy | Lịch sử run |
-
-**Lưu ý:** Nếu insert vào ClickHouse thất bại, vẫn ghi `status='failed'` vào `csv_upload_events` để không bị skip mãi mãi.
+**Note:** If ClickHouse insert fails, `status='failed'` is still written to `csv_upload_events` so the file is retried next time (not permanently skipped).
 
 ---
 
-## 4. Cấu hình I/O (io_config.yaml)
+## 4. I/O Configuration (io_config.yaml)
 
 **File:** `mage/io_config.yaml`
 
-File này định nghĩa các "profiles" kết nối cho Mage. Mỗi profile là một set credentials có thể được chọn trong Data Loader/Exporter.
+This file defines connection "profiles" for Mage. Each profile is a set of credentials that can be selected in a Data Loader/Exporter.
 
 ```yaml
 version: 0.1.1
 
-# Profile mặc định: metadata DB của Mage
+# Default profile: Mage's internal metadata DB
 default:
   POSTGRES_DBNAME: "{{ env_var('MAGE_DB_NAME') }}"
   POSTGRES_HOST: dlh-postgres
@@ -482,7 +515,7 @@ default:
   POSTGRES_USER: "{{ env_var('MAGE_DB_USER') }}"
   POSTGRES_CONNECTION_METHOD: direct
 
-# Profile nguồn dữ liệu ETL
+# ETL data source profile
 source_db:
   POSTGRES_DBNAME: "{{ env_var('POSTGRES_DB') }}"
   POSTGRES_HOST: dlh-postgres
@@ -492,7 +525,7 @@ source_db:
   POSTGRES_USER: "{{ env_var('POSTGRES_USER') }}"
   POSTGRES_CONNECTION_METHOD: direct
 
-# Profile workspace riêng của người dùng
+# User's custom workspace profile
 custom_db:
   POSTGRES_DBNAME: "{{ env_var('CUSTOM_DB_NAME', '') }}"
   POSTGRES_HOST: dlh-postgres
@@ -502,7 +535,7 @@ custom_db:
   POSTGRES_USER: "{{ env_var('CUSTOM_DB_USER', '') }}"
   POSTGRES_CONNECTION_METHOD: direct
 
-# Profile ClickHouse
+# ClickHouse profile
 clickhouse:
   CLICKHOUSE_DATABASE: "{{ env_var('CLICKHOUSE_DB') }}"
   CLICKHOUSE_HOST: dlh-clickhouse
@@ -512,18 +545,18 @@ clickhouse:
   CLICKHOUSE_USERNAME: "{{ env_var('CLICKHOUSE_USER') }}"
 ```
 
-**Cách dùng profile trong Mage UI:**
-- Khi tạo Data Loader PostgreSQL: chọn profile `source_db` hoặc `custom_db`
-- Khi tạo Data Exporter ClickHouse: chọn profile `clickhouse`
+**Using profiles in the Mage UI:**
+- When creating a PostgreSQL Data Loader: select the `source_db` or `custom_db` profile
+- When creating a ClickHouse Data Exporter: select the `clickhouse` profile
 
 ---
 
-## 5. Thêm bảng nguồn mới
+## 5. Adding a New Source Table
 
-### Cách 1: Dùng biến `SOURCE_TABLE` (đơn giản nhất)
+### Method 1: Use `SOURCE_TABLE` (simplest)
 
 ```bash
-# Trong .env
+# In .env
 SOURCE_TABLE=my_orders_table
 SOURCE_DB_NAME=my_business_db
 SOURCE_DB_USER=my_db_user
@@ -531,22 +564,22 @@ SOURCE_DB_PASSWORD=my_password
 SOURCE_SCHEMA=sales
 ```
 
-Pipeline sẽ extract toàn bộ bảng `sales.my_orders_table`.
+The pipeline will extract the entire `sales.my_orders_table` table.
 
-### Cách 2: Thêm vào `SOURCE_TABLE_CANDIDATES`
+### Method 2: Add to `SOURCE_TABLE_CANDIDATES`
 
 ```bash
-# Trong .env – pipeline sẽ tự tìm bảng đầu tiên tồn tại
+# In .env – pipeline will auto-find the first existing table
 SOURCE_TABLE_CANDIDATES=Demo,test_projects,my_orders,transactions
 ```
 
-### Cách 3: Tùy chỉnh `extract_postgres.py`
+### Method 3: Customize `extract_postgres.py`
 
-Nếu cần query phức tạp hơn (filter, join, custom columns), chỉnh sửa file:
+For more complex queries (filters, joins, custom columns), edit the file:
 
 ```python
 # mage/data_loaders/extract_postgres.py
-# Thay đổi query:
+# Change the query:
 query = sql.SQL(
     'SELECT id, name, value, created_at FROM {}.{} WHERE status = %s'
 ).format(
@@ -556,12 +589,12 @@ query = sql.SQL(
 df = pd.read_sql(query.as_string(conn), conn, params=['active'])
 ```
 
-### Cách 4: Tùy chỉnh `transform_silver.py` cho schema mới
+### Method 4: Customize `transform_silver.py` for a new schema
 
-Nếu bảng nguồn có cột khác với bảng Demo, cập nhật transformer:
+If the source table has different columns than the Demo table, update the transformer:
 
 ```python
-# Thêm xử lý cho cột mới
+# Add processing for new columns
 if 'phone_number' in df.columns:
     # Normalize phone numbers
     df['phone_number'] = df['phone_number'].str.replace(r'[^\d+]', '', regex=True)
@@ -573,11 +606,11 @@ if 'order_amount' in df.columns:
 
 ---
 
-## 6. Tùy chỉnh pipeline
+## 6. Customizing the Pipeline
 
-### Thêm bước transform mới
+### Adding a new transform step
 
-1. Tạo file mới trong `mage/transformers/`:
+1. Create a new file in `mage/transformers/`:
 
 ```python
 # mage/transformers/enrich_with_geo.py
@@ -588,73 +621,73 @@ if 'transformer' not in dir():
 
 @transformer
 def enrich_with_geo(df: pd.DataFrame, *args, **kwargs):
-    """Thêm thông tin địa lý từ region code."""
+    """Add geographic information from region code."""
     region_map = {
-        'hn': 'Hà Nội', 
-        'hcm': 'TP. Hồ Chí Minh',
-        'dn': 'Đà Nẵng',
+        'hn': 'Hanoi',
+        'hcm': 'Ho Chi Minh City',
+        'dn': 'Da Nang',
     }
     if 'region_code' in df.columns:
         df['region_name'] = df['region_code'].map(region_map)
     return df
 ```
 
-2. Mở Mage UI (http://localhost:26789)
-3. Vào pipeline `etl_postgres_to_lakehouse`
-4. Click "Add block" → chọn file transformer mới
-5. Kéo thả để sắp xếp thứ tự
+2. Open Mage UI (http://localhost:26789)
+3. Go to the `etl_postgres_to_lakehouse` pipeline
+4. Click "Add block" → select the new transformer file
+5. Drag and drop to arrange the order
 
-### Thay đổi lịch chạy
+### Changing the schedule
 
 ```yaml
-# Trong mage/pipelines/etl_postgres_to_lakehouse/metadata.yaml
-# Tìm schedule và thay đổi cron expression
+# In mage/pipelines/etl_postgres_to_lakehouse/metadata.yaml
+# Find schedule and change the cron expression
 schedule:
-  - cron: "0 */6 * * *"   # Mỗi 6 giờ → đổi thành:
-  # - cron: "0 2 * * *"   # Mỗi ngày lúc 2:00 AM
-  # - cron: "0 */1 * * *" # Mỗi 1 giờ
-  # - cron: "*/30 * * * *"# Mỗi 30 phút
+  - cron: "0 */6 * * *"   # Every 6 hours → change to:
+  # - cron: "0 2 * * *"   # Daily at 2:00 AM
+  # - cron: "0 */1 * * *" # Every hour
+  # - cron: "*/30 * * * *"# Every 30 minutes
 ```
 
-Hoặc qua Mage UI: Pipelines → Triggers → chỉnh Schedule.
+Or via Mage UI: Pipelines → Triggers → edit the Schedule.
 
-### Thêm notification khi pipeline thất bại
+### Adding failure notifications
 
-Trong Mage UI: Settings → Alerts → thêm webhook Slack/Teams/Email.
+In Mage UI: Settings → Alerts → add a Slack/Teams/Email webhook.
 
 ---
 
-## 7. Xử lý lỗi và logging
+## 7. Error Handling and Logging
 
-### Cấu trúc log
+### Log structure
 
-Tất cả blocks dùng format log nhất quán:
+All blocks use a consistent log format:
 
 ```python
 print(f"[block_name] key=value key=value ...")
 ```
 
-Ví dụ:
+Example:
 ```
 [extract_postgres] run_id=abc123  rows=100000  table=public.Demo
 [transform_silver] Duplicates removed: 123
 [transform_silver] Silver rows ready: 99877
-[transform_gold] daily=365 rows  by_region=8 rows  by_category=12 rows
+[transform_gold] daily=365 rows  weekly=52 rows  monthly=12 rows  yearly=3 rows  by_region=8 rows  by_category=12 rows
 [load_to_clickhouse] From RustFS Silver → silver_demo: 99877 rows
-[load_to_clickhouse] COMPLETE: run_id=abc123  status=success  silver=99877  daily=365
+[load_to_clickhouse] COMPLETE: run_id=abc123  status=success  silver=99877  daily=365  weekly=52  monthly=12  yearly=3
 ```
 
-### Xem log pipeline
+### Viewing pipeline logs
 
 ```bash
-# Xem log Mage real-time
+# View Mage logs in real-time
 docker compose logs -f mage
 
-# Lọc log của pipeline cụ thể
+# Filter logs for a specific block
 docker compose logs mage | grep "\[extract_postgres\]"
 docker compose logs mage | grep "ERROR"
 
-# Xem run history trong ClickHouse
+# View run history in ClickHouse
 docker compose exec clickhouse clickhouse-client --query "
 SELECT
     run_id,
@@ -671,10 +704,10 @@ LIMIT 10
 FORMAT Pretty"
 ```
 
-### Xử lý pipeline thất bại
+### Handling pipeline failures
 
 ```bash
-# Xem lý do thất bại
+# View failure reason
 docker compose exec clickhouse clickhouse-client --query "
 SELECT error_message, started_at
 FROM analytics.pipeline_runs
@@ -683,21 +716,21 @@ ORDER BY started_at DESC
 LIMIT 5
 FORMAT Pretty"
 
-# Chạy lại pipeline
+# Re-run the pipeline
 docker compose exec mage mage run etl_postgres_to_lakehouse
 
-# Nếu ClickHouse tables bị corrupt: rebuild từ RustFS
+# If ClickHouse tables are corrupted: rebuild from RustFS
 docker compose exec clickhouse clickhouse-client --query "TRUNCATE TABLE analytics.silver_demo"
 docker compose exec mage mage run etl_postgres_to_lakehouse
-# load_to_clickhouse sẽ đọc lại từ RustFS
+# load_to_clickhouse will re-read from RustFS
 ```
 
-### Xử lý CSV bị stuck (không được xử lý mãi)
+### Handling stuck CSV files
 
-Nếu pipeline ghi `status='failed'` vào `csv_upload_events`, file đó sẽ không bị bỏ qua và sẽ được thử lại lần sau. Nhưng nếu file bị corrupt hoặc format sai:
+If the pipeline writes `status='failed'` to `csv_upload_events`, the file will be retried on the next run. If a file is corrupted or in the wrong format:
 
 ```bash
-# Xem danh sách CSV failed
+# View failed CSV files
 docker compose exec clickhouse clickhouse-client --query "
 SELECT source_key, status, error_message, processed_at
 FROM analytics.csv_upload_events
@@ -705,17 +738,16 @@ WHERE status = 'failed'
 ORDER BY processed_at DESC
 FORMAT Pretty"
 
-# Đánh dấu file là 'ignored' để bỏ qua
-# Hoặc xóa file đó khỏi RustFS qua Web Console
+# To skip a file permanently: delete it from RustFS via the Web Console
 ```
 
 ---
 
-## 8. Schema ClickHouse
+## 8. ClickHouse Schema
 
 ### analytics.silver_demo
 
-Dữ liệu từ bảng Demo PostgreSQL sau khi làm sạch.
+Data from the PostgreSQL Demo table after cleaning.
 
 ```sql
 CREATE TABLE analytics.silver_demo
@@ -761,19 +793,83 @@ PARTITION BY toYYYYMM(order_date)
 ORDER BY (order_date, _pipeline_run_id);
 ```
 
+### analytics.gold_demo_weekly
+
+```sql
+CREATE TABLE analytics.gold_demo_weekly
+(
+    year_week String,
+    week_start Date,
+    order_count Int64,
+    total_revenue Float64,
+    avg_order_value Float64,
+    total_quantity Int64,
+    unique_customers Int64,
+    unique_regions Int64,
+    unique_categories Int64,
+    _pipeline_run_id String DEFAULT '',
+    _gold_processed_at DateTime64(3) DEFAULT now64(3)
+)
+ENGINE = MergeTree
+PARTITION BY toYear(week_start)
+ORDER BY (year_week, week_start, _pipeline_run_id);
+```
+
+### analytics.gold_demo_monthly
+
+```sql
+CREATE TABLE analytics.gold_demo_monthly
+(
+    year_month String,
+    month_start Date,
+    order_count Int64,
+    total_revenue Float64,
+    avg_order_value Float64,
+    total_quantity Int64,
+    unique_customers Int64,
+    unique_regions Int64,
+    unique_categories Int64,
+    _pipeline_run_id String DEFAULT '',
+    _gold_processed_at DateTime64(3) DEFAULT now64(3)
+)
+ENGINE = MergeTree
+PARTITION BY toYear(month_start)
+ORDER BY (year_month, month_start, _pipeline_run_id);
+```
+
+### analytics.gold_demo_yearly
+
+```sql
+CREATE TABLE analytics.gold_demo_yearly
+(
+    year Int32,
+    order_count Int64,
+    total_revenue Float64,
+    avg_order_value Float64,
+    total_quantity Int64,
+    unique_customers Int64,
+    unique_regions Int64,
+    unique_categories Int64,
+    _pipeline_run_id String DEFAULT '',
+    _gold_processed_at DateTime64(3) DEFAULT now64(3)
+)
+ENGINE = MergeTree
+ORDER BY (year, _pipeline_run_id);
+```
+
 ### analytics.csv_quality_metrics
 
 ```sql
 CREATE TABLE analytics.csv_quality_metrics
 (
     pipeline_run_id String,
-    source_key String,          -- Đường dẫn S3
-    source_etag String,         -- ETag file (fingerprint)
-    raw_rows Int64,             -- Số dòng trước khi làm sạch
-    cleaned_rows Int64,         -- Số dòng sau khi làm sạch
-    dropped_rows Int64,         -- Số dòng bị loại (raw - cleaned)
-    duplicate_rows Int64,       -- Số dòng duplicate bị xóa
-    null_cells Int64,           -- Tổng số ô null trong DataFrame
+    source_key String,          -- S3 path
+    source_etag String,         -- File ETag (fingerprint)
+    raw_rows Int64,             -- Row count before cleaning
+    cleaned_rows Int64,         -- Row count after cleaning
+    dropped_rows Int64,         -- Rows removed (raw - cleaned)
+    duplicate_rows Int64,       -- Duplicate rows removed
+    null_cells Int64,           -- Total null cells in DataFrame
     processed_at DateTime64(3)
 )
 ENGINE = MergeTree
@@ -788,7 +884,7 @@ CREATE TABLE analytics.pipeline_runs
 (
     run_id String,
     pipeline_name String,
-    status String,              -- 'success' hoặc 'failed'
+    status String,              -- 'success' or 'failed'
     started_at DateTime64(3),
     ended_at Nullable(DateTime64(3)),
     rows_extracted Int64 DEFAULT 0,
@@ -804,23 +900,39 @@ PARTITION BY toYYYYMM(started_at)
 ORDER BY started_at;
 ```
 
-### Queries hữu ích
+### Useful queries
 
 ```sql
--- Tổng hợp revenue theo ngày (7 ngày gần nhất)
+-- Revenue summary by day (last 7 days)
 SELECT order_date, total_revenue, order_count
 FROM analytics.gold_demo_daily
 WHERE order_date >= today() - 7
 ORDER BY order_date;
 
--- Top categories theo revenue
+-- Revenue summary by week
+SELECT year_week, week_start, total_revenue, order_count
+FROM analytics.gold_demo_weekly
+ORDER BY year_week DESC
+LIMIT 12;
+
+-- Revenue summary by month
+SELECT year_month, month_start, total_revenue, order_count
+FROM analytics.gold_demo_monthly
+ORDER BY year_month DESC;
+
+-- Revenue summary by year
+SELECT year, total_revenue, order_count, avg_order_value
+FROM analytics.gold_demo_yearly
+ORDER BY year DESC;
+
+-- Top categories by revenue
 SELECT category, sum(total_revenue) AS revenue
 FROM analytics.gold_demo_by_category
 GROUP BY category
 ORDER BY revenue DESC;
 
 -- CSV quality summary
-SELECT 
+SELECT
     source_key,
     raw_rows,
     cleaned_rows,
@@ -831,7 +943,7 @@ FROM analytics.csv_quality_metrics
 ORDER BY processed_at DESC
 LIMIT 20;
 
--- Pipeline success rate (7 ngày)
+-- Pipeline success rate (last 7 days)
 SELECT
     pipeline_name,
     countIf(status = 'success') AS success,
@@ -844,4 +956,4 @@ GROUP BY pipeline_name;
 
 ---
 
-*Xem thêm: [README.md](../README.md) | [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) | [VARIABLES_REFERENCE.md](VARIABLES_REFERENCE.md)*
+*See also: [README.md](../README.md) | [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) | [VARIABLES_REFERENCE.md](VARIABLES_REFERENCE.md)*
