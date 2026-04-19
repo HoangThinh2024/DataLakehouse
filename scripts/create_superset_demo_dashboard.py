@@ -1,34 +1,88 @@
 #!/usr/bin/env python3
-"""Create or update a Superset demo dashboard for the 100k CSV showcase.
+"""Create or update a comprehensive Superset dashboard for the DataLakehouse.
+
+Charts included:
+  - KPI: Total Revenue       (big_number_total)
+  - KPI: Total Orders        (big_number_total)
+  - KPI: Average Order Value (big_number_total)
+  - Bar chart: Revenue by Category
+  - Pie chart: Orders by Region
+  - Line graph: Revenue Over Time (daily)
+  - Table: Daily Sales Summary
+  - Bar chart: Top Regions by Revenue
+
+Environment variables:
+  SUPERSET_URL             (default: http://127.0.0.1:28088)
+  SUPERSET_ADMIN_USER      (default: admin)
+  SUPERSET_ADMIN_PASSWORD  (default: admin)
+  CLICKHOUSE_USER          (default: default)
+  CLICKHOUSE_PASSWORD      (default: "")
+  CLICKHOUSE_DB            (default: analytics)
+  DLH_BIND_IP              (default: 127.0.0.1)
+  DLH_CLICKHOUSE_HTTP_PORT (default: 28123)
 
 Run from host machine:
   python scripts/create_superset_demo_dashboard.py
-
-Environment variables:
-  SUPERSET_URL (default: http://127.0.0.1:28088)
-  SUPERSET_ADMIN_USER (default: admin)
-  SUPERSET_ADMIN_PASSWORD (default: admin)
-  SUPERSET_DEMO_DASHBOARD_TITLE (default: Data Lakehouse CSV Demo 100k)
 """
 
 from __future__ import annotations
 
 import json
 import os
-from typing import Any, Dict
+from pathlib import Path
+from typing import Any, Dict, List
 
 import requests
 
-BASE_URL = os.getenv("SUPERSET_URL", "http://127.0.0.1:28088").rstrip("/")
+# ---------------------------------------------------------------------------
+# Configuration from environment
+# ---------------------------------------------------------------------------
+REPO_ROOT = Path(__file__).resolve().parents[1]
+ENV_FILE = REPO_ROOT / ".env"
+
+
+def _load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key:
+            os.environ.setdefault(key, value)
+
+
+_load_env_file(ENV_FILE)
+
+BIND_IP = os.getenv("DLH_BIND_IP", "127.0.0.1")
+CH_HTTP_PORT = os.getenv("DLH_CLICKHOUSE_HTTP_PORT", "28123")
+CH_USER = os.getenv("CLICKHOUSE_USER", "default") or "default"
+CH_PASSWORD = os.getenv("CLICKHOUSE_PASSWORD", "") or ""
+CH_DB = os.getenv("CLICKHOUSE_DB", "analytics")
+
+BASE_URL = os.getenv("SUPERSET_URL", f"http://{BIND_IP}:28088").rstrip("/")
 ADMIN_USER = os.getenv("SUPERSET_ADMIN_USER", "admin")
 ADMIN_PASSWORD = os.getenv("SUPERSET_ADMIN_PASSWORD", "admin")
-DASHBOARD_TITLE = os.getenv("SUPERSET_DEMO_DASHBOARD_TITLE", "Data Lakehouse CSV Demo 100k")
-DASHBOARD_SLUG = "data-lakehouse-csv-demo-100k"
+
+DASHBOARD_TITLE = os.getenv("SUPERSET_DASHBOARD_TITLE", "DataLakehouse Analytics")
+DASHBOARD_SLUG = "datalakehouse-analytics"
 
 DB_NAME = "ClickHouse Analytics"
-DB_URI = "clickhousedb+connect://default:@dlh-clickhouse:8123/analytics"
-SCHEMA = "analytics"
+# Build URI from env vars so it reflects user-configured ports and credentials
+if CH_PASSWORD:
+    DB_URI = f"clickhousedb+connect://{CH_USER}:{CH_PASSWORD}@dlh-clickhouse:8123/{CH_DB}"
+else:
+    DB_URI = f"clickhousedb+connect://{CH_USER}@dlh-clickhouse:8123/{CH_DB}"
 
+SCHEMA = CH_DB
+
+
+# ---------------------------------------------------------------------------
+# Superset API client
+# ---------------------------------------------------------------------------
 
 def _query(page: int = 0, page_size: int = 1000) -> str:
     return f"(page:{page},page_size:{page_size})"
@@ -83,12 +137,15 @@ class SupersetClient:
         return res.json()
 
 
+# ---------------------------------------------------------------------------
+# Resource helpers
+# ---------------------------------------------------------------------------
+
 def ensure_database(client: SupersetClient) -> int:
     items = client.get(f"/api/v1/database/?q={_query()}").get("result", [])
     for item in items:
         if item.get("database_name") == DB_NAME:
             return int(item["id"])
-
     payload = {
         "database_name": DB_NAME,
         "sqlalchemy_uri": DB_URI,
@@ -105,7 +162,6 @@ def ensure_dataset(client: SupersetClient, database_id: int, table_name: str) ->
         db = item.get("database") or {}
         if db.get("id") == database_id and item.get("schema") == SCHEMA and item.get("table_name") == table_name:
             return int(item["id"])
-
     payload = {"database": database_id, "schema": SCHEMA, "table_name": table_name}
     created = client.post("/api/v1/dataset/", payload)
     return int(created["id"])
@@ -116,10 +172,18 @@ def ensure_dashboard(client: SupersetClient) -> int:
     for item in items:
         if item.get("dashboard_title") == DASHBOARD_TITLE:
             return int(item["id"])
-
     payload = {"dashboard_title": DASHBOARD_TITLE, "slug": DASHBOARD_SLUG, "published": True}
     created = client.post("/api/v1/dashboard/", payload)
     return int(created["id"])
+
+
+def _simple_metric(column_name: str, aggregate: str, label: str) -> Dict[str, Any]:
+    return {
+        "expressionType": "SIMPLE",
+        "column": {"column_name": column_name},
+        "aggregate": aggregate,
+        "label": label,
+    }
 
 
 def ensure_chart(
@@ -134,11 +198,7 @@ def ensure_chart(
     items = client.get(f"/api/v1/chart/?q={_query()}").get("result", [])
     for item in items:
         if item.get("slice_name") == slice_name:
-            # Some Superset builds reject partial dashboard updates on chart PUT.
-            # Reuse the existing chart and rely on dashboard layout update below.
-            chart_id = int(item["id"])
-            return chart_id
-
+            return int(item["id"])
     payload = {
         "slice_name": slice_name,
         "viz_type": viz_type,
@@ -151,145 +211,255 @@ def ensure_chart(
     return int(created["id"])
 
 
+# ---------------------------------------------------------------------------
+# Dashboard layout builder
+# ---------------------------------------------------------------------------
+
 def build_layout(chart_ids: Dict[str, int]) -> Dict[str, Any]:
-    return {
+    """
+    Layout structure (3 rows):
+      Row 1 – KPI metrics (3 big-number tiles)
+      Row 2 – Bar (category revenue) + Pie (region orders)
+      Row 3 – Line graph (daily revenue) + Table (daily summary)
+      Row 4 – Bar (top regions by revenue)
+    """
+    layout: Dict[str, Any] = {
         "ROOT_ID": {"id": "ROOT_ID", "type": "ROOT", "children": ["GRID_ID"], "parents": []},
-        "GRID_ID": {"id": "GRID_ID", "type": "GRID", "children": ["ROW-1", "ROW-2"], "parents": ["ROOT_ID"]},
-        "ROW-1": {
-            "id": "ROW-1",
-            "type": "ROW",
-            "children": ["CHART-overview", "CHART-quality"],
-            "parents": ["ROOT_ID", "GRID_ID"],
-            "meta": {"background": "BACKGROUND_TRANSPARENT"},
-        },
-        "CHART-overview": {
-            "id": "CHART-overview",
-            "type": "CHART",
-            "children": [],
-            "parents": ["ROOT_ID", "GRID_ID", "ROW-1"],
-            "meta": {"chartId": chart_ids["kpi_cleaned"], "width": 6, "height": 60},
-        },
-        "CHART-quality": {
-            "id": "CHART-quality",
-            "type": "CHART",
-            "children": [],
-            "parents": ["ROOT_ID", "GRID_ID", "ROW-1"],
-            "meta": {"chartId": chart_ids["quality_table"], "width": 6, "height": 60},
-        },
-        "ROW-2": {
-            "id": "ROW-2",
-            "type": "ROW",
-            "children": ["CHART-bar", "CHART-events"],
-            "parents": ["ROOT_ID", "GRID_ID"],
-            "meta": {"background": "BACKGROUND_TRANSPARENT"},
-        },
-        "CHART-bar": {
-            "id": "CHART-bar",
-            "type": "CHART",
-            "children": [],
-            "parents": ["ROOT_ID", "GRID_ID", "ROW-2"],
-            "meta": {"chartId": chart_ids["quality_bar"], "width": 6, "height": 60},
-        },
-        "CHART-events": {
-            "id": "CHART-events",
-            "type": "CHART",
-            "children": [],
-            "parents": ["ROOT_ID", "GRID_ID", "ROW-2"],
-            "meta": {"chartId": chart_ids["events_table"], "width": 6, "height": 60},
+        "GRID_ID": {
+            "id": "GRID_ID",
+            "type": "GRID",
+            "children": ["ROW-kpi", "ROW-cat-region", "ROW-time-table", "ROW-region-bar"],
+            "parents": ["ROOT_ID"],
         },
     }
 
+    def _row(row_id: str, children: List[str]) -> Dict[str, Any]:
+        return {
+            "id": row_id,
+            "type": "ROW",
+            "children": children,
+            "parents": ["ROOT_ID", "GRID_ID"],
+            "meta": {"background": "BACKGROUND_TRANSPARENT"},
+        }
+
+    def _chart_cell(cell_id: str, row_id: str, chart_id: int, width: int = 4, height: int = 50) -> Dict[str, Any]:
+        return {
+            "id": cell_id,
+            "type": "CHART",
+            "children": [],
+            "parents": ["ROOT_ID", "GRID_ID", row_id],
+            "meta": {"chartId": chart_id, "width": width, "height": height},
+        }
+
+    # Row 1 – KPI
+    layout["ROW-kpi"] = _row("ROW-kpi", ["CHART-kpi-revenue", "CHART-kpi-orders", "CHART-kpi-avg"])
+    layout["CHART-kpi-revenue"] = _chart_cell("CHART-kpi-revenue", "ROW-kpi", chart_ids["kpi_revenue"], 4, 40)
+    layout["CHART-kpi-orders"] = _chart_cell("CHART-kpi-orders", "ROW-kpi", chart_ids["kpi_orders"], 4, 40)
+    layout["CHART-kpi-avg"] = _chart_cell("CHART-kpi-avg", "ROW-kpi", chart_ids["kpi_avg"], 4, 40)
+
+    # Row 2 – Bar + Pie
+    layout["ROW-cat-region"] = _row("ROW-cat-region", ["CHART-bar-cat", "CHART-pie-region"])
+    layout["CHART-bar-cat"] = _chart_cell("CHART-bar-cat", "ROW-cat-region", chart_ids["bar_category"], 6, 60)
+    layout["CHART-pie-region"] = _chart_cell("CHART-pie-region", "ROW-cat-region", chart_ids["pie_region"], 6, 60)
+
+    # Row 3 – Line + Table
+    layout["ROW-time-table"] = _row("ROW-time-table", ["CHART-line-daily", "CHART-table-daily"])
+    layout["CHART-line-daily"] = _chart_cell("CHART-line-daily", "ROW-time-table", chart_ids["line_daily"], 6, 60)
+    layout["CHART-table-daily"] = _chart_cell("CHART-table-daily", "ROW-time-table", chart_ids["table_daily"], 6, 60)
+
+    # Row 4 – Top regions bar
+    layout["ROW-region-bar"] = _row("ROW-region-bar", ["CHART-bar-region"])
+    layout["CHART-bar-region"] = _chart_cell("CHART-bar-region", "ROW-region-bar", chart_ids["bar_region"], 12, 60)
+
+    return layout
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 def main() -> None:
+    print(f"Connecting to Superset at {BASE_URL} …")
     client = SupersetClient(BASE_URL, ADMIN_USER, ADMIN_PASSWORD)
 
     db_id = ensure_database(client)
-    ds_quality = ensure_dataset(client, db_id, "csv_quality_metrics")
-    ds_events = ensure_dataset(client, db_id, "csv_upload_events")
+    print(f"ClickHouse database id: {db_id}")
+
+    ds_daily = ensure_dataset(client, db_id, "gold_demo_daily")
+    ds_region = ensure_dataset(client, db_id, "gold_demo_by_region")
+    ds_category = ensure_dataset(client, db_id, "gold_demo_by_category")
+    ds_silver = ensure_dataset(client, db_id, "silver_demo")
     dashboard_id = ensure_dashboard(client)
 
-    chart_ids = {
-        "kpi_cleaned": ensure_chart(
-            client,
-            dashboard_id=dashboard_id,
-            dataset_id=ds_quality,
-            slice_name="DLH 100k - CSV Data Overview",
-            viz_type="table",
-            params={
-                "datasource": f"{ds_quality}__table",
-                "viz_type": "table",
-                "all_columns": ["source_key", "raw_rows", "cleaned_rows", "dropped_rows", "duplicate_rows", "processed_at"],
-                "adhoc_filters": [],
-                "order_desc": True,
-                "row_limit": 10,
-            },
-        ),
-        "quality_table": ensure_chart(
-            client,
-            dashboard_id=dashboard_id,
-            dataset_id=ds_quality,
-            slice_name="DLH 100k - CSV Quality Metrics",
-            viz_type="table",
-            params={
-                "datasource": f"{ds_quality}__table",
-                "viz_type": "table",
-                "all_columns": ["source_key", "raw_rows", "cleaned_rows", "dropped_rows", "duplicate_rows", "processed_at"],
-                "adhoc_filters": [],
-                "order_desc": True,
-                "row_limit": 50,
-            },
-        ),
-        "events_table": ensure_chart(
-            client,
-            dashboard_id=dashboard_id,
-            dataset_id=ds_events,
-            slice_name="DLH 100k - CSV Upload Events",
-            viz_type="table",
-            params={
-                "datasource": f"{ds_events}__table",
-                "viz_type": "table",
-                "all_columns": ["source_key", "status", "error_message", "processed_at", "row_count"],
-                "adhoc_filters": [],
-                "order_desc": True,
-                "row_limit": 50,
-            },
-        ),
-        "quality_bar": ensure_chart(
-            client,
-            dashboard_id=dashboard_id,
-            dataset_id=ds_quality,
-            slice_name="DLH 100k - CSV Row Processing Comparison",
-            viz_type="echarts_timeseries",
-            params={
-                "datasource": f"{ds_quality}__table",
-                "viz_type": "echarts_timeseries",
-                "x_axis": {"type": "time", "label": "File"},
-                "y_axis": {"label": "Row Count"},
-                "time_grain_sqla": None,
-                "time_range": "No filter",
-                "granularity_sqla": None,
-                "groupby": ["source_key"],
-                "metrics": [
-                    {
-                        "label": "Cleaned Rows",
-                        "expressionType": "SIMPLE",
-                        "column": {"column_name": "cleaned_rows"},
-                        "aggregate": "SUM",
-                    },
-                    {
-                        "label": "Dropped Rows",
-                        "expressionType": "SIMPLE",
-                        "column": {"column_name": "dropped_rows"},
-                        "aggregate": "SUM",
-                    },
-                ],
-                "adhoc_filters": [],
-                "order_desc": True,
-                "row_limit": 100,
-            },
-        ),
-    }
+    print(f"Dashboard id: {dashboard_id}  Creating / verifying charts …")
 
+    chart_ids: Dict[str, int] = {}
+
+    # ── KPI: Total Revenue ──────────────────────────────────────────────────
+    chart_ids["kpi_revenue"] = ensure_chart(
+        client,
+        dashboard_id=dashboard_id,
+        dataset_id=ds_daily,
+        slice_name="DLH – Tổng Doanh Thu (Total Revenue)",
+        viz_type="big_number_total",
+        params={
+            "datasource": f"{ds_daily}__table",
+            "viz_type": "big_number_total",
+            "metric": _simple_metric("total_revenue", "SUM", "Total Revenue"),
+            "adhoc_filters": [],
+            "subheader": "VND",
+            "header_font_size": 0.4,
+            "subheader_font_size": 0.15,
+        },
+    )
+
+    # ── KPI: Total Orders ───────────────────────────────────────────────────
+    chart_ids["kpi_orders"] = ensure_chart(
+        client,
+        dashboard_id=dashboard_id,
+        dataset_id=ds_daily,
+        slice_name="DLH – Tổng Đơn Hàng (Total Orders)",
+        viz_type="big_number_total",
+        params={
+            "datasource": f"{ds_daily}__table",
+            "viz_type": "big_number_total",
+            "metric": _simple_metric("order_count", "SUM", "Total Orders"),
+            "adhoc_filters": [],
+            "subheader": "đơn hàng",
+            "header_font_size": 0.4,
+            "subheader_font_size": 0.15,
+        },
+    )
+
+    # ── KPI: Average Order Value ────────────────────────────────────────────
+    chart_ids["kpi_avg"] = ensure_chart(
+        client,
+        dashboard_id=dashboard_id,
+        dataset_id=ds_daily,
+        slice_name="DLH – Giá Trị ĐH Trung Bình (Avg Order Value)",
+        viz_type="big_number_total",
+        params={
+            "datasource": f"{ds_daily}__table",
+            "viz_type": "big_number_total",
+            "metric": _simple_metric("avg_order_value", "AVG", "Avg Order Value"),
+            "adhoc_filters": [],
+            "subheader": "VND / đơn",
+            "header_font_size": 0.4,
+            "subheader_font_size": 0.15,
+        },
+    )
+
+    # ── Bar chart: Revenue by Category ─────────────────────────────────────
+    chart_ids["bar_category"] = ensure_chart(
+        client,
+        dashboard_id=dashboard_id,
+        dataset_id=ds_category,
+        slice_name="DLH – Doanh Thu theo Danh Mục (Revenue by Category)",
+        viz_type="echarts_bar",
+        params={
+            "datasource": f"{ds_category}__table",
+            "viz_type": "echarts_bar",
+            "x_axis": "category",
+            "metrics": [_simple_metric("total_revenue", "SUM", "Doanh Thu")],
+            "groupby": [],
+            "adhoc_filters": [],
+            "row_limit": 50,
+            "order_desc": True,
+            "show_legend": False,
+            "show_bar_value": True,
+            "orientation": "vertical",
+        },
+    )
+
+    # ── Pie chart: Orders by Region ─────────────────────────────────────────
+    chart_ids["pie_region"] = ensure_chart(
+        client,
+        dashboard_id=dashboard_id,
+        dataset_id=ds_region,
+        slice_name="DLH – Đơn Hàng theo Vùng (Orders by Region)",
+        viz_type="pie",
+        params={
+            "datasource": f"{ds_region}__table",
+            "viz_type": "pie",
+            "groupby": ["region"],
+            "metric": _simple_metric("order_count", "SUM", "Số Đơn"),
+            "adhoc_filters": [],
+            "row_limit": 20,
+            "show_labels": True,
+            "show_legend": True,
+            "donut": False,
+        },
+    )
+
+    # ── Line graph: Daily Revenue Over Time ─────────────────────────────────
+    chart_ids["line_daily"] = ensure_chart(
+        client,
+        dashboard_id=dashboard_id,
+        dataset_id=ds_daily,
+        slice_name="DLH – Doanh Thu Theo Ngày (Daily Revenue)",
+        viz_type="echarts_timeseries_line",
+        params={
+            "datasource": f"{ds_daily}__table",
+            "viz_type": "echarts_timeseries_line",
+            "x_axis": "order_date",
+            "metrics": [_simple_metric("total_revenue", "SUM", "Doanh Thu")],
+            "groupby": [],
+            "adhoc_filters": [],
+            "time_grain_sqla": "P1D",
+            "time_range": "No filter",
+            "row_limit": 500,
+            "show_legend": True,
+            "area": False,
+            "smooth": True,
+        },
+    )
+
+    # ── Table: Daily Sales Summary ───────────────────────────────────────────
+    chart_ids["table_daily"] = ensure_chart(
+        client,
+        dashboard_id=dashboard_id,
+        dataset_id=ds_daily,
+        slice_name="DLH – Bảng Tổng Hợp Doanh Số (Daily Sales Table)",
+        viz_type="table",
+        params={
+            "datasource": f"{ds_daily}__table",
+            "viz_type": "table",
+            "all_columns": [
+                "order_date", "order_count", "total_revenue",
+                "avg_order_value", "total_quantity",
+                "unique_customers", "unique_regions",
+            ],
+            "adhoc_filters": [],
+            "order_desc": True,
+            "row_limit": 100,
+            "include_search": True,
+            "show_cell_bars": True,
+        },
+    )
+
+    # ── Bar chart: Top Regions by Revenue ───────────────────────────────────
+    chart_ids["bar_region"] = ensure_chart(
+        client,
+        dashboard_id=dashboard_id,
+        dataset_id=ds_region,
+        slice_name="DLH – Doanh Thu theo Vùng (Revenue by Region)",
+        viz_type="echarts_bar",
+        params={
+            "datasource": f"{ds_region}__table",
+            "viz_type": "echarts_bar",
+            "x_axis": "region",
+            "metrics": [_simple_metric("total_revenue", "SUM", "Doanh Thu")],
+            "groupby": [],
+            "adhoc_filters": [],
+            "row_limit": 20,
+            "order_desc": True,
+            "show_legend": False,
+            "show_bar_value": True,
+            "orientation": "vertical",
+        },
+    )
+
+    # ── Assemble dashboard layout ───────────────────────────────────────────
     layout = build_layout(chart_ids)
     client.put(
         f"/api/v1/dashboard/{dashboard_id}",
@@ -302,12 +472,23 @@ def main() -> None:
 
     result = client.get(f"/api/v1/dashboard/{dashboard_id}").get("result", {})
     dashboard_url = result.get("url") or f"/superset/dashboard/{dashboard_id}/"
-    print("Superset dashboard ready")
-    print(f"- dashboard_id: {dashboard_id}")
-    print(f"- title: {DASHBOARD_TITLE}")
-    print(f"- url: {BASE_URL}{dashboard_url}")
-    for key, value in chart_ids.items():
-        print(f"- chart_{key}: {value}")
+
+    print("\n✅  Superset dashboard ready!")
+    print(f"   Title : {DASHBOARD_TITLE}")
+    print(f"   URL   : {BASE_URL}{dashboard_url}")
+    print("\nCharts created:")
+    chart_labels = {
+        "kpi_revenue": "KPI – Tổng Doanh Thu",
+        "kpi_orders": "KPI – Tổng Đơn Hàng",
+        "kpi_avg": "KPI – Giá Trị TB",
+        "bar_category": "Biểu đồ cột – Doanh Thu / Danh Mục",
+        "pie_region": "Biểu đồ tròn – Đơn Hàng / Vùng",
+        "line_daily": "Đồ thị đường – Doanh Thu Theo Ngày",
+        "table_daily": "Bảng tính – Tổng Hợp Doanh Số",
+        "bar_region": "Biểu đồ cột – Doanh Thu / Vùng",
+    }
+    for key, label in chart_labels.items():
+        print(f"   [{chart_ids[key]:>5}] {label}")
 
 
 if __name__ == "__main__":
