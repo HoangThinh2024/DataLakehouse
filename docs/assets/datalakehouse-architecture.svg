@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">DataLakehouse architecture</title>
+  <desc id="desc">Bootstrap, control plane, data flow, and serving layers for the DataLakehouse project.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f3f7fb"/>
+      <stop offset="100%" stop-color="#fef7ef"/>
+    </linearGradient>
+    <linearGradient id="head" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.15"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <style>
+      .h1 { font: 700 32px sans-serif; fill: #ffffff; }
+      .h2 { font: 400 14px sans-serif; fill: #cbd5e1; }
+      .sec { font: 700 18px sans-serif; fill: #0f172a; }
+      .lbl { font: 600 14px sans-serif; fill: #0f172a; }
+      .txt { font: 400 12px sans-serif; fill: #334155; }
+      .tiny { font: 400 11px sans-serif; fill: #475569; }
+      .box { rx: 16; ry: 16; stroke: #d0d7e2; stroke-width: 1.5; filter: url(#shadow); }
+      .arrow { stroke: #475569; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1440" height="900" fill="url(#bg)"/>
+  <rect x="40" y="24" width="1360" height="88" rx="22" fill="url(#head)" filter="url(#shadow)"/>
+  <text x="72" y="63" class="h1">DataLakehouse</text>
+  <text x="72" y="90" class="h2">Guided setup, unified lifecycle control, medallion data flow, and analytics serving</text>
+
+  <rect x="60" y="142" width="1320" height="150" class="box" fill="#ffffff"/>
+  <text x="84" y="174" class="sec">Bootstrap and Control Plane</text>
+
+  <rect x="84" y="192" width="246" height="78" rx="12" fill="#fff7ed" stroke="#e5e7eb"/>
+  <text x="102" y="218" class="lbl">scripts/setup.sh</text>
+  <text x="102" y="238" class="txt">interactive bootstrap, env generation</text>
+  <text x="102" y="255" class="tiny">network create + deploy</text>
+
+  <rect x="352" y="192" width="246" height="78" rx="12" fill="#eef2ff" stroke="#e5e7eb"/>
+  <text x="370" y="218" class="lbl">scripts/stackctl.sh</text>
+  <text x="370" y="238" class="txt">up/down/redeploy/health/logs</text>
+  <text x="370" y="255" class="tiny">validate-env, sync-env, inspect</text>
+
+  <rect x="620" y="192" width="246" height="78" rx="12" fill="#ecfeff" stroke="#e5e7eb"/>
+  <text x="638" y="218" class="lbl">.env + .env.example</text>
+  <text x="638" y="238" class="txt">runtime source of truth</text>
+  <text x="638" y="255" class="tiny">ports, credentials, image tags</text>
+
+  <rect x="888" y="192" width="246" height="78" rx="12" fill="#fef3c7" stroke="#e5e7eb"/>
+  <text x="906" y="218" class="lbl">setup_ufw_docker.sh</text>
+  <text x="906" y="238" class="txt">ufw-docker firewall automation</text>
+  <text x="906" y="255" class="tiny">commented rules, cleanup support</text>
+
+  <rect x="1156" y="192" width="204" height="78" rx="12" fill="#dcfce7" stroke="#e5e7eb"/>
+  <text x="1174" y="218" class="lbl">verify script</text>
+  <text x="1174" y="238" class="txt">verify_lakehouse_</text>
+  <text x="1174" y="254" class="txt">architecture.py</text>
+
+  <line x1="330" y1="232" x2="352" y2="232" class="arrow"/>
+  <line x1="598" y1="232" x2="620" y2="232" class="arrow"/>
+  <line x1="866" y1="232" x2="888" y2="232" class="arrow"/>
+  <line x1="1134" y1="232" x2="1156" y2="232" class="arrow"/>
+
+  <rect x="60" y="320" width="1320" height="250" class="box" fill="#ffffff"/>
+  <text x="84" y="352" class="sec">Runtime Data Path</text>
+
+  <rect x="84" y="376" width="222" height="168" rx="14" fill="#e0f2fe" stroke="#cbd5e1"/>
+  <text x="102" y="402" class="lbl">Sources</text>
+  <text x="102" y="424" class="txt">PostgreSQL source tables</text>
+  <text x="102" y="444" class="txt">CSV uploads</text>
+  <text x="102" y="464" class="txt">API/manual ingest</text>
+
+  <rect x="334" y="376" width="222" height="168" rx="14" fill="#ede9fe" stroke="#cbd5e1"/>
+  <text x="352" y="402" class="lbl">Processing</text>
+  <text x="352" y="424" class="txt">Mage pipelines</text>
+  <text x="352" y="444" class="txt">extract -> transform</text>
+  <text x="352" y="464" class="txt">schedule + orchestration</text>
+
+  <rect x="584" y="376" width="222" height="168" rx="14" fill="#ecfdf5" stroke="#cbd5e1"/>
+  <text x="602" y="402" class="lbl">Lake Storage (RustFS)</text>
+  <text x="602" y="424" class="txt">Bronze (raw)</text>
+  <text x="602" y="444" class="txt">Silver (clean)</text>
+  <text x="602" y="464" class="txt">Gold (aggregated)</text>
+
+  <rect x="834" y="376" width="222" height="168" rx="14" fill="#fff7ed" stroke="#cbd5e1"/>
+  <text x="852" y="402" class="lbl">Warehouse</text>
+  <text x="852" y="424" class="txt">ClickHouse analytics</text>
+  <text x="852" y="444" class="txt">silver/gold serving tables</text>
+  <text x="852" y="464" class="txt">OLAP queries</text>
+
+  <rect x="1084" y="376" width="276" height="168" rx="14" fill="#fdf2f8" stroke="#cbd5e1"/>
+  <text x="1102" y="402" class="lbl">Serving and Observability</text>
+  <text x="1102" y="424" class="txt">Superset dashboards</text>
+  <text x="1102" y="444" class="txt">Grafana monitoring</text>
+  <text x="1102" y="464" class="txt">NocoDB operations UI</text>
+
+  <line x1="306" y1="458" x2="334" y2="458" class="arrow"/>
+  <line x1="556" y1="458" x2="584" y2="458" class="arrow"/>
+  <line x1="806" y1="458" x2="834" y2="458" class="arrow"/>
+  <line x1="1056" y1="458" x2="1084" y2="458" class="arrow"/>
+
+  <rect x="60" y="596" width="1320" height="270" class="box" fill="#ffffff"/>
+  <text x="84" y="628" class="sec">Operations, Security, and Validation</text>
+
+  <rect x="84" y="652" width="410" height="190" rx="14" fill="#f8fafc" stroke="#d1d5db"/>
+  <text x="102" y="678" class="lbl">Security Boundary</text>
+  <text x="102" y="700" class="txt">- host bind via DLH_BIND_IP</text>
+  <text x="102" y="720" class="txt">- LAN scope via DLH_LAN_CIDR</text>
+  <text x="102" y="740" class="txt">- ufw-docker managed ingress rules</text>
+  <text x="102" y="760" class="txt">- explicit rule comments for auditability</text>
+  <text x="102" y="780" class="txt">- cleanup on remove/down workflow</text>
+
+  <rect x="514" y="652" width="410" height="190" rx="14" fill="#eff6ff" stroke="#d1d5db"/>
+  <text x="532" y="678" class="lbl">Operational Workflow</text>
+  <text x="532" y="700" class="txt">- bootstrap: setup.sh</text>
+  <text x="532" y="720" class="txt">- day-2 ops: stackctl.sh</text>
+  <text x="532" y="740" class="txt">- diagnostics: health/logs/inspect</text>
+  <text x="532" y="760" class="txt">- env control: validate-env + sync-env</text>
+  <text x="532" y="780" class="txt">- controlled teardown: reset or down</text>
+
+  <rect x="944" y="652" width="416" height="190" rx="14" fill="#f0fdf4" stroke="#d1d5db"/>
+  <text x="962" y="678" class="lbl">Automation and Quality Checks</text>
+  <text x="962" y="700" class="txt">- uv run scripts/run_etl_and_dashboard.py</text>
+  <text x="962" y="720" class="txt">- dashboard provisioning automation</text>
+  <text x="962" y="740" class="txt">- verify_lakehouse_architecture.py checks</text>
+  <text x="962" y="760" class="txt">- compose status + endpoint checks</text>
+  <text x="962" y="780" class="txt">- consistent redeploy pipeline</text>
+
+  <text x="84" y="884" class="tiny">Current model: Docker Compose runtime, uv-managed host tooling, medallion storage flow, and ufw-docker LAN firewall management.</text>
+</svg>

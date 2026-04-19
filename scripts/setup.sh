@@ -1,17 +1,25 @@
 #!/usr/bin/env bash
-# =============================================================
-# DataLakehouse – Interactive Deployment Setup
-# =============================================================
+# ============================================================================
+# DataLakehouse – Interactive Deployment Setup & Bootstrap
+# ============================================================================
+# Purpose:
+#   Complete guided setup for DataLakehouse deployment:
+#   - Guided .env configuration
+#   - Docker network creation
+#   - Stack deployment via stackctl.sh
+#   - Optional: UFW firewall setup, Python sync, ETL/dashboards
+#
 # Usage:
 #   bash scripts/setup.sh
 #
-# What this script does:
-#   1. Walks you through every configuration variable with defaults.
-#   2. Writes a .env file in the project root.
-#   3. Creates the Docker network (web_network) if it does not exist.
-#   4. Runs `docker compose up -d`.
-#   5. (Optional) Asks if you want to run ETL and create dashboards.
-# =============================================================
+# The script is organized into logical phases:
+#   Phase 1: Environment and settings validation
+#   Phase 2: Interactive configuration questionnaire
+#   Phase 3: .env file generation
+#   Phase 4: Docker network setup
+#   Phase 5: Stack deployment
+#   Phase 6: Optional post-deployment tasks (firewall, Python, ETL)
+# ============================================================================
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -28,6 +36,52 @@ header() { echo; echo "$(_bold "$(_cyan "=== $* ===")")"; echo; }
 info()   { echo "  $(_green "→") $*"; }
 warn()   { echo "  $(_yellow "⚠") $*"; }
 err()    { echo "  $(_red "✗") $*" >&2; }
+
+# ── Python environment helpers (uv) ───────────────────────
+ensure_uv() {
+  if command -v uv >/dev/null 2>&1; then
+    info "Found uv: $(uv --version)"
+    return 0
+  fi
+
+  warn "uv (Astral) is not installed."
+  if ! ask_yn "Install uv now via official installer?" "y"; then
+    return 1
+  fi
+
+  if command -v curl >/dev/null 2>&1; then
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO- https://astral.sh/uv/install.sh | sh
+  else
+    err "Neither curl nor wget is available to install uv automatically."
+    return 1
+  fi
+
+  # uv installer typically places binaries in ~/.local/bin
+  export PATH="$HOME/.local/bin:$PATH"
+
+  if command -v uv >/dev/null 2>&1; then
+    info "Installed uv: $(uv --version)"
+    return 0
+  fi
+
+  err "uv installation finished but command is not in PATH yet."
+  echo "  Open a new shell or run: export PATH=\"$HOME/.local/bin:\$PATH\""
+  return 1
+}
+
+sync_python_env() {
+  if ! ensure_uv; then
+    warn "Skipping Python dependency setup (uv not available)."
+    return 1
+  fi
+
+  info "Syncing Python dependencies with uv (all groups) …"
+  (cd "$REPO_ROOT" && uv sync --all-groups)
+  info "Python environment ready at $REPO_ROOT/.venv"
+  return 0
+}
 
 # ── Prompt helper ───────────────────────────────────────────
 # ask VAR_NAME "Description" "default_value"
@@ -96,6 +150,9 @@ load_existing_env() {
 # ── Default values (sourced from existing .env or hardcoded) ─
 load_existing_env
 
+DLH_LAN_CIDR="${DLH_LAN_CIDR:-192.168.1.0/24}"
+UFW_ALLOW_DATA_PORTS="${UFW_ALLOW_DATA_PORTS:-false}"
+
 # =============================================================
 header "DataLakehouse – Guided Setup"
 echo "  This wizard configures your .env file and deploys the stack."
@@ -107,6 +164,8 @@ header "1 / 8 – Global Settings"
 
 ask TZ           "Timezone"                             "${TZ:-Asia/Ho_Chi_Minh}"
 ask DLH_BIND_IP  "Bind IP (127.0.0.1 = local only)"    "${DLH_BIND_IP:-127.0.0.1}"
+ask DLH_LAN_CIDR "LAN CIDR for firewall rules"          "${DLH_LAN_CIDR:-192.168.1.0/24}"
+ask UFW_ALLOW_DATA_PORTS "Allow data ports to LAN (true/false)" "${UFW_ALLOW_DATA_PORTS:-false}"
 
 # =============================================================
 header "2 / 8 – Docker Image Versions"
@@ -138,10 +197,18 @@ if [ -n "$CUSTOM_DB_NAME" ]; then
   ask CUSTOM_DB_USER     "Custom username"     "${CUSTOM_DB_USER:-dlh_custom_user}"
   ask CUSTOM_DB_PASSWORD "Custom password"     "${CUSTOM_DB_PASSWORD:-change-this-custom-password}"
   ask CUSTOM_SCHEMA      "Custom schema name"  "${CUSTOM_SCHEMA:-custom_schema}"
+  SOURCE_DB_NAME_VAL="$CUSTOM_DB_NAME"
+  SOURCE_DB_USER_VAL="$CUSTOM_DB_USER"
+  SOURCE_DB_PASSWORD_VAL="$CUSTOM_DB_PASSWORD"
+  SOURCE_SCHEMA_VAL="$CUSTOM_SCHEMA"
 else
   CUSTOM_DB_USER=""
   CUSTOM_DB_PASSWORD=""
   CUSTOM_SCHEMA=""
+  SOURCE_DB_NAME_VAL="$POSTGRES_DB"
+  SOURCE_DB_USER_VAL="$POSTGRES_USER"
+  SOURCE_DB_PASSWORD_VAL="$POSTGRES_PASSWORD"
+  SOURCE_SCHEMA_VAL="public"
 fi
 
 # =============================================================
@@ -190,14 +257,31 @@ header "Writing .env"
 
 cat > "$ENV_FILE" <<EOF
 # ============================================================
-# DataLakehouse – generated by scripts/setup.sh
-# $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+# DataLakehouse Environment Configuration
+# ============================================================
+# This file was auto-generated by scripts/setup.sh
+# Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+#
+# IMPORTANT NOTES:
+#  • Keep credentials secure (do NOT commit to Git)
+#  • Port values (DLH_*_PORT) must be unique
+#  • Changes take effect after: docker compose restart <service>
+#  • Use stackctl.sh for common operations:
+#    - bash scripts/stackctl.sh up
+#    - bash scripts/stackctl.sh down
+#    - bash scripts/stackctl.sh redeploy
+#    - bash scripts/stackctl.sh check-env
+#    - bash scripts/stackctl.sh check-system
 # ============================================================
 
+# ─ Global Settings ─────────────────────────────────────────
 TZ=${TZ}
 DLH_BIND_IP=${DLH_BIND_IP}
+DLH_LAN_CIDR=${DLH_LAN_CIDR}
+UFW_ALLOW_DATA_PORTS=${UFW_ALLOW_DATA_PORTS}
 
-# Docker Image Versions
+# ─ Docker Image Versions ───────────────────────────────────
+# Pin versions for reproducibility. Use 'latest' for auto-updates.
 POSTGRES_IMAGE_VERSION=${POSTGRES_IMAGE_VERSION}
 RUSTFS_IMAGE_VERSION=${RUSTFS_IMAGE_VERSION}
 MINIO_MC_IMAGE_VERSION=${MINIO_MC_IMAGE_VERSION}
@@ -207,19 +291,20 @@ NOCODB_IMAGE_VERSION=${NOCODB_IMAGE_VERSION}
 SUPERSET_IMAGE_VERSION=${SUPERSET_IMAGE_VERSION}
 GRAFANA_IMAGE_VERSION=${GRAFANA_IMAGE_VERSION}
 
-# Core PostgreSQL
+# ─ Core PostgreSQL (System Admin) ──────────────────────────
 POSTGRES_DB=${POSTGRES_DB}
 POSTGRES_USER=${POSTGRES_USER}
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 DLH_POSTGRES_PORT=${DLH_POSTGRES_PORT}
+POSTGRES_HOST=dlh-postgres
 
-# Custom Workspace
+# ─ Custom Workspace (for isolated ETL/reporting) ───────────
 CUSTOM_DB_NAME=${CUSTOM_DB_NAME}
 CUSTOM_DB_USER=${CUSTOM_DB_USER}
 CUSTOM_DB_PASSWORD=${CUSTOM_DB_PASSWORD}
 CUSTOM_SCHEMA=${CUSTOM_SCHEMA}
 
-# RustFS
+# ─ RustFS (Object Storage via S3-like API) ────────────────
 RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY}
 RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY}
 DLH_RUSTFS_API_PORT=${DLH_RUSTFS_API_PORT}
@@ -231,24 +316,25 @@ RUSTFS_BRONZE_BUCKET=bronze
 RUSTFS_SILVER_BUCKET=silver
 RUSTFS_GOLD_BUCKET=gold
 
-# ClickHouse
+# ─ ClickHouse (Analytics Data Warehouse) ───────────────────
 CLICKHOUSE_DB=${CLICKHOUSE_DB}
 CLICKHOUSE_USER=${CLICKHOUSE_USER}
 CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
 DLH_CLICKHOUSE_HTTP_PORT=${DLH_CLICKHOUSE_HTTP_PORT}
 DLH_CLICKHOUSE_TCP_PORT=${DLH_CLICKHOUSE_TCP_PORT}
 
-# Mage
+# ─ Mage (ETL Orchestration) ────────────────────────────────
 DLH_MAGE_PORT=${DLH_MAGE_PORT}
 MAGE_DB_NAME=dlh_mage
 MAGE_DB_USER=dlh_mage_user
 MAGE_DB_PASSWORD=${MAGE_DB_PASSWORD}
-SOURCE_DB_NAME=${POSTGRES_DB}
-SOURCE_DB_USER=${POSTGRES_USER}
-SOURCE_DB_PASSWORD=${POSTGRES_PASSWORD}
-SOURCE_SCHEMA=${CUSTOM_SCHEMA:-public}
+SOURCE_DB_NAME=${SOURCE_DB_NAME_VAL}
+SOURCE_DB_USER=${SOURCE_DB_USER_VAL}
+SOURCE_DB_PASSWORD=${SOURCE_DB_PASSWORD_VAL}
+SOURCE_SCHEMA=${SOURCE_SCHEMA_VAL}
+SOURCE_SCHEMA_FALLBACKS=public
 SOURCE_TABLE=
-SOURCE_TABLE_CANDIDATES=Demo,test_projects
+SOURCE_TABLE_CANDIDATES=Demo,test_projects,sales_orders
 CSV_UPLOAD_BUCKET=bronze
 CSV_UPLOAD_PREFIX=csv_upload/
 CSV_UPLOAD_ALLOW_ANYWHERE=true
@@ -256,13 +342,13 @@ CSV_UPLOAD_SEPARATOR=,
 CSV_UPLOAD_ENCODING=utf-8
 CSV_UPLOAD_SCAN_LIMIT=200
 
-# NocoDB
+# ─ NocoDB (Database UI) ────────────────────────────────────
 DLH_NOCODB_PORT=${DLH_NOCODB_PORT}
 NOCODB_DB_NAME=dlh_nocodb
 NOCODB_DB_USER=dlh_nocodb_user
 NOCODB_DB_PASSWORD=${NOCODB_DB_PASSWORD}
 
-# Superset
+# ─ Superset (BI and Analytics) ─────────────────────────────
 DLH_SUPERSET_PORT=${DLH_SUPERSET_PORT}
 SUPERSET_SECRET_KEY=${SUPERSET_SECRET_KEY}
 SUPERSET_DB_NAME=dlh_superset
@@ -271,8 +357,9 @@ SUPERSET_DB_PASSWORD=${SUPERSET_DB_PASSWORD}
 SUPERSET_ADMIN_USER=${SUPERSET_ADMIN_USER}
 SUPERSET_ADMIN_PASSWORD=${SUPERSET_ADMIN_PASSWORD}
 SUPERSET_ADMIN_EMAIL=admin@superset.local
+SUPERSET_PREFERRED_URL_SCHEME=http
 
-# Grafana
+# ─ Grafana (Monitoring & Dashboards) ───────────────────────
 DLH_GRAFANA_PORT=${DLH_GRAFANA_PORT}
 GRAFANA_DB_NAME=dlh_grafana
 GRAFANA_DB_USER=dlh_grafana_user
@@ -280,7 +367,7 @@ GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD}
 GRAFANA_ADMIN_USER=${GRAFANA_ADMIN_USER}
 GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
 
-# Nginx Proxy Manager (optional)
+# ─ Nginx Proxy Manager (optional, for reverse proxy) ───────
 DLH_NPM_HTTP_PORT=28080
 DLH_NPM_HTTPS_PORT=28443
 DLH_NPM_ADMIN_PORT=28081
@@ -307,8 +394,8 @@ fi
 header "Deploying Stack"
 
 cd "$REPO_ROOT"
-info "Running: docker compose up -d"
-docker compose up -d
+info "Running: bash scripts/stackctl.sh up"
+bash "$REPO_ROOT/scripts/stackctl.sh" up
 
 info "Stack is starting. Use 'docker compose logs -f <service>' to follow logs."
 echo
@@ -322,18 +409,51 @@ echo "    Superset   : http://localhost:${DLH_SUPERSET_PORT}"
 echo "    Grafana    : http://localhost:${DLH_GRAFANA_PORT}"
 
 # =============================================================
+# Optional: UFW + ufw-docker for LAN deployments
+# =============================================================
+if [ "$DLH_BIND_IP" != "127.0.0.1" ]; then
+  echo
+  if ask_yn "Configure UFW + ufw-docker for LAN access now?" "y"; then
+    info "Configuring host firewall for LAN CIDR ${DLH_LAN_CIDR} …"
+    bash "$REPO_ROOT/scripts/setup_ufw_docker.sh" "$DLH_LAN_CIDR" || \
+      warn "Firewall setup script failed. Review output and rerun manually."
+  else
+    info "Skipped firewall setup."
+    echo "  You can run it later with:"
+    echo "    bash scripts/setup_ufw_docker.sh ${DLH_LAN_CIDR}"
+  fi
+fi
+
+# =============================================================
+# Python deps for host scripts
+# =============================================================
+echo
+if ask_yn "Prepare host Python environment with uv sync now?" "y"; then
+  sync_python_env || true
+else
+  info "Skipped Python environment setup."
+  echo "  You can run it later with:"
+  echo "    uv sync --all-groups"
+fi
+
+# =============================================================
 # Optional: ETL + Dashboard
 # =============================================================
 echo
 if ask_yn "Run ETL and create Superset dashboards now? (requires services to be healthy)" "n"; then
   echo
   info "Launching ETL and dashboard setup …"
-  python3 "$REPO_ROOT/scripts/run_etl_and_dashboard.py"
+  if command -v uv >/dev/null 2>&1; then
+    (cd "$REPO_ROOT" && uv run python scripts/run_etl_and_dashboard.py)
+  else
+    warn "uv not found, falling back to python3."
+    python3 "$REPO_ROOT/scripts/run_etl_and_dashboard.py"
+  fi
 else
   echo
   info "Skipped ETL/dashboard setup."
   echo "  Run it later with:"
-  echo "    python3 scripts/run_etl_and_dashboard.py"
+  echo "    uv run python scripts/run_etl_and_dashboard.py"
 fi
 
 echo

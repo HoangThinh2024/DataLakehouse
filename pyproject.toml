@@ -1,0 +1,19 @@
+[project]
+name = "datalakehouse"
+version = "0.1.0"
+description = "Host-side helper scripts for the DataLakehouse stack"
+requires-python = ">=3.11"
+dependencies = [
+  "boto3>=1.34.0",
+  "psycopg2-binary>=2.9.9",
+  "requests>=2.31.0",
+]
+
+[dependency-groups]
+mage = [
+  "pyarrow>=14.0.1",
+  "clickhouse-driver>=0.2.9",
+]
+
+[tool.uv]
+package = false
