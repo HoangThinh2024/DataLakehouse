@@ -162,7 +162,7 @@ def _ensure_clickhouse_objects(client: Client, db: str) -> None:
             _gold_processed_at DateTime64(3) DEFAULT now64(3)
         )
         ENGINE = MergeTree
-        PARTITION BY toYear(week_start)
+        PARTITION BY toYear(addDays(week_start, 3))
         ORDER BY (year_week, week_start, _pipeline_run_id)
         ''',
         f'''
