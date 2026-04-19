@@ -16,7 +16,6 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$REPO_ROOT/.env"
-ENV_EXAMPLE="$REPO_ROOT/.env.example"
 
 # ── Colour helpers ──────────────────────────────────────────
 _bold()  { printf '\033[1m%s\033[0m' "$*"; }
