@@ -170,6 +170,7 @@ services:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
       MAGE_CODE_PATH: ${MAGE_CODE_PATH:-/home/src}
       USER_CODE_PATH: ${USER_CODE_PATH:-/home/src}
+      POSTGRES_HOST: ${POSTGRES_HOST:-dlh-postgres}
       DATABASE_CONNECTION_URL: postgresql+psycopg2://${MAGE_DB_USER:-dlh_mage_user}:${MAGE_DB_PASSWORD:-change-me}@${POSTGRES_HOST:-dlh-postgres}:5432/${MAGE_DB_NAME:-dlh_mage}
       MAGE_DATABASE_CONNECTION_URL: postgresql+psycopg2://${MAGE_DB_USER:-dlh_mage_user}:${MAGE_DB_PASSWORD:-change-me}@${POSTGRES_HOST:-dlh-postgres}:5432/${MAGE_DB_NAME:-dlh_mage}
       # Source DB for ETL extraction (uses CUSTOM_DB_* when set)
