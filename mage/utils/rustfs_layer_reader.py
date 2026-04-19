@@ -138,6 +138,27 @@ def read_latest_gold_daily(date_str: Optional[str] = None) -> pd.DataFrame:
     return read_latest_layer(bucket, prefix, date_str)
 
 
+def read_latest_gold_weekly(date_str: Optional[str] = None) -> pd.DataFrame:
+    """Read latest Gold weekly aggregation layer."""
+    bucket = os.getenv('RUSTFS_GOLD_BUCKET', 'gold')
+    prefix = 'demo_weekly'
+    return read_latest_layer(bucket, prefix, date_str)
+
+
+def read_latest_gold_monthly(date_str: Optional[str] = None) -> pd.DataFrame:
+    """Read latest Gold monthly aggregation layer."""
+    bucket = os.getenv('RUSTFS_GOLD_BUCKET', 'gold')
+    prefix = 'demo_monthly'
+    return read_latest_layer(bucket, prefix, date_str)
+
+
+def read_latest_gold_yearly(date_str: Optional[str] = None) -> pd.DataFrame:
+    """Read latest Gold yearly aggregation layer."""
+    bucket = os.getenv('RUSTFS_GOLD_BUCKET', 'gold')
+    prefix = 'demo_yearly'
+    return read_latest_layer(bucket, prefix, date_str)
+
+
 def read_latest_gold_region(date_str: Optional[str] = None) -> pd.DataFrame:
     """Read latest Gold by-region aggregation layer."""
     bucket = os.getenv('RUSTFS_GOLD_BUCKET', 'gold')
@@ -156,6 +177,9 @@ def read_all_gold() -> dict:
     """Read all Gold layer tables as a dict."""
     return {
         'gold_daily': read_latest_gold_daily(),
+        'gold_weekly': read_latest_gold_weekly(),
+        'gold_monthly': read_latest_gold_monthly(),
+        'gold_yearly': read_latest_gold_yearly(),
         'gold_region': read_latest_gold_region(),
         'gold_category': read_latest_gold_category(),
     }
