@@ -280,6 +280,14 @@ def main() -> int:
 
     effective_db = custom_db or get_env('SOURCE_DB_NAME', get_env('POSTGRES_DB', 'datalakehouse'))
     effective_schema = custom_schema or get_env('SOURCE_SCHEMA', 'public')
+    source_table = get_env('SOURCE_TABLE')
+    if not source_table:
+        candidates = [
+            name.strip()
+            for name in (get_env('SOURCE_TABLE_CANDIDATES', 'Demo,test_projects,sales_orders') or '').split(',')
+            if name.strip()
+        ]
+        source_table = candidates[0] if candidates else 'sales_orders'
 
     columns, rows = fetch_rows()
     csv_text, safe_columns = build_csv(columns, rows)
