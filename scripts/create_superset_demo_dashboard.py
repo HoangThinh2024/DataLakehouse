@@ -189,11 +189,24 @@ def ensure_dataset(
         "schema": SCHEMA,
         "table_name": table_name,
     }
-    if datetime_col:
-        payload["main_dttm_col"] = datetime_col
-
     created = client.post("/api/v1/dataset/", payload)
-    return int(created["id"])
+    dataset_raw_id = created.get("id") or (created.get("result") or {}).get("id")
+    if not dataset_raw_id:
+        raise RuntimeError(f"Could not parse dataset id from Superset response: {created}")
+    dataset_id = int(dataset_raw_id)
+
+    # Superset versions may reject main_dttm_col during POST /dataset but allow it on PUT.
+    if datetime_col:
+        client.put(
+            f"/api/v1/dataset/{dataset_id}",
+            {
+                "database_id": database_id,
+                "schema": SCHEMA,
+                "table_name": table_name,
+                "main_dttm_col": datetime_col,
+            },
+        )
+    return dataset_id
 
 
 def ensure_dashboard(client: SupersetClient) -> int:
