@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -366,26 +367,47 @@ def run_etl(cfg: dict[str, Any], table_name: str) -> None:
         ch_port = _env("DLH_CLICKHOUSE_HTTP_PORT", "28123")
         os.environ["CLICKHOUSE_HTTP_URL"] = f"http://{bind_ip}:{ch_port}"
 
-    etl_script = REPO_ROOT / "scripts" / "demo_to_lakehouse.py"
-    if not etl_script.exists():
-        print(f"❌  ETL script not found: {etl_script}")
+    # Use the Mage pipeline to populate Silver/Gold ClickHouse tables consumed by Superset.
+    # This keeps ETL aligned with the documented lakehouse architecture.
+    source_host = cfg["host"]
+    source_port = cfg["port"]
+    if source_host in {"127.0.0.1", "localhost", "0.0.0.0", "::1", "::"}:
+        source_host = _env("POSTGRES_HOST", "dlh-postgres")
+        source_port = int(_env("POSTGRES_PORT", "5432"))
+
+    env_vars = {
+        "SOURCE_DB_HOST": source_host,
+        "SOURCE_DB_PORT": str(source_port),
+        "SOURCE_DB_NAME": cfg["dbname"],
+        "SOURCE_DB_USER": cfg["user"],
+        "SOURCE_DB_PASSWORD": cfg["password"],
+        "SOURCE_SCHEMA": cfg["schema"],
+        "SOURCE_TABLE": table_name,
+    }
+    if cfg["is_custom"]:
+        env_vars.update(
+            {
+                "CUSTOM_DB_NAME": cfg["dbname"],
+                "CUSTOM_DB_USER": cfg["user"],
+                "CUSTOM_DB_PASSWORD": cfg["password"],
+                "CUSTOM_SCHEMA": cfg["schema"],
+            }
+        )
+
+    cmd = ["docker", "compose", "exec", "-T"]
+    for key, value in env_vars.items():
+        cmd.extend(["-e", f"{key}={value}"])
+    cmd.extend(["mage", "mage", "run", "/home/src", "etl_postgres_to_lakehouse"])
+
+    print("    ETL engine: Mage pipeline etl_postgres_to_lakehouse")
+    try:
+        rc = subprocess.run(cmd, cwd=REPO_ROOT, check=False).returncode
+    except FileNotFoundError:
+        print("❌  docker command not found. Install Docker and Docker Compose to run ETL.")
         sys.exit(1)
 
-    # Import and run
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("demo_to_lakehouse", etl_script)
-    if spec is None or spec.loader is None:
-        print(f"❌  Could not load ETL module from {etl_script}")
-        sys.exit(1)
-    module = importlib.util.module_from_spec(spec)
-    try:
-        spec.loader.exec_module(module)  # type: ignore[attr-defined]
-    except Exception as exc:
-        print(f"❌  Failed to load ETL module ({etl_script}): {exc}")
-        sys.exit(1)
-    rc = module.main()
     if rc != 0:
-        print(f"❌  ETL finished with exit code {rc}")
+        print(f"❌  Mage pipeline finished with exit code {rc}")
         sys.exit(rc)
 
 
