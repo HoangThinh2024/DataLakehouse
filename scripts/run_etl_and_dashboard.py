@@ -22,6 +22,7 @@ Environment variables (from .env or shell):
 
 from __future__ import annotations
 
+import argparse
 import datetime as dt
 import os
 import sys
@@ -33,6 +34,26 @@ from typing import Any
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = REPO_ROOT / ".env"
+
+
+def _has_surrogates(value: str) -> bool:
+    return any(0xD800 <= ord(ch) <= 0xDFFF for ch in value)
+
+
+def _sanitize_env_value(value: str) -> str:
+    """Normalize environment values that may contain surrogate-escaped bytes on WSL."""
+    if not value:
+        return value
+    if not _has_surrogates(value):
+        return value
+
+    raw = value.encode("utf-8", errors="surrogateescape")
+    for encoding in ("utf-8", "cp1258", "cp1252", "latin-1"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="replace")
 
 
 def _load_env_file(path: Path) -> None:
@@ -84,7 +105,10 @@ def _load_env_file(path: Path) -> None:
         key = key.strip()
         value = value.strip().strip('"').strip("'")
         if key:
-            os.environ.setdefault(key, value)
+            existing = os.environ.get(key)
+            # Keep explicit shell overrides, except when value is encoding-corrupted.
+            if existing is None or _has_surrogates(existing):
+                os.environ[key] = value
 
 
 _load_env_file(ENV_FILE)
@@ -92,6 +116,7 @@ _load_env_file(ENV_FILE)
 
 def _env(name: str, default: str = "") -> str:
     value = os.getenv(name, "")
+    value = _sanitize_env_value(value)
     return value if value else default
 
 
@@ -166,6 +191,44 @@ def _default_source_table() -> str:
     return candidates[0] if candidates else "sales_orders"
 
 
+def _source_table_candidates() -> list[str]:
+    names = [
+        name.strip()
+        for name in _env("SOURCE_TABLE_CANDIDATES", "Demo,test_projects,sales_orders").split(",")
+        if name.strip()
+    ]
+    if not names:
+        names = ["sales_orders"]
+    return names
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run DataLakehouse ETL and optionally create Superset dashboard"
+    )
+    parser.add_argument(
+        "--auto",
+        action="store_true",
+        help="Run non-interactively using existing/default source table selection",
+    )
+    parser.add_argument(
+        "--create-sample-table",
+        action="store_true",
+        help="In --auto mode, create sample table if needed before running ETL",
+    )
+    parser.add_argument(
+        "--table",
+        default="",
+        help="Force table name for ETL source",
+    )
+    parser.add_argument(
+        "--skip-dashboard",
+        action="store_true",
+        help="Run ETL only and skip Superset dashboard creation",
+    )
+    return parser.parse_args(argv)
+
+
 # ---------------------------------------------------------------------------
 # PostgreSQL helpers
 # ---------------------------------------------------------------------------
@@ -196,6 +259,19 @@ def _table_exists(conn, schema: str, table: str) -> bool:
             (schema, table),
         )
         return cur.fetchone() is not None
+
+
+def _list_tables(conn, schema: str) -> list[str]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT table_name FROM information_schema.tables
+            WHERE table_schema = %s AND table_type = 'BASE TABLE'
+            ORDER BY table_name
+            """,
+            (schema,),
+        )
+        return [r[0] for r in cur.fetchall()]
 
 
 def create_sample_table(conn, schema: str, table_name: str) -> int:
@@ -354,7 +430,9 @@ def run_dashboard() -> None:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
+
     print()
     print("=" * 60)
     print("  DataLakehouse – ETL & Dashboard Runner")
@@ -401,45 +479,69 @@ def main() -> int:
             print(f"\n  Schema '{schema}' does not exist yet – it will be created.")
 
     # ── Test table ────────────────────────────────────────────
-    print()
-    answer = input(
-        f"  ❓ Create a sample 'sales_orders' table in schema '{schema}' of '{src_dbname}'? [y/N]: "
-    ).strip().lower()
-
     etl_table = _default_source_table()
+    tables = _list_tables(conn, schema)
 
-    if answer in ("y", "yes"):
-        table_name = input(
-            "     Table name [sales_orders]: "
-        ).strip() or "sales_orders"
+    if args.auto:
+        desired_table = (args.table or "").strip()
+        auto_candidates = [desired_table] if desired_table else _source_table_candidates()
 
-        if _table_exists(conn, schema, table_name):
-            print(f"  ℹ️  Table '{schema}.{table_name}' already exists – skipping creation.")
+        if args.create_sample_table:
+            table_name = desired_table or "sales_orders"
+            if _table_exists(conn, schema, table_name):
+                print(f"  ℹ️  Table '{schema}.{table_name}' already exists – skipping creation.")
+            else:
+                print(f"  ✏️  Creating '{schema}.{table_name}' …")
+                n = create_sample_table(conn, schema, table_name)
+                print(f"  ✅  Created table with {n} sample rows.")
+            etl_table = table_name
         else:
-            print(f"  ✏️  Creating '{schema}.{table_name}' …")
-            n = create_sample_table(conn, schema, table_name)
-            print(f"  ✅  Created table with {n} sample rows.")
+            picked = ""
+            for candidate in auto_candidates:
+                if candidate and candidate in tables:
+                    picked = candidate
+                    break
 
-        etl_table = table_name
+            if picked:
+                etl_table = picked
+                print(f"  🤖 Auto mode selected source table: '{etl_table}'")
+            elif tables:
+                etl_table = tables[0]
+                print(f"  🤖 Auto mode selected first table: '{etl_table}'")
+            else:
+                # Auto-bootstrap data to guarantee ETL can run end-to-end.
+                etl_table = desired_table or "sales_orders"
+                print(f"  ⚠️  No tables found in schema '{schema}'.")
+                print(f"  ✏️  Auto mode will create sample table '{schema}.{etl_table}' …")
+                n = create_sample_table(conn, schema, etl_table)
+                print(f"  ✅  Created table with {n} sample rows.")
     else:
-        # Try to find an existing table to use for ETL
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT table_name FROM information_schema.tables
-                WHERE table_schema = %s AND table_type = 'BASE TABLE'
-                ORDER BY table_name LIMIT 10
-                """,
-                (schema,),
-            )
-            tables = [r[0] for r in cur.fetchall()]
+        print()
+        answer = input(
+            f"  ❓ Create a sample 'sales_orders' table in schema '{schema}' of '{src_dbname}'? [y/N]: "
+        ).strip().lower()
 
-        if tables:
-            print(f"\n  Available tables in schema '{schema}': {tables}")
-            chosen = input(f"  Table for ETL [{tables[0]}]: ").strip() or tables[0]
-            etl_table = chosen
+        if answer in ("y", "yes"):
+            table_name = input(
+                "     Table name [sales_orders]: "
+            ).strip() or "sales_orders"
+
+            if _table_exists(conn, schema, table_name):
+                print(f"  ℹ️  Table '{schema}.{table_name}' already exists – skipping creation.")
+            else:
+                print(f"  ✏️  Creating '{schema}.{table_name}' …")
+                n = create_sample_table(conn, schema, table_name)
+                print(f"  ✅  Created table with {n} sample rows.")
+
+            etl_table = table_name
         else:
-            print(f"\n  ⚠️  No tables found in schema '{schema}'. ETL will use default 'Demo' table.")
+            if tables:
+                display_tables = tables[:10]
+                print(f"\n  Available tables in schema '{schema}': {display_tables}")
+                chosen = input(f"  Table for ETL [{display_tables[0]}]: ").strip() or display_tables[0]
+                etl_table = chosen
+            else:
+                print(f"\n  ⚠️  No tables found in schema '{schema}'. ETL will use default 'Demo' table.")
 
     conn.close()
 
@@ -454,16 +556,19 @@ def main() -> int:
         return int(exc.code) if exc.code is not None else 1
 
     # ── Dashboard ─────────────────────────────────────────────
-    print("\n📊  Creating Superset dashboard …")
-    try:
-        run_dashboard()
-    except Exception as exc:
-        print(f"\n  ⚠️  Dashboard creation failed: {exc}")
-        print(
-            "  Make sure Superset is healthy and SUPERSET_ADMIN_USER / "
-            "SUPERSET_ADMIN_PASSWORD are correct."
-        )
-        return 1
+    if args.skip_dashboard:
+        print("\n⏭️  Skipping Superset dashboard creation (--skip-dashboard).")
+    else:
+        print("\n📊  Creating Superset dashboard …")
+        try:
+            run_dashboard()
+        except Exception as exc:
+            print(f"\n  ⚠️  Dashboard creation failed: {exc}")
+            print(
+                "  Make sure Superset is healthy and SUPERSET_ADMIN_USER / "
+                "SUPERSET_ADMIN_PASSWORD are correct."
+            )
+            return 1
 
     print("\n" + "=" * 60)
     print("  All done! Open Superset to view your dashboards.")
