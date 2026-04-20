@@ -96,10 +96,11 @@ check_env() {
   load_env_file
   echo "Environment snapshot:"
   for key in \
-    TZ DLH_BIND_IP DLH_LAN_CIDR UFW_ALLOW_DATA_PORTS \
+    TZ DLH_BIND_IP DLH_APP_BIND_IP DLH_DATA_BIND_IP DLH_LAN_CIDR UFW_ALLOW_DATA_PORTS \
     POSTGRES_DB POSTGRES_USER POSTGRES_HOST \
     CUSTOM_DB_NAME CUSTOM_DB_USER CUSTOM_SCHEMA \
     SOURCE_DB_NAME SOURCE_DB_USER SOURCE_SCHEMA SOURCE_TABLE SOURCE_TABLE_CANDIDATES \
+    MAGE_DEFAULT_OWNER_EMAIL MAGE_DEFAULT_OWNER_USERNAME \
     CLICKHOUSE_DB CLICKHOUSE_USER DLH_CLICKHOUSE_HTTP_PORT DLH_CLICKHOUSE_TCP_PORT \
     DLH_RUSTFS_API_PORT DLH_RUSTFS_CONSOLE_PORT DLH_MAGE_PORT DLH_NOCODB_PORT DLH_SUPERSET_PORT DLH_GRAFANA_PORT \
     SUPERSET_ADMIN_USER SUPERSET_PREFERRED_URL_SCHEME
@@ -132,8 +133,10 @@ sync_env() {
   load_env_file
   echo "Update mutable environment values. Leave blank to keep the current value."
 
-  local bind_ip lan_cidr allow_data_ports postgres_port rustfs_api_port rustfs_console_port clickhouse_http_port clickhouse_tcp_port mage_port nocodb_port superset_port grafana_port superset_scheme
+  local bind_ip app_bind_ip data_bind_ip lan_cidr allow_data_ports postgres_port rustfs_api_port rustfs_console_port clickhouse_http_port clickhouse_tcp_port mage_port nocodb_port superset_port grafana_port superset_scheme mage_owner_email mage_owner_username mage_owner_password
   bind_ip="$(ask_input "Bind IP" "${DLH_BIND_IP:-127.0.0.1}")"
+  app_bind_ip="$(ask_input "App/UI bind IP" "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}")"
+  data_bind_ip="$(ask_input "Data/DB bind IP" "${DLH_DATA_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}")"
   lan_cidr="$(ask_input "LAN CIDR" "${DLH_LAN_CIDR:-192.168.1.0/24}")"
   allow_data_ports="$(ask_input "Open data ports to LAN?" "${UFW_ALLOW_DATA_PORTS:-false}")"
   postgres_port="$(ask_input "PostgreSQL port" "${DLH_POSTGRES_PORT:-25432}")"
@@ -142,12 +145,17 @@ sync_env() {
   clickhouse_http_port="$(ask_input "ClickHouse HTTP port" "${DLH_CLICKHOUSE_HTTP_PORT:-28123}")"
   clickhouse_tcp_port="$(ask_input "ClickHouse TCP port" "${DLH_CLICKHOUSE_TCP_PORT:-29000}")"
   mage_port="$(ask_input "Mage port" "${DLH_MAGE_PORT:-26789}")"
+  mage_owner_email="$(ask_input "Mage default owner email" "${MAGE_DEFAULT_OWNER_EMAIL:-admin@admin.com}")"
+  mage_owner_username="$(ask_input "Mage default owner username" "${MAGE_DEFAULT_OWNER_USERNAME:-admin}")"
+  mage_owner_password="$(ask_input "Mage default owner password" "${MAGE_DEFAULT_OWNER_PASSWORD:-admin}")"
   nocodb_port="$(ask_input "NocoDB port" "${DLH_NOCODB_PORT:-28082}")"
   superset_port="$(ask_input "Superset port" "${DLH_SUPERSET_PORT:-28088}")"
   grafana_port="$(ask_input "Grafana port" "${DLH_GRAFANA_PORT:-23001}")"
   superset_scheme="$(ask_input "Superset URL scheme" "${SUPERSET_PREFERRED_URL_SCHEME:-http}")"
 
   upsert_env_var "DLH_BIND_IP" "$bind_ip"
+  upsert_env_var "DLH_APP_BIND_IP" "$app_bind_ip"
+  upsert_env_var "DLH_DATA_BIND_IP" "$data_bind_ip"
   upsert_env_var "DLH_LAN_CIDR" "$lan_cidr"
   upsert_env_var "UFW_ALLOW_DATA_PORTS" "$allow_data_ports"
   upsert_env_var "DLH_POSTGRES_PORT" "$postgres_port"
@@ -156,6 +164,9 @@ sync_env() {
   upsert_env_var "DLH_CLICKHOUSE_HTTP_PORT" "$clickhouse_http_port"
   upsert_env_var "DLH_CLICKHOUSE_TCP_PORT" "$clickhouse_tcp_port"
   upsert_env_var "DLH_MAGE_PORT" "$mage_port"
+  upsert_env_var "MAGE_DEFAULT_OWNER_EMAIL" "$mage_owner_email"
+  upsert_env_var "MAGE_DEFAULT_OWNER_USERNAME" "$mage_owner_username"
+  upsert_env_var "MAGE_DEFAULT_OWNER_PASSWORD" "$mage_owner_password"
   upsert_env_var "DLH_NOCODB_PORT" "$nocodb_port"
   upsert_env_var "DLH_SUPERSET_PORT" "$superset_port"
   upsert_env_var "DLH_GRAFANA_PORT" "$grafana_port"
@@ -353,6 +364,8 @@ validate_env() {
   # Check critical variables
   local critical_vars=(
     "DLH_BIND_IP"
+    "DLH_APP_BIND_IP"
+    "DLH_DATA_BIND_IP"
     "DLH_LAN_CIDR"
     "POSTGRES_DB"
     "POSTGRES_USER"

@@ -14,6 +14,8 @@ Source of truth:
 |---|---|---|
 | `TZ` | Container timezone | `Asia/Ho_Chi_Minh` |
 | `DLH_BIND_IP` | Host bind IP for published ports | `127.0.0.1` |
+| `DLH_APP_BIND_IP` | Host bind IP for UI/app ports (Mage, NocoDB, Superset, Grafana, RustFS console) | `127.0.0.1` |
+| `DLH_DATA_BIND_IP` | Host bind IP for data/database ports (PostgreSQL, ClickHouse, RustFS API) | `0.0.0.0` |
 | `DLH_LAN_CIDR` | Trusted LAN range for firewall rules | `192.168.1.0/24` |
 | `UFW_ALLOW_DATA_PORTS` | Whether data ports are opened to LAN by firewall script | `false` |
 
@@ -82,6 +84,9 @@ Source of truth:
 | `MAGE_DB_NAME` | Mage metadata database | `dlh_mage` |
 | `MAGE_DB_USER` | Mage metadata user | `dlh_mage_user` |
 | `MAGE_DB_PASSWORD` | Mage metadata password | `change-this-mage-password` |
+| `MAGE_DEFAULT_OWNER_EMAIL` | Default Mage owner email (created if no owner exists) | `admin@admin.com` |
+| `MAGE_DEFAULT_OWNER_USERNAME` | Default Mage owner username | `admin` |
+| `MAGE_DEFAULT_OWNER_PASSWORD` | Default Mage owner password | `admin` |
 | `SOURCE_DB_NAME` | Source DB used by ETL extractors | `dlh_custom` |
 | `SOURCE_DB_USER` | Source DB user for ETL | `dlh_custom_user` |
 | `SOURCE_DB_PASSWORD` | Source DB password for ETL | `...` |

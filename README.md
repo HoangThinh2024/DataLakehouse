@@ -123,6 +123,34 @@ bash scripts/setup_ufw_docker.sh --remove
 bash scripts/setup_ufw_docker.sh --down
 ```
 
+## Reverse Proxy + LAN Databases
+
+Recommended setup when using an external Nginx Proxy Manager (NPM):
+
+- Keep app ports local-only:
+    - `DLH_APP_BIND_IP=127.0.0.1`
+- Allow data/database ports for LAN clients:
+    - `DLH_DATA_BIND_IP=0.0.0.0`
+    - `UFW_ALLOW_DATA_PORTS=true`
+
+Then apply firewall rules:
+
+```bash
+bash scripts/setup_ufw_docker.sh
+```
+
+If NPM is deployed in a separate Docker project on the same host:
+
+1. Attach NPM container to `web_network`.
+2. Use DataLakehouse service names as upstream targets:
+     - `dlh-mage:6789`
+     - `dlh-nocodb:8080`
+     - `dlh-superset:8088`
+     - `dlh-grafana:3000`
+     - `dlh-rustfs:9001` (console)
+
+This keeps app access centralized through NPM while preserving direct LAN access for PostgreSQL / ClickHouse / RustFS API.
+
 ## Architecture
 
 ![DataLakehouse architecture](docs/assets/datalakehouse-architecture.svg)
