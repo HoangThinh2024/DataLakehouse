@@ -2,6 +2,13 @@
 
 A modern local-first lakehouse stack with Docker Compose, medallion-style data flow, ETL orchestration, and analytics dashboards.
 
+## Project Status (April 2026)
+
+- Core stack bootstrap and lifecycle are stable via scripts/setup.sh and scripts/stackctl.sh.
+- End-to-end ETL and Superset dashboard provisioning are now available in non-interactive mode.
+- WSL compatibility improved for .env parsing and inherited environment encoding issues.
+- Setup flow can launch ETL + dashboard automatically when selected.
+
 ## Documentation
 
 - [Deployment Guide](docs/DEPLOYMENT_GUIDE.md)
@@ -16,7 +23,7 @@ A modern local-first lakehouse stack with Docker Compose, medallion-style data f
 
 - Docker Engine + Docker Compose plugin
 - uv (for host-side Python scripts)
-- Linux/macOS host recommended
+- Linux/macOS/WSL host supported
 
 Check tools:
 
@@ -46,6 +53,7 @@ What setup does:
 2. Generates `.env`.
 3. Creates `web_network` if missing.
 4. Deploys all services.
+5. Optionally runs ETL + Superset dashboard provisioning.
 
 ### 3. Verify stack health
 
@@ -163,11 +171,38 @@ PostgreSQL / CSV -> RustFS Bronze -> RustFS Silver -> RustFS Gold -> ClickHouse 
 
 ## ETL and Dashboard Automation
 
-Run ETL and dashboard provisioning:
+Run ETL and dashboard provisioning (interactive):
 
 ```bash
 uv run python scripts/run_etl_and_dashboard.py
 ```
+
+Run ETL and dashboard provisioning (non-interactive/CI-friendly):
+
+```bash
+uv run python scripts/run_etl_and_dashboard.py --auto
+```
+
+Useful automation flags:
+
+```bash
+# Force source table
+uv run python scripts/run_etl_and_dashboard.py --auto --table sales_orders
+
+# Auto-create sample table first, then run ETL + dashboard
+uv run python scripts/run_etl_and_dashboard.py --auto --create-sample-table --table sales_orders
+
+# Run ETL only (skip dashboard creation)
+uv run python scripts/run_etl_and_dashboard.py --auto --skip-dashboard
+```
+
+Run from guided setup:
+
+```bash
+bash scripts/setup.sh
+```
+
+In setup, choose `y` for "Run ETL and create Superset dashboards now" to run the non-interactive ETL/dashboard flow automatically.
 
 Or include ETL in lifecycle redeploy:
 
@@ -228,6 +263,16 @@ bash scripts/stackctl.sh redeploy
 bash scripts/stackctl.sh reset --hard
 bash scripts/setup.sh
 ```
+
+### WSL/encoding errors in .env
+
+If you previously saw errors similar to invalid UTF-8 bytes or surrogate encoding during PostgreSQL connection, use the updated runner and rerun:
+
+```bash
+uv run python scripts/run_etl_and_dashboard.py --auto
+```
+
+The runner now tolerates BOM/Windows encodings and sanitizes malformed inherited environment values on WSL.
 
 ## Security Notes
 

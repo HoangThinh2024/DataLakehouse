@@ -454,10 +454,10 @@ if ask_yn "Run ETL and create Superset dashboards now? (requires services to be 
   echo
   info "Launching ETL and dashboard setup …"
   if command -v uv >/dev/null 2>&1; then
-    (cd "$REPO_ROOT" && uv run python scripts/run_etl_and_dashboard.py)
+    (cd "$REPO_ROOT" && uv run python scripts/run_etl_and_dashboard.py --auto)
   else
     warn "uv not found, falling back to python3."
-    python3 "$REPO_ROOT/scripts/run_etl_and_dashboard.py"
+    python3 "$REPO_ROOT/scripts/run_etl_and_dashboard.py" --auto
   fi
 else
   echo
