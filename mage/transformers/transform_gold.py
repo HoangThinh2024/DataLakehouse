@@ -34,6 +34,13 @@ def transform_gold(df: pd.DataFrame, *args, **kwargs):
 
     if 'value' in df_agg.columns:
         df_agg['value'] = pd.to_numeric(df_agg['value'], errors='coerce').fillna(0)
+    elif 'unit_price' in df_agg.columns:
+        unit_price = pd.to_numeric(df_agg['unit_price'], errors='coerce').fillna(0)
+        if 'quantity' in df_agg.columns:
+            quantity = pd.to_numeric(df_agg['quantity'], errors='coerce').fillna(0)
+            df_agg['value'] = unit_price * quantity
+        else:
+            df_agg['value'] = unit_price
     else:
         df_agg['value'] = 0.0
 

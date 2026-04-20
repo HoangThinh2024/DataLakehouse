@@ -36,7 +36,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       PGTZ: ${TZ:-Asia/Ho_Chi_Minh}
     ports:
-      - "${DLH_BIND_IP:-127.0.0.1}:${DLH_POSTGRES_PORT:-25432}:5432"
+      - "${DLH_DATA_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_POSTGRES_PORT:-25432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
@@ -96,8 +96,8 @@ services:
       RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
     ports:
-      - "${DLH_BIND_IP:-127.0.0.1}:${DLH_RUSTFS_API_PORT:-29100}:9000"
-      - "${DLH_BIND_IP:-127.0.0.1}:${DLH_RUSTFS_CONSOLE_PORT:-29101}:9001"
+      - "${DLH_DATA_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_RUSTFS_API_PORT:-29100}:9000"
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_RUSTFS_CONSOLE_PORT:-29101}:9001"
     volumes:
       - rustfs_data:/data
     healthcheck:
@@ -144,8 +144,8 @@ services:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
     ports:
-      - "${DLH_BIND_IP:-127.0.0.1}:${DLH_CLICKHOUSE_HTTP_PORT:-28123}:8123"
-      - "${DLH_BIND_IP:-127.0.0.1}:${DLH_CLICKHOUSE_TCP_PORT:-29000}:9000"
+      - "${DLH_DATA_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_CLICKHOUSE_HTTP_PORT:-28123}:8123"
+      - "${DLH_DATA_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_CLICKHOUSE_TCP_PORT:-29000}:9000"
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
@@ -173,6 +173,10 @@ services:
       POSTGRES_HOST: ${POSTGRES_HOST:-dlh-postgres}
       DATABASE_CONNECTION_URL: postgresql+psycopg2://${MAGE_DB_USER:-dlh_mage_user}:${MAGE_DB_PASSWORD:-change-me}@${POSTGRES_HOST:-dlh-postgres}:5432/${MAGE_DB_NAME:-dlh_mage}
       MAGE_DATABASE_CONNECTION_URL: postgresql+psycopg2://${MAGE_DB_USER:-dlh_mage_user}:${MAGE_DB_PASSWORD:-change-me}@${POSTGRES_HOST:-dlh-postgres}:5432/${MAGE_DB_NAME:-dlh_mage}
+      # Mage default owner user (used when workspace has no owner yet)
+      DEFAULT_OWNER_EMAIL: ${MAGE_DEFAULT_OWNER_EMAIL:-admin@admin.com}
+      DEFAULT_OWNER_PASSWORD: ${MAGE_DEFAULT_OWNER_PASSWORD:-admin}
+      DEFAULT_OWNER_USERNAME: ${MAGE_DEFAULT_OWNER_USERNAME:-admin}
       # Source DB for ETL extraction (uses CUSTOM_DB_* when set)
       SOURCE_DB_HOST: ${POSTGRES_HOST:-dlh-postgres}
       SOURCE_DB_PORT: "5432"
@@ -204,7 +208,7 @@ services:
       CLICKHOUSE_HTTP_PORT: "8123"
       CLICKHOUSE_TCP_PORT: "9000"
     ports:
-      - "${DLH_BIND_IP:-127.0.0.1}:${DLH_MAGE_PORT:-26789}:6789"
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_MAGE_PORT:-26789}:6789"
     volumes:
       - ./mage:/home/src
     depends_on:
@@ -235,7 +239,7 @@ services:
       LITESTREAM_S3_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
       NC_ALLOW_LOCAL_EXTERNAL_DBS: true
     ports:
-      - "${DLH_BIND_IP:-127.0.0.1}:${DLH_NOCODB_PORT:-28082}:8080"
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_NOCODB_PORT:-28082}:8080"
     depends_on:
       postgres-bootstrap:
         condition: service_completed_successfully
@@ -258,7 +262,7 @@ services:
       SUPERSET_DB_USER: ${SUPERSET_DB_USER:-dlh_superset_user}
       SUPERSET_DB_PASSWORD: ${SUPERSET_DB_PASSWORD:-change-me}
     ports:
-      - "${DLH_BIND_IP:-127.0.0.1}:${DLH_SUPERSET_PORT:-28088}:8088"
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_SUPERSET_PORT:-28088}:8088"
     volumes:
       - superset_data:/var/lib/superset
       - ./superset/superset_config.py:/app/pythonpath/superset_config.py:ro
@@ -298,7 +302,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-dlh_admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
     ports:
-      - "${DLH_BIND_IP:-127.0.0.1}:${DLH_GRAFANA_PORT:-23001}:3000"
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_GRAFANA_PORT:-23001}:3000"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro

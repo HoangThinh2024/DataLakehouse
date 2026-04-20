@@ -164,6 +164,8 @@ header "1 / 8 – Global Settings"
 
 ask TZ           "Timezone"                             "${TZ:-Asia/Ho_Chi_Minh}"
 ask DLH_BIND_IP  "Bind IP (127.0.0.1 = local only)"    "${DLH_BIND_IP:-127.0.0.1}"
+ask DLH_APP_BIND_IP  "App/UI bind IP (use 127.0.0.1 when using reverse proxy)" "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}"
+ask DLH_DATA_BIND_IP "Data/DB bind IP (use 0.0.0.0 for LAN clients)"            "${DLH_DATA_BIND_IP:-0.0.0.0}"
 ask DLH_LAN_CIDR "LAN CIDR for firewall rules"          "${DLH_LAN_CIDR:-192.168.1.0/24}"
 ask UFW_ALLOW_DATA_PORTS "Allow data ports to LAN (true/false)" "${UFW_ALLOW_DATA_PORTS:-false}"
 
@@ -233,6 +235,9 @@ header "7 / 8 – App Service Passwords"
 echo "  (Mage, NocoDB, Superset, Grafana metadata DB passwords)"
 
 ask MAGE_DB_PASSWORD     "Mage DB password"     "${MAGE_DB_PASSWORD:-change-this-mage-password}"
+ask MAGE_DEFAULT_OWNER_EMAIL "Mage default owner email" "${MAGE_DEFAULT_OWNER_EMAIL:-admin@admin.com}"
+ask MAGE_DEFAULT_OWNER_USERNAME "Mage default owner username" "${MAGE_DEFAULT_OWNER_USERNAME:-admin}"
+ask MAGE_DEFAULT_OWNER_PASSWORD "Mage default owner password" "${MAGE_DEFAULT_OWNER_PASSWORD:-admin}"
 ask NOCODB_DB_PASSWORD   "NocoDB DB password"   "${NOCODB_DB_PASSWORD:-change-this-nocodb-password}"
 ask SUPERSET_SECRET_KEY  "Superset secret key"  "${SUPERSET_SECRET_KEY:-replace-this-secret}"
 ask SUPERSET_DB_PASSWORD "Superset DB password" "${SUPERSET_DB_PASSWORD:-change-this-superset-db-password}"
@@ -277,6 +282,8 @@ cat > "$ENV_FILE" <<EOF
 # ─ Global Settings ─────────────────────────────────────────
 TZ=${TZ}
 DLH_BIND_IP=${DLH_BIND_IP}
+DLH_APP_BIND_IP=${DLH_APP_BIND_IP}
+DLH_DATA_BIND_IP=${DLH_DATA_BIND_IP}
 DLH_LAN_CIDR=${DLH_LAN_CIDR}
 UFW_ALLOW_DATA_PORTS=${UFW_ALLOW_DATA_PORTS}
 
@@ -328,6 +335,9 @@ DLH_MAGE_PORT=${DLH_MAGE_PORT}
 MAGE_DB_NAME=dlh_mage
 MAGE_DB_USER=dlh_mage_user
 MAGE_DB_PASSWORD=${MAGE_DB_PASSWORD}
+MAGE_DEFAULT_OWNER_EMAIL=${MAGE_DEFAULT_OWNER_EMAIL}
+MAGE_DEFAULT_OWNER_USERNAME=${MAGE_DEFAULT_OWNER_USERNAME}
+MAGE_DEFAULT_OWNER_PASSWORD=${MAGE_DEFAULT_OWNER_PASSWORD}
 SOURCE_DB_NAME=${SOURCE_DB_NAME_VAL}
 SOURCE_DB_USER=${SOURCE_DB_USER_VAL}
 SOURCE_DB_PASSWORD=${SOURCE_DB_PASSWORD_VAL}

@@ -160,13 +160,38 @@ def ensure_database(client: SupersetClient) -> int:
     return int(created["id"])
 
 
-def ensure_dataset(client: SupersetClient, database_id: int, table_name: str) -> int:
+def ensure_dataset(
+    client: SupersetClient,
+    database_id: int,
+    table_name: str,
+    *,
+    datetime_col: str | None = None,
+) -> int:
     items = client.get(f"/api/v1/dataset/?q={_query()}").get("result", [])
     for item in items:
         db = item.get("database") or {}
         if db.get("id") == database_id and item.get("schema") == SCHEMA and item.get("table_name") == table_name:
-            return int(item["id"])
-    payload = {"database": database_id, "schema": SCHEMA, "table_name": table_name}
+            dataset_id = int(item["id"])
+            if datetime_col:
+                client.put(
+                    f"/api/v1/dataset/{dataset_id}",
+                    {
+                        "database_id": database_id,
+                        "schema": SCHEMA,
+                        "table_name": table_name,
+                        "main_dttm_col": datetime_col,
+                    },
+                )
+            return dataset_id
+
+    payload: Dict[str, Any] = {
+        "database": database_id,
+        "schema": SCHEMA,
+        "table_name": table_name,
+    }
+    if datetime_col:
+        payload["main_dttm_col"] = datetime_col
+
     created = client.post("/api/v1/dataset/", payload)
     return int(created["id"])
 
@@ -299,10 +324,10 @@ def main() -> None:
     db_id = ensure_database(client)
     print(f"ClickHouse database id: {db_id}")
 
-    ds_daily = ensure_dataset(client, db_id, "gold_demo_daily")
-    ds_region = ensure_dataset(client, db_id, "gold_demo_by_region")
-    ds_category = ensure_dataset(client, db_id, "gold_demo_by_category")
-    ds_silver = ensure_dataset(client, db_id, "silver_demo")
+    ds_daily = ensure_dataset(client, db_id, "gold_demo_daily", datetime_col="order_date")
+    ds_region = ensure_dataset(client, db_id, "gold_demo_by_region", datetime_col="report_date")
+    ds_category = ensure_dataset(client, db_id, "gold_demo_by_category", datetime_col="report_date")
+    ds_silver = ensure_dataset(client, db_id, "silver_demo", datetime_col="_silver_processed_at")
     dashboard_id = ensure_dashboard(client)
 
     print(f"Dashboard id: {dashboard_id}  Creating / verifying charts …")
@@ -373,10 +398,13 @@ def main() -> None:
         params={
             "datasource": f"{ds_category}__table",
             "viz_type": "echarts_timeseries_bar",
+            "x_axis": "report_date",
             "orientation": "vertical",
             "groupby": ["category"],
             "metrics": [_simple_metric("total_revenue", "SUM", "Doanh Thu")],
             "adhoc_filters": [],
+            "time_grain_sqla": "P1D",
+            "time_range": "No filter",
             "row_limit": 50,
             "order_desc": True,
             "show_legend": False,
@@ -460,10 +488,13 @@ def main() -> None:
         params={
             "datasource": f"{ds_region}__table",
             "viz_type": "echarts_timeseries_bar",
+            "x_axis": "report_date",
             "orientation": "vertical",
             "groupby": ["region"],
             "metrics": [_simple_metric("total_revenue", "SUM", "Doanh Thu")],
             "adhoc_filters": [],
+            "time_grain_sqla": "P1D",
+            "time_range": "No filter",
             "row_limit": 20,
             "order_desc": True,
             "show_legend": False,
