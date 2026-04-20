@@ -38,7 +38,45 @@ ENV_FILE = REPO_ROOT / ".env"
 def _load_env_file(path: Path) -> None:
     if not path.exists():
         return
-    for raw in path.read_text(encoding="utf-8").splitlines():
+
+    raw_bytes = path.read_bytes()
+    text = ""
+    decode_errors: list[str] = []
+
+    # Windows editors can save .env as UTF-8 BOM or UTF-16 with BOM.
+    if raw_bytes.startswith((b"\xff\xfe", b"\xfe\xff")):
+        try:
+            text = raw_bytes.decode("utf-16")
+            print(f"Warning: loaded {path} using utf-16 encoding", file=sys.stderr)
+        except UnicodeDecodeError as exc:
+            decode_errors.append(f"utf-16: {exc}")
+    elif raw_bytes.startswith(b"\xef\xbb\xbf"):
+        try:
+            text = raw_bytes.decode("utf-8-sig")
+            print(f"Warning: loaded {path} using utf-8-sig encoding", file=sys.stderr)
+        except UnicodeDecodeError as exc:
+            decode_errors.append(f"utf-8-sig: {exc}")
+
+    if not text:
+        for encoding in ("utf-8", "cp1258", "cp1252", "latin-1"):
+            try:
+                text = raw_bytes.decode(encoding)
+                if encoding != "utf-8":
+                    print(f"Warning: loaded {path} using {encoding} encoding", file=sys.stderr)
+                break
+            except UnicodeDecodeError as exc:
+                decode_errors.append(f"{encoding}: {exc}")
+
+    if not text:
+        # Last-resort decode so a malformed byte does not block orchestration startup.
+        text = raw_bytes.decode("utf-8", errors="replace")
+        print(
+            f"Warning: loaded {path} with UTF-8 replacement for invalid bytes. "
+            f"Decode attempts failed: {'; '.join(decode_errors)}",
+            file=sys.stderr,
+        )
+
+    for raw in text.splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
