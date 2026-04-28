@@ -33,6 +33,12 @@ What it does:
 4. Creates Docker network `web_network` when needed.
 5. Starts the stack and runs initial checks.
 
+Redis integration notes:
+
+1. The stack provisions one shared Redis service (`dlh-redis`) for cache/queue workloads.
+2. Superset uses Redis for dashboard/query caching and SQL Lab results backend.
+3. Authentik uses Redis for worker queue and session/cache state.
+
 ## 3. Day-2 Operations with stackctl.sh
 
 Use `scripts/stackctl.sh` as the main lifecycle interface.
@@ -133,7 +139,28 @@ uv run python scripts/verify_lakehouse_architecture.py
 ```bash
 bash scripts/stackctl.sh health
 bash scripts/stackctl.sh logs <service>
+docker compose logs dlh-redis
 ```
+
+Redis-specific warning notes:
+
+1. `WARNING Memory overcommit must be enabled`:
+- This cannot be set safely as a container sysctl in this stack.
+- Set it on the host instead:
+
+```bash
+sudo sysctl -w vm.overcommit_memory=1
+echo 'vm.overcommit_memory = 1' | sudo tee -a /etc/sysctl.conf
+```
+
+2. `Possible SECURITY ATTACK detected`:
+- This usually means HTTP traffic reached Redis port.
+- Keep `REDIS_BIND_IP=127.0.0.1` (or remove Redis host port mapping) to avoid external probes.
+
+Redis Stack note:
+
+- The stack uses `redis/redis-stack` so the server and web UI are bundled into one container.
+- Redis GUI is exposed on `DLH_REDIS_GUI_PORT` and no separate Redis Insight service is needed.
 
 ### Port conflicts
 
@@ -156,4 +183,4 @@ bash scripts/setup.sh
 - Rotate all default passwords before deployment.
 - Use reverse proxy/TLS for public access.
 - Restrict exposed ports to trusted CIDRs.
-- Back up Docker volumes: PostgreSQL, ClickHouse, RustFS.
+- Back up Docker volumes: PostgreSQL, ClickHouse, RustFS, Redis.

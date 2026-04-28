@@ -31,6 +31,8 @@ Source of truth:
 | `NOCODB_IMAGE_VERSION` | NocoDB image tag | `latest` |
 | `SUPERSET_IMAGE_VERSION` | Superset image tag | `latest` |
 | `GRAFANA_IMAGE_VERSION` | Grafana image tag | `latest` |
+| `REDIS_STACK_IMAGE_VERSION` | Redis Stack image tag | `latest` |
+| `AUTHENTIK_IMAGE_VERSION` | Authentik image tag | `2026.2.1` |
 
 ## 3. Core PostgreSQL
 
@@ -101,7 +103,26 @@ Source of truth:
 | `CSV_UPLOAD_ENCODING` | CSV encoding | `utf-8` |
 | `CSV_UPLOAD_SCAN_LIMIT` | Max files scanned per run | `200` |
 
-## 8. NocoDB
+## 8. Redis
+
+| Variable | Description | Example |
+|---|---|---|
+| `REDIS_HOST` | Internal Redis hostname used by services | `dlh-redis` |
+| `REDIS_BIND_IP` | Host bind IP for published Redis port (set `127.0.0.1` for local-only) | `127.0.0.1` |
+| `DLH_REDIS_PORT` | Host port mapped to Redis `6379` | `26379` |
+| `REDIS_PASSWORD` | Shared Redis password | `change-this-redis-password` |
+| `REDIS_PROTECTED_MODE` | Redis protected mode flag | `yes` |
+| `REDIS_APPENDONLY` | Enable append-only persistence | `yes` |
+| `REDIS_MAXMEMORY` | Memory ceiling for Redis container | `512mb` |
+| `REDIS_MAXMEMORY_POLICY` | Eviction policy when memory is full | `allkeys-lru` |
+| `REDIS_VM_OVERCOMMIT_MEMORY` | Container sysctl value for `vm.overcommit_memory` | `1` |
+| `REDIS_STACK_IMAGE_VERSION` | Redis Stack image tag | `latest` |
+| `DLH_REDIS_GUI_PORT` | Host port for Redis Insight UI | `25540` |
+| `REDIS_AUTHENTIK_DB` | Redis logical DB index used by Authentik | `1` |
+| `SUPERSET_REDIS_CACHE_DB` | Redis logical DB index used by Superset cache | `2` |
+| `SUPERSET_REDIS_RESULTS_DB` | Redis logical DB index used by Superset SQL Lab results | `3` |
+
+## 9. NocoDB
 
 | Variable | Description | Example |
 |---|---|---|
@@ -110,7 +131,7 @@ Source of truth:
 | `NOCODB_DB_USER` | NocoDB metadata user | `dlh_nocodb_user` |
 | `NOCODB_DB_PASSWORD` | NocoDB metadata password | `change-this-nocodb-password` |
 
-## 9. Superset
+## 10. Superset
 
 | Variable | Description | Example |
 |---|---|---|
@@ -123,8 +144,22 @@ Source of truth:
 | `SUPERSET_ADMIN_PASSWORD` | Superset admin password | `admin` |
 | `SUPERSET_ADMIN_EMAIL` | Superset admin email | `admin@superset.local` |
 | `SUPERSET_PREFERRED_URL_SCHEME` | URL scheme behind proxy or direct | `http` |
+| `SUPERSET_PIP_REQUIREMENTS` | Extra Python packages installed at Superset startup | `psycopg2-binary==2.9.9 clickhouse-connect==0.8.3` |
 
-## 10. Grafana
+## 11. Authentik
+
+| Variable | Description | Example |
+|---|---|---|
+| `DLH_AUTHENTIK_PORT` | Host port for Authentik web UI/API | `29090` |
+| `AUTHENTIK_SECRET_KEY` | Authentik cryptographic secret key | `replace-this-with-a-long-random-secret` |
+| `AUTHENTIK_DB_NAME` | Authentik metadata DB name | `dlh_authentik` |
+| `AUTHENTIK_DB_USER` | Authentik metadata DB user | `dlh_authentik_user` |
+| `AUTHENTIK_DB_PASSWORD` | Authentik metadata DB password | `change-this-authentik-db-password` |
+| `AUTHENTIK_BOOTSTRAP_EMAIL` | Initial admin email for first bootstrap | `admin@authentik.local` |
+| `AUTHENTIK_BOOTSTRAP_PASSWORD` | Initial admin password for first bootstrap | `admin` |
+| `AUTHENTIK_BOOTSTRAP_TOKEN` | Optional first-run bootstrap token | `` |
+
+## 12. Grafana
 
 | Variable | Description | Example |
 |---|---|---|
@@ -135,7 +170,7 @@ Source of truth:
 | `GRAFANA_ADMIN_USER` | Grafana admin username | `admin` |
 | `GRAFANA_ADMIN_PASSWORD` | Grafana admin password | `admin` |
 
-## 11. Optional Reverse Proxy
+## 13. Optional Reverse Proxy
 
 | Variable | Description | Example |
 |---|---|---|
@@ -143,7 +178,7 @@ Source of truth:
 | `DLH_NPM_HTTPS_PORT` | Nginx Proxy Manager HTTPS port | `28443` |
 | `DLH_NPM_ADMIN_PORT` | Nginx Proxy Manager admin UI port | `28081` |
 
-## 12. Validation Checklist
+## 14. Validation Checklist
 
 Before deploying, verify:
 
