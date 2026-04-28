@@ -2,6 +2,11 @@
 -- ClickHouse Analytics Schema
 -- Layers: Bronze (raw) → Silver (clean) → Gold (aggregated)
 -- + Pipeline run tracking table for Grafana monitoring
+--
+-- Silver and Gold tables use ReplacingMergeTree to provide
+-- idempotent/deduplicating loads on repeated pipeline runs.
+-- The version column (_silver_processed_at / _gold_processed_at)
+-- ensures the most-recent write wins on OPTIMIZE … FINAL.
 -- =============================================================
 
 -- Ensure analytics database exists (also set via env CLICKHOUSE_DB)
@@ -33,6 +38,10 @@ ORDER BY (_extracted_at, _pipeline_run_id);
 
 -- =============================================================
 -- SILVER: cleaned & typed data
+-- ReplacingMergeTree deduplicates rows sharing the same
+-- (_pipeline_run_id, _silver_processed_at) key, keeping the row
+-- with the highest _silver_processed_at version.
+-- Note: id is Nullable and therefore cannot appear in ORDER BY.
 -- =============================================================
 CREATE TABLE IF NOT EXISTS analytics.silver_demo
 (
@@ -51,12 +60,13 @@ CREATE TABLE IF NOT EXISTS analytics.silver_demo
     _source_table           String DEFAULT 'Demo',
     _silver_processed_at    DateTime64(3) DEFAULT now64(3)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree(_silver_processed_at)
 PARTITION BY toYYYYMM(toDateTime(_silver_processed_at))
-ORDER BY (_silver_processed_at, _pipeline_run_id);
+ORDER BY (_pipeline_run_id, _silver_processed_at);
 
 -- =============================================================
 -- GOLD: aggregated summaries
+-- ReplacingMergeTree deduplicates repeated runs for same period.
 -- =============================================================
 
 -- Daily sales summary
@@ -73,7 +83,7 @@ CREATE TABLE IF NOT EXISTS analytics.gold_demo_daily
     _pipeline_run_id        String DEFAULT '',
     _gold_processed_at      DateTime64(3) DEFAULT now64(3)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree(_gold_processed_at)
 PARTITION BY toYYYYMM(order_date)
 ORDER BY (order_date, _pipeline_run_id);
 
@@ -89,7 +99,7 @@ CREATE TABLE IF NOT EXISTS analytics.gold_demo_by_region
     _pipeline_run_id        String DEFAULT '',
     _gold_processed_at      DateTime64(3) DEFAULT now64(3)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree(_gold_processed_at)
 PARTITION BY toYYYYMM(report_date)
 ORDER BY (region, report_date, _pipeline_run_id);
 
@@ -105,7 +115,7 @@ CREATE TABLE IF NOT EXISTS analytics.gold_demo_by_category
     _pipeline_run_id        String DEFAULT '',
     _gold_processed_at      DateTime64(3) DEFAULT now64(3)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree(_gold_processed_at)
 PARTITION BY toYYYYMM(report_date)
 ORDER BY (category, report_date, _pipeline_run_id);
 

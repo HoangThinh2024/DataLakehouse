@@ -141,7 +141,7 @@ def export_data(data, *args, **kwargs):
             'status': 'success',
             'row_count': 0, # Aggregate row count is handled at CH table level or ignored
             'pipeline_run_id': f['pipeline_run_id'],
-            'processed_at': dt.datetime.utcnow(),
+            'processed_at': dt.datetime.now(dt.timezone.utc),
         })
     
     client.execute(

@@ -267,18 +267,16 @@ def load_clickhouse(data, *args, **kwargs):
     All data reads from RustFS, not from in-memory pipeline state.
     This ensures immutability and recoverability.
     """
-    started_at = dt.datetime.utcnow()
+    started_at = dt.datetime.now(dt.timezone.utc)
     
     client = _ch_client()
     db = os.getenv('CLICKHOUSE_DB', 'analytics')
     _ensure_clickhouse_objects(client, db)
     
     rows_silver = rows_daily = rows_weekly = rows_monthly = rows_yearly = rows_region = rows_category = 0
-    rows_gold_weekly = rows_weekly
-    rows_gold_monthly = rows_monthly
-    rows_gold_yearly = rows_yearly
     error_msg = None
     run_id = 'auto-load'
+    status = 'unknown'
     
     try:
         print("[load_to_clickhouse] Reading from RustFS (lakehouse architecture)...")
@@ -361,6 +359,19 @@ def load_clickhouse(data, *args, **kwargs):
             print(f"[load_to_clickhouse] From RustFS Gold → gold_demo_by_category: {rows_category} rows")
         
         status = 'success'
+
+        # ── Force deduplication on all ReplacingMergeTree tables ──
+        optimize_tables = [
+            f'{db}.silver_demo',
+            f'{db}.gold_demo_daily',
+            f'{db}.gold_demo_by_region',
+            f'{db}.gold_demo_by_category',
+        ]
+        for tbl in optimize_tables:
+            try:
+                client.execute(f'OPTIMIZE TABLE {tbl} FINAL')
+            except Exception as opt_exc:
+                print(f"[load_to_clickhouse] WARNING: OPTIMIZE {tbl} failed: {opt_exc}")
     
     except Exception as exc:
         error_msg = str(exc)
@@ -370,7 +381,7 @@ def load_clickhouse(data, *args, **kwargs):
     
     finally:
         # ── Record pipeline run ──────────────────────────────────
-        ended_at = dt.datetime.utcnow()
+        ended_at = dt.datetime.now(dt.timezone.utc)
         run_record = [{
             'run_id': run_id,
             'pipeline_name': 'etl_postgres_to_lakehouse',

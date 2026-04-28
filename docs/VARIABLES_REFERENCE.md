@@ -31,7 +31,8 @@ Source of truth:
 | `NOCODB_IMAGE_VERSION` | NocoDB image tag | `latest` |
 | `SUPERSET_IMAGE_VERSION` | Superset image tag | `latest` |
 | `GRAFANA_IMAGE_VERSION` | Grafana image tag | `latest` |
-| `REDIS_STACK_IMAGE_VERSION` | Redis Stack image tag | `latest` |
+| `REDIS_STACK_IMAGE_VERSION` | Redis Stack image tag | `7.4.2-v3` |
+| `REDISINSIGHT_IMAGE_VERSION` | Redis Insight image tag | `2.66.0` |
 | `AUTHENTIK_IMAGE_VERSION` | Authentik image tag | `2026.2.1` |
 
 ## 3. Core PostgreSQL

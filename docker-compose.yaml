@@ -17,6 +17,21 @@ x-dlh-runtime: &dlh-runtime
 x-dlh-timezone: &dlh-timezone
   TZ: ${TZ:-Asia/Ho_Chi_Minh}
 
+x-authentik-env: &authentik-env
+  TZ: ${TZ:-Asia/Ho_Chi_Minh}
+  AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-change-this-authentik-secret-key}
+  AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+  AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
+  AUTHENTIK_REDIS__HOST: ${REDIS_HOST:-dlh-redis}
+  AUTHENTIK_REDIS__PORT: 6379
+  AUTHENTIK_REDIS__PASSWORD: ${REDIS_PASSWORD:-change-this-redis-password}
+  AUTHENTIK_REDIS__DB: ${REDIS_AUTHENTIK_DB:-1}
+  AUTHENTIK_POSTGRESQL__HOST: ${POSTGRES_HOST:-dlh-postgres}
+  AUTHENTIK_POSTGRESQL__PORT: 5432
+  AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_DB_NAME:-${POSTGRES_DB:-postgres}}
+  AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_DB_USER:-${POSTGRES_USER:-postgres}}
+  AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_DB_PASSWORD:-${POSTGRES_PASSWORD:-postgres}}
+
 services:
   # ==========================================================
   # LAYER 2: STORAGE
@@ -205,6 +220,12 @@ services:
       - "${REDIS_BIND_IP:-127.0.0.1}:${DLH_REDIS_GUI_PORT:-25540}:5540"
     volumes:
       - redisinsight_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:5540/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     depends_on:
       dlh-redis:
         condition: service_healthy
@@ -264,6 +285,12 @@ services:
       - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_MAGE_PORT:-26789}:6789"
     volumes:
       - ./mage:/home/src
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:6789/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     depends_on:
       postgres-bootstrap:
         condition: service_completed_successfully
@@ -293,6 +320,12 @@ services:
       NC_ALLOW_LOCAL_EXTERNAL_DBS: true
     ports:
       - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_NOCODB_PORT:-28082}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     depends_on:
       postgres-bootstrap:
         condition: service_completed_successfully
@@ -305,7 +338,6 @@ services:
     <<: *dlh-runtime
     image: apache/superset:${SUPERSET_IMAGE_VERSION:-latest}
     container_name: dlh-superset
-    user: root
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
       SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
@@ -352,19 +384,7 @@ services:
     env_file:
       - .env
     environment:
-      TZ: ${TZ:-Asia/Ho_Chi_Minh}
-      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-change-this-authentik-secret-key}
-      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
-      AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
-      AUTHENTIK_REDIS__HOST: ${REDIS_HOST:-dlh-redis}
-      AUTHENTIK_REDIS__PORT: 6379
-      AUTHENTIK_REDIS__PASSWORD: ${REDIS_PASSWORD:-change-this-redis-password}
-      AUTHENTIK_REDIS__DB: ${REDIS_AUTHENTIK_DB:-1}
-      AUTHENTIK_POSTGRESQL__HOST: ${POSTGRES_HOST:-dlh-postgres}
-      AUTHENTIK_POSTGRESQL__PORT: 5432
-      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_DB_NAME:-${POSTGRES_DB:-postgres}}
-      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_DB_USER:-${POSTGRES_USER:-postgres}}
-      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_DB_PASSWORD:-${POSTGRES_PASSWORD:-postgres}}
+      <<: *authentik-env
       AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-admin@authentik.local}
       AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-admin}
       AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-}
@@ -387,23 +407,17 @@ services:
     env_file:
       - .env
     environment:
-      TZ: ${TZ:-Asia/Ho_Chi_Minh}
-      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-change-this-authentik-secret-key}
-      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
-      AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
-      AUTHENTIK_REDIS__HOST: ${REDIS_HOST:-dlh-redis}
-      AUTHENTIK_REDIS__PORT: 6379
-      AUTHENTIK_REDIS__PASSWORD: ${REDIS_PASSWORD:-change-this-redis-password}
-      AUTHENTIK_REDIS__DB: ${REDIS_AUTHENTIK_DB:-1}
-      AUTHENTIK_POSTGRESQL__HOST: ${POSTGRES_HOST:-dlh-postgres}
-      AUTHENTIK_POSTGRESQL__PORT: 5432
-      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_DB_NAME:-${POSTGRES_DB:-postgres}}
-      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_DB_USER:-${POSTGRES_USER:-postgres}}
-      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_DB_PASSWORD:-${POSTGRES_PASSWORD:-postgres}}
+      <<: *authentik-env
     command: worker
     volumes:
       - authentik_media:/media
       - authentik_templates:/templates
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     depends_on:
       postgres-bootstrap:
         condition: service_completed_successfully
@@ -452,7 +466,7 @@ services:
   nginx-proxy-manager:
     image: jc21/nginx-proxy-manager:latest
     container_name: dlh-nginx-proxy-manager
-    restart: unless-stopped
+    restart: always
     ports:
       - "${DLH_NPM_HTTP_PORT:-80}:80"
       - "${DLH_NPM_HTTPS_PORT:-443}:443"

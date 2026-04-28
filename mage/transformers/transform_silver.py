@@ -80,7 +80,7 @@ def transform_silver(df: pd.DataFrame, *args, **kwargs):
 
     # 7. Add silver metadata
     df['_pipeline_run_id'] = run_id
-    df['_silver_processed_at'] = dt.datetime.utcnow().isoformat() + 'Z'
+    df['_silver_processed_at'] = dt.datetime.now(dt.timezone.utc).isoformat().replace('+00:00', 'Z')
 
     print(f"[transform_silver] Silver rows ready: {len(df)}")
     return df

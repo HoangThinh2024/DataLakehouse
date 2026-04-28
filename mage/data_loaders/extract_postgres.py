@@ -152,7 +152,7 @@ def load_data(*args, **kwargs):
     conn.close()
 
     # Attach pipeline run metadata columns
-    now_utc = dt.datetime.utcnow().isoformat() + 'Z'
+    now_utc = dt.datetime.now(dt.timezone.utc).isoformat().replace('+00:00', 'Z')
     df['_pipeline_run_id'] = run_id
     df['_source_table'] = f'{resolved_schema}.{resolved_table}'
     df['_extracted_at'] = now_utc
