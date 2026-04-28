@@ -139,7 +139,7 @@ def export_data(data, *args, **kwargs):
     db = os.getenv('CLICKHOUSE_DB', 'analytics')
     _ensure_tables(client, db)
 
-    started_at = dt.datetime.utcnow()
+    started_at = dt.datetime.now(dt.timezone.utc)
     run_id = data.get('pipeline_run_id', 'unknown')
     source_key = data.get('source_key', '')
     source_etag = data.get('source_etag', '')
@@ -220,7 +220,7 @@ def export_data(data, *args, **kwargs):
             }],
         )
 
-        ended_at = dt.datetime.utcnow()
+        ended_at = dt.datetime.now(dt.timezone.utc)
         client.execute(
             f'INSERT INTO {db}.pipeline_runs '
             '(run_id, pipeline_name, status, started_at, ended_at, rows_extracted, rows_silver, rows_gold_daily, rows_gold_region, rows_gold_category, error_message) VALUES',
@@ -258,7 +258,7 @@ def export_data(data, *args, **kwargs):
                 'row_count': 0,
                 'duplicate_rows': 0,
                 'dropped_rows': 0,
-                'processed_at': dt.datetime.utcnow(),
+                'processed_at': dt.datetime.now(dt.timezone.utc),
                 'pipeline_run_id': run_id,
                 'error_message': error_msg,
             }],
