@@ -87,7 +87,53 @@ Dưới đây là quy trình thực tế để đưa một đơn hàng vào hệ
 | **GIÁM SÁT** | **Grafana** | Bác sĩ hệ thống | Cảnh báo sớm mọi sự cố kỹ thuật. |
 
 ---
-**Lời kết:** Hệ thống DataLakehouse không chỉ là những dòng code khô khan, nó là một dây chuyền thông minh giúp doanh nghiệp của bạn ra quyết định dựa trên dữ liệu một cách nhanh chóng và chính xác nhất.
+
+## PHẦN 5: BẢO TRÌ VÀ KHÔI PHỤC DỮ LIỆU (MAINTENANCE & RECOVERY)
+
+Hệ thống của chúng ta tích hợp sẵn cơ chế bảo trì tự động để đảm bảo dữ liệu luôn an toàn và bộ nhớ luôn tinh gọn.
+
+### 1. Cơ chế Sao lưu (Backup)
+*   **Công cụ:** Script `scripts/maintenance_tasks.py` (chạy bên trong container Mage).
+*   **Hoạt động:** Sử dụng lệnh `BACKUP` gốc của ClickHouse để nén toàn bộ database `analytics`.
+*   **Vị trí lưu trữ:** `s3://backups/clickhouse/YYYY-MM-DD/` (Nằm trong RustFS).
+*   **Cách chạy thủ công:**
+    ```bash
+    docker exec dlh-mage python3 /home/src/scripts/maintenance_tasks.py
+    ```
+
+### 2. Cơ chế Dọn dẹp (Cleanup)
+*   **Nguyên tắc:** Giữ lại dữ liệu trong **30 ngày**.
+*   **Đối tượng dọn dẹp:**
+    - Các file Parquet cũ trong lớp `silver` và `gold`.
+    - Các bản sao lưu (Backup) cũ hơn 30 ngày.
+*   **Lợi ích:** Đảm bảo ổ cứng của bạn không bị đầy theo thời gian do các file phiên bản cũ.
+
+### 3. Quy trình Khôi phục Dữ liệu (Restore Guide)
+Trong trường hợp dữ liệu bị hỏng hoặc mất, hãy thực hiện các bước sau để khôi phục từ bản sao lưu gần nhất:
+
+1.  **Xác định bản sao lưu:** Truy cập RustFS Console (`http://localhost:29101`), vào bucket `backups` để tìm ngày bạn muốn khôi phục.
+2.  **Thực hiện lệnh Restore:** Chạy lệnh sau bên trong Clickhouse (sử dụng user `doe` hoặc `default` có quyền admin):
+    ```sql
+    -- 1. Xóa database cũ (Cẩn thận!)
+    DROP DATABASE IF EXISTS analytics;
+
+    -- 2. Khôi phục từ S3 (Thay YYYY-MM-DD bằng ngày bạn chọn)
+    RESTORE DATABASE analytics FROM S3(
+        'http://dlh-rustfs:9000/backups/clickhouse/YYYY-MM-DD/', 
+        'rustfsadmin', 
+        'rustfsadmin'
+    );
+    ```
+3.  **Kiểm tra:** Sau khi chạy xong, toàn bộ bảng và dữ liệu tại thời điểm đó sẽ xuất hiện trở lại.
+
+### 4. Thiết lập Lịch trình Tự động (Cron job)
+Để hệ thống tự bảo trì vào **2:00 sáng hằng ngày**, hãy thêm dòng sau vào `crontab` của máy tính (Linux/WSL):
+```bash
+0 2 * * * docker exec dlh-mage python3 /home/src/scripts/maintenance_tasks.py >> /home/johndoe/dlh_maintenance.log 2>&1
+```
+
+---
+**Lưu ý cho AI/Dev sau này:** Mọi thông tin xác thực cho việc backup đều được lấy từ biến môi trường trong file `.env`. Đảm bảo `RUSTFS_ACCESS_KEY` và `RUSTFS_SECRET_KEY` luôn khớp giữa Mage và RustFS.
 
 ---
 

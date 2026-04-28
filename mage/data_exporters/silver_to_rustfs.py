@@ -56,6 +56,7 @@ def export_silver(data, *args, **kwargs):
     prefix = os.getenv('RUSTFS_SILVER_PREFIX', 'demo')
     run_id = data.get('pipeline_run_id', 'unknown')
     date_str = dt.date.today().isoformat()
+    # Using run_id for deterministic naming if provided
     key = f'{prefix}/dt={date_str}/{run_id}.parquet'
 
     # Serialise object columns that Parquet can't handle natively
