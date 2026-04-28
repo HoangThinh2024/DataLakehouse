@@ -38,8 +38,10 @@ ORDER BY (_extracted_at, _pipeline_run_id);
 
 -- =============================================================
 -- SILVER: cleaned & typed data
--- ReplacingMergeTree deduplicates by (_pipeline_run_id, id),
--- keeping the row with the latest _silver_processed_at.
+-- ReplacingMergeTree deduplicates rows sharing the same
+-- (_pipeline_run_id, _silver_processed_at) key, keeping the row
+-- with the highest _silver_processed_at version.
+-- Note: id is Nullable and therefore cannot appear in ORDER BY.
 -- =============================================================
 CREATE TABLE IF NOT EXISTS analytics.silver_demo
 (

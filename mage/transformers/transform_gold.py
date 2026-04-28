@@ -18,7 +18,7 @@ def transform_gold(data, *args, **kwargs):
 
     df = data['dataframe'].copy()
     run_id = data.get('pipeline_run_id', 'unknown')
-    gold_ts = dt.datetime.now(dt.timezone.utc).isoformat()
+    gold_ts = dt.datetime.now(dt.timezone.utc).isoformat().replace('+00:00', 'Z')
     
     # 0. Robust Column Normalization for Assignee
     assignee_col = 'Người thực hiện'
