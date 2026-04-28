@@ -15,6 +15,7 @@ Usage:
   bash scripts/stackctl.sh logs [SERVICE]               Show service logs (use 'all' for all)
   bash scripts/stackctl.sh reset [--hard]               Clean state (containers) --hard: with volumes
   bash scripts/stackctl.sh check-env                    Validate environment variables
+  bash scripts/stackctl.sh check-system                 Quick system health overview
   bash scripts/stackctl.sh sync-env                     Update environment interactively
   bash scripts/stackctl.sh validate-env                 Strict validation with suggestions
   bash scripts/stackctl.sh inspect [SERVICE]            Detailed service information
@@ -198,7 +199,7 @@ redeploy() {
   if [[ "$with_etl" == "true" ]]; then
     if command -v uv >/dev/null 2>&1; then
       info "Running ETL and dashboard orchestration..."
-      (cd "$REPO_ROOT" && uv run python scripts/run_etl_and_dashboard.py)
+      (cd "$REPO_ROOT" && uv run python scripts/run_etl_and_dashboard.py --auto)
     else
       warn "uv is not installed; skipping ETL/dashboard orchestration."
     fi
