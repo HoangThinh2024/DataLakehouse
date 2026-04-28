@@ -297,6 +297,8 @@ MAGE_IMAGE_VERSION=${MAGE_IMAGE_VERSION}
 NOCODB_IMAGE_VERSION=${NOCODB_IMAGE_VERSION}
 SUPERSET_IMAGE_VERSION=${SUPERSET_IMAGE_VERSION}
 GRAFANA_IMAGE_VERSION=${GRAFANA_IMAGE_VERSION}
+REDIS_STACK_IMAGE_VERSION=${REDIS_STACK_IMAGE_VERSION:-latest}
+AUTHENTIK_IMAGE_VERSION=${AUTHENTIK_IMAGE_VERSION:-2026.2.1}
 
 # ─ Core PostgreSQL (System Admin) ──────────────────────────
 POSTGRES_DB=${POSTGRES_DB}
@@ -329,6 +331,22 @@ CLICKHOUSE_USER=${CLICKHOUSE_USER}
 CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
 DLH_CLICKHOUSE_HTTP_PORT=${DLH_CLICKHOUSE_HTTP_PORT}
 DLH_CLICKHOUSE_TCP_PORT=${DLH_CLICKHOUSE_TCP_PORT}
+
+# ─ Redis (Shared Cache / Queue Backend) ───────────────────
+REDIS_HOST=dlh-redis
+REDIS_BIND_IP=${REDIS_BIND_IP:-127.0.0.1}
+DLH_REDIS_PORT=${DLH_REDIS_PORT:-26379}
+REDIS_PASSWORD=${REDIS_PASSWORD:-change-this-redis-password}
+REDIS_PROTECTED_MODE=${REDIS_PROTECTED_MODE:-yes}
+REDIS_APPENDONLY=${REDIS_APPENDONLY:-yes}
+REDIS_MAXMEMORY=${REDIS_MAXMEMORY:-512mb}
+REDIS_MAXMEMORY_POLICY=${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
+REDIS_VM_OVERCOMMIT_MEMORY=${REDIS_VM_OVERCOMMIT_MEMORY:-1}
+REDIS_STACK_IMAGE_VERSION=${REDIS_STACK_IMAGE_VERSION:-latest}
+DLH_REDIS_GUI_PORT=${DLH_REDIS_GUI_PORT:-25540}
+REDIS_AUTHENTIK_DB=${REDIS_AUTHENTIK_DB:-1}
+SUPERSET_REDIS_CACHE_DB=${SUPERSET_REDIS_CACHE_DB:-2}
+SUPERSET_REDIS_RESULTS_DB=${SUPERSET_REDIS_RESULTS_DB:-3}
 
 # ─ Mage (ETL Orchestration) ────────────────────────────────
 DLH_MAGE_PORT=${DLH_MAGE_PORT}
@@ -368,6 +386,17 @@ SUPERSET_ADMIN_USER=${SUPERSET_ADMIN_USER}
 SUPERSET_ADMIN_PASSWORD=${SUPERSET_ADMIN_PASSWORD}
 SUPERSET_ADMIN_EMAIL=admin@superset.local
 SUPERSET_PREFERRED_URL_SCHEME=http
+SUPERSET_PIP_REQUIREMENTS=${SUPERSET_PIP_REQUIREMENTS:-psycopg2-binary==2.9.9 clickhouse-connect==0.8.3}
+
+# ─ Authentik (Identity Provider) ───────────────────────────
+DLH_AUTHENTIK_PORT=${DLH_AUTHENTIK_PORT:-29090}
+AUTHENTIK_SECRET_KEY=${AUTHENTIK_SECRET_KEY:-replace-this-with-a-long-random-secret}
+AUTHENTIK_DB_NAME=${AUTHENTIK_DB_NAME:-dlh_authentik}
+AUTHENTIK_DB_USER=${AUTHENTIK_DB_USER:-dlh_authentik_user}
+AUTHENTIK_DB_PASSWORD=${AUTHENTIK_DB_PASSWORD:-change-this-authentik-db-password}
+AUTHENTIK_BOOTSTRAP_EMAIL=${AUTHENTIK_BOOTSTRAP_EMAIL:-admin@authentik.local}
+AUTHENTIK_BOOTSTRAP_PASSWORD=${AUTHENTIK_BOOTSTRAP_PASSWORD:-admin}
+AUTHENTIK_BOOTSTRAP_TOKEN=${AUTHENTIK_BOOTSTRAP_TOKEN:-}
 
 # ─ Grafana (Monitoring & Dashboards) ───────────────────────
 DLH_GRAFANA_PORT=${DLH_GRAFANA_PORT}
@@ -416,7 +445,10 @@ echo "    ClickHouse : http://localhost:${DLH_CLICKHOUSE_HTTP_PORT}"
 echo "    Mage       : http://localhost:${DLH_MAGE_PORT}"
 echo "    NocoDB     : http://localhost:${DLH_NOCODB_PORT}"
 echo "    Superset   : http://localhost:${DLH_SUPERSET_PORT}"
+echo "    Authentik  : http://localhost:${DLH_AUTHENTIK_PORT:-29090}"
 echo "    Grafana    : http://localhost:${DLH_GRAFANA_PORT}"
+echo "    Redis      : localhost:${DLH_REDIS_PORT:-26379}"
+echo "    Redis GUI  : http://localhost:${DLH_REDIS_GUI_PORT:-25540}"
 
 # =============================================================
 # Optional: UFW + ufw-docker for LAN deployments

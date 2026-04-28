@@ -47,10 +47,14 @@ def _ensure_bucket(client, bucket: str) -> None:
 
 
 @data_exporter
-def export_silver(df: pd.DataFrame, *args, **kwargs):
+def export_silver(data, *args, **kwargs):
+    if not isinstance(data, dict) or data.get('skip'):
+        return data
+        
+    df = data['dataframe']
     bucket = os.getenv('RUSTFS_SILVER_BUCKET', 'silver')
     prefix = os.getenv('RUSTFS_SILVER_PREFIX', 'demo')
-    run_id = df['_pipeline_run_id'].iloc[0] if '_pipeline_run_id' in df.columns else 'unknown'
+    run_id = data.get('pipeline_run_id', 'unknown')
     date_str = dt.date.today().isoformat()
     key = f'{prefix}/dt={date_str}/{run_id}.parquet'
 
@@ -73,10 +77,11 @@ def export_silver(df: pd.DataFrame, *args, **kwargs):
     )
 
     print(f"[silver_to_rustfs] Uploaded {len(df)} rows → s3://{bucket}/{key}")
-    return df
+    return data
 
 
 @test
 def test_output(output, *args):
     assert output is not None, 'Output is None after silver export'
-    assert len(output) > 0, 'Empty DataFrame after silver export'
+    if isinstance(output, dict) and not output.get('skip'):
+        assert 'dataframe' in output, 'Missing dataframe in output'

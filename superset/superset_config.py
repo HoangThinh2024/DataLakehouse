@@ -33,3 +33,39 @@ PREFERRED_URL_SCHEME = os.getenv("SUPERSET_PREFERRED_URL_SCHEME", "http")
 # Requires: pip install clickhouse-connect (installed in docker-compose command)
 ADDITIONAL_DATABASE_CONFIG_MAP = {}
 
+REDIS_HOST = os.getenv("REDIS_HOST", "dlh-redis")
+REDIS_PORT = os.getenv("REDIS_PORT", "6379")
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
+SUPERSET_REDIS_CACHE_DB = os.getenv("SUPERSET_REDIS_CACHE_DB", "2")
+SUPERSET_REDIS_RESULTS_DB = os.getenv("SUPERSET_REDIS_RESULTS_DB", "3")
+
+if REDIS_PASSWORD:
+    REDIS_AUTH = f":{REDIS_PASSWORD}@"
+else:
+    REDIS_AUTH = ""
+
+REDIS_CACHE_URI = f"redis://{REDIS_AUTH}{REDIS_HOST}:{REDIS_PORT}/{SUPERSET_REDIS_CACHE_DB}"
+REDIS_RESULTS_URI = f"redis://{REDIS_AUTH}{REDIS_HOST}:{REDIS_PORT}/{SUPERSET_REDIS_RESULTS_DB}"
+
+# Shared caching layer for charts/dashboard metadata and SQL Lab async results.
+CACHE_CONFIG = {
+    "CACHE_TYPE": "RedisCache",
+    "CACHE_DEFAULT_TIMEOUT": 300,
+    "CACHE_KEY_PREFIX": "superset_cache_",
+    "CACHE_REDIS_URL": REDIS_CACHE_URI,
+}
+
+DATA_CACHE_CONFIG = {
+    "CACHE_TYPE": "RedisCache",
+    "CACHE_DEFAULT_TIMEOUT": 300,
+    "CACHE_KEY_PREFIX": "superset_data_",
+    "CACHE_REDIS_URL": REDIS_CACHE_URI,
+}
+
+RESULTS_BACKEND = {
+    "CACHE_TYPE": "RedisCache",
+    "CACHE_DEFAULT_TIMEOUT": 3600,
+    "CACHE_KEY_PREFIX": "superset_results_",
+    "CACHE_REDIS_URL": REDIS_RESULTS_URI,
+}
+

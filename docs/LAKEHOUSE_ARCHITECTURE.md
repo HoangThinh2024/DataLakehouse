@@ -27,6 +27,10 @@ This document explains the runtime architecture, data flow, and control plane us
 - Grafana for operational monitoring
 - NocoDB for table exploration and lightweight operations
 
+6. Shared Cache and Identity
+- Redis as shared cache/queue backend
+- Authentik for centralized identity and access control
+
 ## 2. Logical Data Flow
 
 ```text
@@ -37,6 +41,7 @@ Supporting flow:
 
 - Metadata and service databases are hosted in PostgreSQL.
 - Mage metadata, Superset metadata, Grafana metadata, and NocoDB metadata are isolated into dedicated databases.
+- Redis is used as shared runtime state for Superset (cache/results) and Authentik (queue/cache).
 
 ## 3. Control Plane
 
@@ -61,9 +66,11 @@ Main containers:
 - PostgreSQL
 - RustFS (+ rustfs-init)
 - ClickHouse
+- Redis (shared)
 - Mage
 - NocoDB
 - Superset
+- Authentik (server + worker)
 - Grafana
 - Optional Nginx Proxy Manager
 

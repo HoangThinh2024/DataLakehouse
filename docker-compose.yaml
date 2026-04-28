@@ -156,6 +156,59 @@ services:
       retries: 5
       start_period: 30s
 
+  # Redis – shared cache/queue backend for platform services
+  dlh-redis:
+    <<: *dlh-runtime
+    image: redis/redis-stack:${REDIS_STACK_IMAGE_VERSION:-latest}
+    container_name: dlh-redis
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    command:
+      - redis-stack-server
+      - --bind
+      - 0.0.0.0
+      - --protected-mode
+      - ${REDIS_PROTECTED_MODE:-yes}
+      - --appendonly
+      - ${REDIS_APPENDONLY:-yes}
+      - --save
+      - "60"
+      - "1"
+      - --loglevel
+      - warning
+      - --requirepass
+      - ${REDIS_PASSWORD:-change-this-redis-password}
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-512mb}
+      - --maxmemory-policy
+      - ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
+    ports:
+      - "${REDIS_BIND_IP:-127.0.0.1}:${DLH_REDIS_PORT:-26379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-change-this-redis-password} ping | grep -q PONG"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redisinsight:
+    <<: *dlh-runtime
+    image: redis/redisinsight:${REDISINSIGHT_IMAGE_VERSION:-latest}
+    container_name: dlh-redisinsight
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    ports:
+      - "${REDIS_BIND_IP:-127.0.0.1}:${DLH_REDIS_GUI_PORT:-25540}:5540"
+    volumes:
+      - redisinsight_data:/data
+    depends_on:
+      dlh-redis:
+        condition: service_healthy
+
   # ==========================================================
   # LAYER 3: PROCESSING
   # ==========================================================
@@ -261,6 +314,12 @@ services:
       SUPERSET_DB_NAME: ${SUPERSET_DB_NAME:-dlh_superset}
       SUPERSET_DB_USER: ${SUPERSET_DB_USER:-dlh_superset_user}
       SUPERSET_DB_PASSWORD: ${SUPERSET_DB_PASSWORD:-change-me}
+      REDIS_HOST: ${REDIS_HOST:-dlh-redis}
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-change-this-redis-password}
+      SUPERSET_REDIS_CACHE_DB: ${SUPERSET_REDIS_CACHE_DB:-2}
+      SUPERSET_REDIS_RESULTS_DB: ${SUPERSET_REDIS_RESULTS_DB:-3}
+      _PIP_ADDITIONAL_REQUIREMENTS: ${SUPERSET_PIP_REQUIREMENTS:-psycopg2-binary==2.9.9 clickhouse-connect==0.8.3}
     ports:
       - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_SUPERSET_PORT:-28088}:8088"
     volumes:
@@ -269,15 +328,87 @@ services:
     depends_on:
       postgres-bootstrap:
         condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
+      dlh-redis:
+        condition: service_healthy
     command: >
       /bin/sh -c "
-      /app/.venv/bin/python -m ensurepip --upgrade &&
-      /app/.venv/bin/python -m pip install --no-cache-dir psycopg2-binary==2.9.9 clickhouse-connect==0.8.3 &&
-      superset db upgrade &&
-      superset fab create-admin --username ${SUPERSET_ADMIN_USER:-admin} --firstname Admin --lastname User --email ${SUPERSET_ADMIN_EMAIL:-admin@superset.local} --password ${SUPERSET_ADMIN_PASSWORD:-admin} || true &&
-      superset init &&
+      pip install --target /app/.venv/lib/python3.10/site-packages $${_PIP_ADDITIONAL_REQUIREMENTS} && \
+      superset db upgrade && \
+      superset fab create-admin --username ${SUPERSET_ADMIN_USER:-admin} --firstname Admin --lastname User --email ${SUPERSET_ADMIN_EMAIL:-admin@superset.local} --password ${SUPERSET_ADMIN_PASSWORD:-admin} || true && \
+      superset init && \
       superset run -h 0.0.0.0 -p 8088 --with-threads
       "
+
+  # ==========================================================
+  # INFRA: AUTHENTICATION (Authentik)
+  # ==========================================================
+
+  authentik-server:
+    <<: *dlh-runtime
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_IMAGE_VERSION:-2026.2.1}
+    container_name: dlh-authentik-server
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-change-this-authentik-secret-key}
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+      AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
+      AUTHENTIK_REDIS__HOST: ${REDIS_HOST:-dlh-redis}
+      AUTHENTIK_REDIS__PORT: 6379
+      AUTHENTIK_REDIS__PASSWORD: ${REDIS_PASSWORD:-change-this-redis-password}
+      AUTHENTIK_REDIS__DB: ${REDIS_AUTHENTIK_DB:-1}
+      AUTHENTIK_POSTGRESQL__HOST: ${POSTGRES_HOST:-dlh-postgres}
+      AUTHENTIK_POSTGRESQL__PORT: 5432
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_DB_NAME:-${POSTGRES_DB:-postgres}}
+      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_DB_USER:-${POSTGRES_USER:-postgres}}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_DB_PASSWORD:-${POSTGRES_PASSWORD:-postgres}}
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-admin@authentik.local}
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-admin}
+      AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-}
+    command: server
+    ports:
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_AUTHENTIK_PORT:-29090}:9000"
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+    depends_on:
+      postgres-bootstrap:
+        condition: service_completed_successfully
+      dlh-redis:
+        condition: service_healthy
+
+  authentik-worker:
+    <<: *dlh-runtime
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_IMAGE_VERSION:-2026.2.1}
+    container_name: dlh-authentik-worker
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-change-this-authentik-secret-key}
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+      AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
+      AUTHENTIK_REDIS__HOST: ${REDIS_HOST:-dlh-redis}
+      AUTHENTIK_REDIS__PORT: 6379
+      AUTHENTIK_REDIS__PASSWORD: ${REDIS_PASSWORD:-change-this-redis-password}
+      AUTHENTIK_REDIS__DB: ${REDIS_AUTHENTIK_DB:-1}
+      AUTHENTIK_POSTGRESQL__HOST: ${POSTGRES_HOST:-dlh-postgres}
+      AUTHENTIK_POSTGRESQL__PORT: 5432
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_DB_NAME:-${POSTGRES_DB:-postgres}}
+      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_DB_USER:-${POSTGRES_USER:-postgres}}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_DB_PASSWORD:-${POSTGRES_PASSWORD:-postgres}}
+    command: worker
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+    depends_on:
+      postgres-bootstrap:
+        condition: service_completed_successfully
+      dlh-redis:
+        condition: service_healthy
 
   grafana:
     <<: *dlh-runtime
@@ -318,23 +449,23 @@ services:
   # OPTIONAL: Nginx Proxy Manager
   # Uncomment this block when you need reverse proxy / SSL.
   # ----------------------------------------------------------
-  # nginx-proxy-manager:
-  #   image: jc21/nginx-proxy-manager:latest
-  #   container_name: dlh-nginx-proxy-manager
-  #   restart: unless-stopped
-  #   ports:
-  #     - "${DLH_NPM_HTTP_PORT:-28080}:80"
-  #     - "${DLH_NPM_HTTPS_PORT:-28443}:443"
-  #     - "${DLH_NPM_ADMIN_PORT:-28081}:81"
-  #   environment:
-  #     TZ: ${TZ:-Asia/Ho_Chi_Minh}
-  #     DB_SQLITE_FILE: /data/database.sqlite
-  #     DISABLE_IPV6: "true"
-  #   volumes:
-  #     - npm_data:/data
-  #     - npm_letsencrypt:/etc/letsencrypt
-  #   networks:
-  #     - web_network
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: dlh-nginx-proxy-manager
+    restart: unless-stopped
+    ports:
+      - "${DLH_NPM_HTTP_PORT:-80}:80"
+      - "${DLH_NPM_HTTPS_PORT:-443}:443"
+      - "${DLH_NPM_ADMIN_PORT:-28081}:81"
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      DB_SQLITE_FILE: /data/database.sqlite
+      DISABLE_IPV6: "true"
+    volumes:
+      - npm_data:/data
+      - npm_letsencrypt:/etc/letsencrypt
+    networks:
+      - web_network
 
 volumes:
   postgres_data:
@@ -346,6 +477,14 @@ volumes:
   superset_data:
     driver: local
   grafana_data:
+    driver: local
+  redis_data:
+    driver: local
+  redisinsight_data:
+    driver: local
+  authentik_media:
+    driver: local
+  authentik_templates:
     driver: local
   npm_data:
     driver: local

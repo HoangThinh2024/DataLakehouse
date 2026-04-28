@@ -6,8 +6,17 @@ A modern local-first lakehouse stack with Docker Compose, medallion-style data f
 
 - Core stack bootstrap and lifecycle are stable via scripts/setup.sh and scripts/stackctl.sh.
 - End-to-end ETL and Superset dashboard provisioning are now available in non-interactive mode.
+- Shared Redis backend is integrated for Superset caching/results and Authentik background processing.
 - WSL compatibility improved for .env parsing and inherited environment encoding issues.
 - Setup flow can launch ETL + dashboard automatically when selected.
+
+## Recent Enhancements (April 2026)
+
+- **Automated Anti-Duplication:** Implemented `ReplacingMergeTree` across all ClickHouse layers (Silver/Gold/Detail) to ensure idempotent data loading.
+- **Robust Workload Reporting:** Improved personnel detection logic with automatic "Chưa phân công" assignment for missing data.
+- **Docker-Aware Real-time Watcher:** New `realtime_watcher.sh` script monitors RustFS volumes directly to trigger ETL within seconds of file upload.
+- **Data Quality Filtering:** Automatic removal of junk Excel rows (empty IDs) during ingestion.
+- **Optimized Performance:** Forced `OPTIMIZE TABLE ... FINAL` post-ingestion for instant data consistency on dashboards.
 
 ## Documentation
 
@@ -67,9 +76,12 @@ bash scripts/stackctl.sh check-system
 - Mage: http://localhost:26789
 - NocoDB: http://localhost:28082
 - Superset: http://localhost:28088
+- Authentik: http://localhost:29090
 - Grafana: http://localhost:23001
 - PostgreSQL: localhost:25432
 - ClickHouse HTTP: http://localhost:28123
+- Redis: localhost:26379
+- Redis GUI (Redis Stack): http://localhost:25540
 
 ## Lifecycle Management
 
@@ -167,6 +179,12 @@ Data path:
 
 ```text
 PostgreSQL / CSV -> RustFS Bronze -> RustFS Silver -> RustFS Gold -> ClickHouse -> Superset/Grafana
+```
+
+Control/cache path:
+
+```text
+Redis -> Superset cache/results backend + Authentik queue/cache
 ```
 
 ## ETL and Dashboard Automation
