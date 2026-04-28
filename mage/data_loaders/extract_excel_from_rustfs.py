@@ -89,15 +89,34 @@ def load_data(*args, **kwargs):
     db = os.getenv('CLICKHOUSE_DB', 'analytics')
     _ensure_tables(ch_client, db)
 
+    objects = []
     try:
         response = s3_client.list_objects_v2(Bucket=bucket, MaxKeys=max_scan)
-    except ClientError as exc:
-        raise RuntimeError(f'Cannot list s3://{bucket}: {exc}') from exc
+        objects = [
+            obj for obj in response.get('Contents', [])
+            if obj.get('Key', '').lower().endswith('.xlsx')
+        ]
+    except Exception as e:
+        print(f'[extract_excel_from_rustfs] S3 scan failed: {e}. Trying local fallback...')
 
-    objects = [
-        obj for obj in response.get('Contents', [])
-        if obj.get('Key', '').lower().endswith('.xlsx')
-    ]
+    # FALLBACK: If S3 is empty/fails, check the local directory in Mage
+    if not objects:
+        local_path = '/home/src/bronze_local'
+        if os.path.exists(local_path):
+            print(f'[extract_excel_from_rustfs] Scanning local path: {local_path}')
+            for root, _, files in os.walk(local_path):
+                for f in files:
+                    if f.lower().endswith('.xlsx'):
+                        full_path = os.path.join(root, f)
+                        rel_path = os.path.relpath(full_path, local_path)
+                        objects.append({
+                            'Key': rel_path,
+                            'ETag': f'local-{os.path.getsize(full_path)}',
+                            'Size': os.path.getsize(full_path),
+                            'LastModified': dt.datetime.fromtimestamp(os.path.getmtime(full_path)),
+                            'is_local': True,
+                            'full_path': full_path
+                        })
 
     objects.sort(key=lambda x: (x.get('LastModified'), x.get('Key', '')))
 
@@ -111,7 +130,7 @@ def load_data(*args, **kwargs):
             selected_objects.append(obj)
 
     if not selected_objects:
-        print(f'[extract_excel_from_rustfs] No new Excel found at s3://{bucket}')
+        print(f'[extract_excel_from_rustfs] No new Excel found at s3://{bucket} or local path')
         return {'skip': True, 'message': 'no new excel'}
 
     all_dfs = []
@@ -124,8 +143,13 @@ def load_data(*args, **kwargs):
         size = int(selected.get('Size', 0))
         run_id = str(uuid.uuid4())
 
-        obj = s3_client.get_object(Bucket=bucket, Key=source_key)
-        body = obj['Body'].read()
+        if selected.get('is_local'):
+            with open(selected['full_path'], 'rb') as f:
+                body = f.read()
+        else:
+            obj = s3_client.get_object(Bucket=bucket, Key=source_key)
+            body = obj['Body'].read()
+            
         df = pd.read_excel(io.BytesIO(body), engine='openpyxl')
 
         now_utc = dt.datetime.utcnow().isoformat() + 'Z'
