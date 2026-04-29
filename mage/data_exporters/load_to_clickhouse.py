@@ -109,7 +109,7 @@ def _ensure_clickhouse_objects(client: Client, db: str) -> None:
         f'''
         CREATE TABLE IF NOT EXISTS {db}.silver_demo
         (
-            id Nullable(Int64),
+            id Int64,
             name Nullable(String),
             category Nullable(String),
             value Nullable(Float64),
@@ -264,7 +264,12 @@ def load_clickhouse(data, *args, **kwargs):
     finally:
         # Record run
         ended_at = dt.datetime.now(dt.timezone.utc)
-        client.execute(f'INSERT INTO {db}.pipeline_runs VALUES', [{
+        cols = [
+            'run_id', 'pipeline_name', 'status', 'started_at', 'ended_at',
+            'rows_extracted', 'rows_silver', 'rows_gold_daily', 'rows_gold_region',
+            'rows_gold_category', 'error_message'
+        ]
+        client.execute(f'INSERT INTO {db}.pipeline_runs ({", ".join(cols)}) VALUES', [{
             'run_id': run_id, 'pipeline_name': 'etl_postgres_to_lakehouse', 'status': status,
             'started_at': started_at, 'ended_at': ended_at, 'rows_extracted': rows_silver,
             'rows_silver': rows_silver, 'rows_gold_daily': rows_daily, 'rows_gold_region': rows_region,

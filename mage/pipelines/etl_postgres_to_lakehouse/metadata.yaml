@@ -120,7 +120,7 @@ blocks:
   timeout: null
   type: data_exporter
   upstream_blocks:
-  - transform_gold
+  - transform_gold_postgres
   uuid: load_to_clickhouse
 
 name: ETL Postgres to Lakehouse
