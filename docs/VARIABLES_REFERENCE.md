@@ -1,12 +1,21 @@
 # Variables Reference
 
-This document defines the environment variables used by the DataLakehouse stack.
+Complete reference for all environment variables used by the DataLakehouse stack.
 
-Source of truth:
+Sources of truth:
 
-- `.env.example` for defaults
-- `.env` for active deployment values
-- `scripts/setup.sh` and `scripts/stackctl.sh sync-env` for managed updates
+| File | Purpose |
+|------|---------|
+| `.env.example` | Default values template — copy to `.env` and customise |
+| `.env` | Active deployment configuration (not committed to git) |
+| `scripts/setup.sh` | Generates `.env` interactively on first setup |
+| `scripts/stackctl.sh sync-env` | Updates individual `.env` values without full re-setup |
+
+Quick validation:
+
+```bash
+bash scripts/stackctl.sh validate-env
+```
 
 ## 1. Global
 
@@ -123,14 +132,11 @@ Source of truth:
 | `SUPERSET_REDIS_CACHE_DB` | Redis logical DB index used by Superset cache | `2` |
 | `SUPERSET_REDIS_RESULTS_DB` | Redis logical DB index used by Superset SQL Lab results | `3` |
 
-## 9. NocoDB
+## 9. CloudBeaver
 
 | Variable | Description | Example |
 |---|---|---|
-| `DLH_NOCODB_PORT` | Host port for NocoDB | `28082` |
-| `NOCODB_DB_NAME` | NocoDB metadata DB | `dlh_nocodb` |
-| `NOCODB_DB_USER` | NocoDB metadata user | `dlh_nocodb_user` |
-| `NOCODB_DB_PASSWORD` | NocoDB metadata password | `change-this-nocodb-password` |
+| `DLH_CLOUDBEAVER_PORT` | Host port for CloudBeaver web SQL IDE | `28978` |
 
 ## 10. Superset
 
