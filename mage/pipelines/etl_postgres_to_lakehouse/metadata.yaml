@@ -74,20 +74,20 @@ blocks:
   color: null
   configuration: {}
   downstream_blocks:
-  - gold_to_rustfs
+  - gold_to_rustfs_postgres
   - load_to_clickhouse
   executor_config: null
   executor_type: local_python
   has_callback: false
   language: python
-  name: Transform Gold
+  name: Transform Gold Postgres
   retry_config: null
   status: not_executed
   timeout: null
   type: transformer
   upstream_blocks:
   - silver_to_rustfs
-  uuid: transform_gold
+  uuid: transform_gold_postgres
 
 - all_upstream_blocks_executed: true
   color: null
@@ -97,14 +97,14 @@ blocks:
   executor_type: local_python
   has_callback: false
   language: python
-  name: Gold to RustFS
+  name: Gold to RustFS Postgres
   retry_config: null
   status: not_executed
   timeout: null
   type: data_exporter
   upstream_blocks:
-  - transform_gold
-  uuid: gold_to_rustfs
+  - transform_gold_postgres
+  uuid: gold_to_rustfs_postgres
 
 - all_upstream_blocks_executed: true
   color: null
