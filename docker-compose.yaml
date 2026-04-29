@@ -304,28 +304,16 @@ services:
   # LAYER 4: SERVING
   # ==========================================================
 
-  nocodb:
+  cloudbeaver:
     <<: *dlh-runtime
-    image: nocodb/nocodb:${NOCODB_IMAGE_VERSION:-latest}
-    container_name: dlh-nocodb
+    image: dbeaver/cloudbeaver:latest
+    container_name: dlh-cloudbeaver
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
-      NC_DB: pg://${POSTGRES_HOST:-dlh-postgres}:5432?u=${NOCODB_DB_USER:-dlh_nocodb_user}&p=${NOCODB_DB_PASSWORD:-change-me}&d=${NOCODB_DB_NAME:-dlh_nocodb}
-      NC_PUBLIC_URL: ${NOCODB_PUBLIC_URL:-http://${DLH_BIND_IP:-127.0.0.1}:${DLH_NOCODB_PORT:-28082}}
-      NUXT_PUBLIC_NC_BACKEND_URL: ${NOCODB_BACKEND_URL:-http://${DLH_BIND_IP:-127.0.0.1}:${DLH_NOCODB_PORT:-28082}}
-      LITESTREAM_S3_BUCKET: ${RUSTFS_BUCKET:-nocodb}
-      LITESTREAM_S3_ENDPOINT: ${LITESTREAM_S3_ENDPOINT:-http://dlh-rustfs:9000}
-      LITESTREAM_S3_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
-      LITESTREAM_S3_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
-      NC_ALLOW_LOCAL_EXTERNAL_DBS: true
     ports:
-      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_NOCODB_PORT:-28082}:8080"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/api/v1/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_CLOUDBEAVER_PORT:-28978}:8978"
+    volumes:
+      - cloudbeaver_data:/opt/cloudbeaver/workspace
     depends_on:
       postgres-bootstrap:
         condition: service_completed_successfully
@@ -495,6 +483,8 @@ volumes:
   redis_data:
     driver: local
   redisinsight_data:
+    driver: local
+  cloudbeaver_data:
     driver: local
   authentik_media:
     driver: local
