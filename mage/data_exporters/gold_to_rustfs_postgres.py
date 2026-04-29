@@ -39,8 +39,8 @@ def export_gold_postgres(data, *args, **kwargs):
     date_str = dt.date.today().isoformat()
     client = _s3_client()
 
-    _upload_df(client, bucket, f'gold_daily/dt={date_str}/{run_id}.parquet', data.get('gold_daily'))
-    _upload_df(client, bucket, f'gold_region/dt={date_str}/{run_id}.parquet', data.get('gold_region'))
-    _upload_df(client, bucket, f'gold_category/dt={date_str}/{run_id}.parquet', data.get('gold_category'))
+    _upload_df(client, bucket, f'demo_daily/dt={date_str}/{run_id}.parquet', data.get('gold_daily'))
+    _upload_df(client, bucket, f'demo_by_region/dt={date_str}/{run_id}.parquet', data.get('gold_region'))
+    _upload_df(client, bucket, f'demo_by_category/dt={date_str}/{run_id}.parquet', data.get('gold_category'))
 
     return data

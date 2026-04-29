@@ -326,8 +326,10 @@ services:
     <<: *dlh-runtime
     image: apache/superset:${SUPERSET_IMAGE_VERSION:-latest}
     container_name: dlh-superset
+    user: root
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      PYTHONPATH: /app/pythonpath:/app/.venv/lib/python3.10/site-packages
       SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
       SUPERSET_CONFIG_PATH: ${SUPERSET_CONFIG_PATH:-/app/pythonpath/superset_config.py}
       SUPERSET_LOAD_EXAMPLES: "${SUPERSET_LOAD_EXAMPLES:-no}"
@@ -354,11 +356,11 @@ services:
         condition: service_healthy
     command: >
       /bin/sh -c "
-      pip install --target /app/.venv/lib/python3.10/site-packages $${_PIP_ADDITIONAL_REQUIREMENTS} && \
-      superset db upgrade && \
-      superset fab create-admin --username ${SUPERSET_ADMIN_USER:-admin} --firstname Admin --lastname User --email ${SUPERSET_ADMIN_EMAIL:-admin@superset.local} --password ${SUPERSET_ADMIN_PASSWORD:-admin} || true && \
-      superset init && \
-      superset run -h 0.0.0.0 -p 8088 --with-threads
+      /usr/local/bin/pip install --target /app/.venv/lib/python3.10/site-packages $${_PIP_ADDITIONAL_REQUIREMENTS} && \
+      /app/.venv/bin/superset db upgrade && \
+      /app/.venv/bin/superset fab create-admin --username ${SUPERSET_ADMIN_USER:-admin} --firstname Admin --lastname User --email ${SUPERSET_ADMIN_EMAIL:-admin@superset.local} --password ${SUPERSET_ADMIN_PASSWORD:-admin} || true && \
+      /app/.venv/bin/superset init && \
+      /app/.venv/bin/superset run -h 0.0.0.0 -p 8088 --with-threads
       "
 
   # ==========================================================
