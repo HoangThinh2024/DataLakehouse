@@ -4,6 +4,7 @@ import logging
 import sys
 import boto3
 from botocore.client import Config as BotoConfig
+from botocore.exceptions import ClientError
 from clickhouse_driver import Client
 
 # Configure logging
@@ -17,7 +18,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configuration from environment or defaults
+# RUSTFS_S3_ENDPOINT: Used by this script to communicate with RustFS S3 API (Host/External)
 RUSTFS_S3_ENDPOINT = os.getenv('RUSTFS_S3_ENDPOINT', 'http://127.0.0.1:29100')
+# RUSTFS_INTERNAL_ENDPOINT: Used by ClickHouse server to reach RustFS (Container/Internal)
 RUSTFS_INTERNAL_ENDPOINT = os.getenv('RUSTFS_INTERNAL_ENDPOINT', 'http://dlh-rustfs:9000')
 
 # Secrets should be provided via environment variables
@@ -30,8 +33,8 @@ CLICKHOUSE_USER = os.getenv('CLICKHOUSE_USER')
 CLICKHOUSE_PASSWORD = os.getenv('CLICKHOUSE_PASSWORD')
 DB_NAME = os.getenv('CLICKHOUSE_DB', 'analytics')
 
-BACKUP_BUCKET = 'backups'
-RETENTION_DAYS = 30  # Keep backups and old data for 30 days
+BACKUP_BUCKET = os.getenv('BACKUP_BUCKET', 'backups')
+RETENTION_DAYS = int(os.getenv('RETENTION_DAYS', '30'))  # Keep backups and old data for N days
 
 def validate_config():
     """Validate that all required environment variables are set."""
@@ -52,6 +55,7 @@ def validate_config():
     logger.info("Configuration validated successfully.")
 
 def get_s3_client():
+    """Initialize and return a boto3 S3 client configured for RustFS."""
     return boto3.client(
         's3',
         endpoint_url=RUSTFS_S3_ENDPOINT,
@@ -61,6 +65,12 @@ def get_s3_client():
     )
 
 def backup_clickhouse():
+    """
+    Perform a native ClickHouse backup to RustFS.
+    
+    This function creates the backup bucket if it doesn't exist and then
+    triggers the BACKUP DATABASE command in ClickHouse.
+    """
     logger.info("Starting ClickHouse backup...")
     date_str = dt.date.today().isoformat()
     s3_client = get_s3_client()
@@ -68,29 +78,40 @@ def backup_clickhouse():
     # Ensure backup bucket exists
     try:
         s3_client.create_bucket(Bucket=BACKUP_BUCKET)
-    except Exception:
-        # Bucket might already exist
-        pass
+    except ClientError as e:
+        # If the bucket already exists, we can ignore the error
+        error_code = e.response.get('Error', {}).get('Code')
+        if error_code not in ('BucketAlreadyExists', 'BucketAlreadyOwnedByYou'):
+            logger.warning(f"Unexpected error creating bucket {BACKUP_BUCKET}: {e}")
+    except Exception as e:
+        logger.warning(f"Non-S3 error while ensuring bucket {BACKUP_BUCKET} exists: {e}")
     
     # ClickHouse Native Backup to S3 (RustFS)
-    # The server needs the INTERNAL endpoint
+    # The server needs the INTERNAL endpoint to reach RustFS from within the network
     backup_path = f"S3('{RUSTFS_INTERNAL_ENDPOINT}/{BACKUP_BUCKET}/clickhouse/{date_str}/', '{ACCESS_KEY}', '{SECRET_KEY}')"
     
     logger.info(f"Connecting to ClickHouse at {CLICKHOUSE_HOST}:{CLICKHOUSE_PORT}...")
-    client = Client(
-        host=CLICKHOUSE_HOST,
-        port=CLICKHOUSE_PORT,
-        user=CLICKHOUSE_USER,
-        password=CLICKHOUSE_PASSWORD
-    )
+    
     try:
-        logger.info(f"Running BACKUP DATABASE {DB_NAME} to RustFS...")
-        client.execute(f"BACKUP DATABASE {DB_NAME} TO {backup_path}")
-        logger.info(f"Backup successful: s3://{BACKUP_BUCKET}/clickhouse/{date_str}/")
+        with Client(
+            host=CLICKHOUSE_HOST,
+            port=CLICKHOUSE_PORT,
+            user=CLICKHOUSE_USER,
+            password=CLICKHOUSE_PASSWORD
+        ) as client:
+            logger.info(f"Running BACKUP DATABASE {DB_NAME} to RustFS...")
+            client.execute(f"BACKUP DATABASE {DB_NAME} TO {backup_path}")
+            logger.info(f"Backup successful: s3://{BACKUP_BUCKET}/clickhouse/{date_str}/")
     except Exception as e:
         logger.error(f"Backup failed: {e}")
 
 def cleanup_old_data():
+    """
+    Delete objects older than RETENTION_DAYS from specified buckets.
+    
+    Iterates through 'silver', 'gold', and 'backups' buckets and removes
+    any object whose LastModified date is before the cutoff.
+    """
     logger.info("Starting cleanup tasks...")
     s3_client = get_s3_client()
     cutoff_date = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=RETENTION_DAYS)
