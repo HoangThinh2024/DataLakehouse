@@ -160,7 +160,6 @@ prepare_ports() {
   UI_PORTS=(
     "${DLH_GRAFANA_PORT:-23001}"        # Grafana UI
     "${DLH_MAGE_PORT:-26789}"           # Mage orchestration UI
-    "${DLH_NOCODB_PORT:-28082}"         # NocoDB UI
     "${DLH_SUPERSET_PORT:-28088}"       # Superset analytics UI
     "${DLH_RUSTFS_CONSOLE_PORT:-29101}" # RustFS console
   )
@@ -219,7 +218,7 @@ apply_rules() {
 
   echo
   echo "Managed port groups:"
-  echo "  UI ports   : Grafana, Mage, NocoDB, Superset, RustFS console"
+  echo "  UI ports   : Grafana, Mage, Superset, RustFS console"
   echo "  Data ports : PostgreSQL, ClickHouse HTTP/TCP, RustFS API (optional)"
   echo
 
@@ -229,7 +228,6 @@ apply_rules() {
     case "$port" in
       23001) service_name="grafana" ;;
       26789) service_name="mage" ;;
-      28082) service_name="nocodb" ;;
       28088) service_name="superset" ;;
       29101) service_name="rustfs-console" ;;
       *) service_name="unknown" ;;

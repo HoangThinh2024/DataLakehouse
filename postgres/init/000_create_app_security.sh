@@ -3,7 +3,6 @@ set -euo pipefail
 
 APP_CONFIGS=(
   "${MAGE_DB_NAME:-dlh_mage}|${MAGE_DB_USER:-dlh_mage_user}|${MAGE_DB_PASSWORD:-change-me}"
-  "${NOCODB_DB_NAME:-dlh_nocodb}|${NOCODB_DB_USER:-dlh_nocodb_user}|${NOCODB_DB_PASSWORD:-change-me}"
   "${SUPERSET_DB_NAME:-dlh_superset}|${SUPERSET_DB_USER:-dlh_superset_user}|${SUPERSET_DB_PASSWORD:-change-me}"
   "${GRAFANA_DB_NAME:-dlh_grafana}|${GRAFANA_DB_USER:-dlh_grafana_user}|${GRAFANA_DB_PASSWORD:-change-me}"
   "${AUTHENTIK_DB_NAME:-dlh_authentik}|${AUTHENTIK_DB_USER:-dlh_authentik_user}|${AUTHENTIK_DB_PASSWORD:-change-me}"

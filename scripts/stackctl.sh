@@ -113,7 +113,7 @@ check_env() {
     SOURCE_DB_NAME SOURCE_DB_USER SOURCE_SCHEMA SOURCE_TABLE SOURCE_TABLE_CANDIDATES \
     MAGE_DEFAULT_OWNER_EMAIL MAGE_DEFAULT_OWNER_USERNAME \
     CLICKHOUSE_DB CLICKHOUSE_USER DLH_CLICKHOUSE_HTTP_PORT DLH_CLICKHOUSE_TCP_PORT \
-    DLH_RUSTFS_API_PORT DLH_RUSTFS_CONSOLE_PORT DLH_MAGE_PORT DLH_NOCODB_PORT DLH_SUPERSET_PORT DLH_GRAFANA_PORT \
+    DLH_RUSTFS_API_PORT DLH_RUSTFS_CONSOLE_PORT DLH_MAGE_PORT DLH_SUPERSET_PORT DLH_GRAFANA_PORT \
     SUPERSET_ADMIN_USER SUPERSET_PREFERRED_URL_SCHEME
   do
     print_env_value "$key"
@@ -125,7 +125,7 @@ check_env() {
     problems=$((problems + 1))
   fi
 
-  for key in DLH_POSTGRES_PORT DLH_RUSTFS_API_PORT DLH_RUSTFS_CONSOLE_PORT DLH_CLICKHOUSE_HTTP_PORT DLH_CLICKHOUSE_TCP_PORT DLH_MAGE_PORT DLH_NOCODB_PORT DLH_SUPERSET_PORT DLH_GRAFANA_PORT; do
+  for key in DLH_POSTGRES_PORT DLH_RUSTFS_API_PORT DLH_RUSTFS_CONSOLE_PORT DLH_CLICKHOUSE_HTTP_PORT DLH_CLICKHOUSE_TCP_PORT DLH_MAGE_PORT DLH_SUPERSET_PORT DLH_GRAFANA_PORT; do
     value="${!key:-}"
     if [[ -n "$value" ]] && ! is_valid_port "$value"; then
       err "Invalid $key: $value"
@@ -144,7 +144,7 @@ sync_env() {
   load_env_file
   echo "Update mutable environment values. Leave blank to keep the current value."
 
-  local bind_ip app_bind_ip data_bind_ip lan_cidr allow_data_ports postgres_port rustfs_api_port rustfs_console_port clickhouse_http_port clickhouse_tcp_port mage_port nocodb_port superset_port grafana_port superset_scheme mage_owner_email mage_owner_username mage_owner_password
+  local bind_ip app_bind_ip data_bind_ip lan_cidr allow_data_ports postgres_port rustfs_api_port rustfs_console_port clickhouse_http_port clickhouse_tcp_port mage_port superset_port grafana_port superset_scheme mage_owner_email mage_owner_username mage_owner_password
   bind_ip="$(ask_input "Bind IP" "${DLH_BIND_IP:-127.0.0.1}")"
   app_bind_ip="$(ask_input "App/UI bind IP" "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}")"
   data_bind_ip="$(ask_input "Data/DB bind IP" "${DLH_DATA_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}")"
@@ -159,7 +159,6 @@ sync_env() {
   mage_owner_email="$(ask_input "Mage default owner email" "${MAGE_DEFAULT_OWNER_EMAIL:-admin@admin.com}")"
   mage_owner_username="$(ask_input "Mage default owner username" "${MAGE_DEFAULT_OWNER_USERNAME:-admin}")"
   mage_owner_password="$(ask_input "Mage default owner password" "${MAGE_DEFAULT_OWNER_PASSWORD:-admin}")"
-  nocodb_port="$(ask_input "NocoDB port" "${DLH_NOCODB_PORT:-28082}")"
   superset_port="$(ask_input "Superset port" "${DLH_SUPERSET_PORT:-28088}")"
   grafana_port="$(ask_input "Grafana port" "${DLH_GRAFANA_PORT:-23001}")"
   superset_scheme="$(ask_input "Superset URL scheme" "${SUPERSET_PREFERRED_URL_SCHEME:-http}")"
@@ -178,7 +177,6 @@ sync_env() {
   upsert_env_var "MAGE_DEFAULT_OWNER_EMAIL" "$mage_owner_email"
   upsert_env_var "MAGE_DEFAULT_OWNER_USERNAME" "$mage_owner_username"
   upsert_env_var "MAGE_DEFAULT_OWNER_PASSWORD" "$mage_owner_password"
-  upsert_env_var "DLH_NOCODB_PORT" "$nocodb_port"
   upsert_env_var "DLH_SUPERSET_PORT" "$superset_port"
   upsert_env_var "DLH_GRAFANA_PORT" "$grafana_port"
   upsert_env_var "SUPERSET_PREFERRED_URL_SCHEME" "$superset_scheme"
@@ -235,7 +233,6 @@ check_system() {
     "dlh-rustfs:${DLH_RUSTFS_API_PORT:-29100}"
     "dlh-clickhouse:${DLH_CLICKHOUSE_HTTP_PORT:-28123}"
     "dlh-mage:${DLH_MAGE_PORT:-26789}"
-    "dlh-nocodb:${DLH_NOCODB_PORT:-28082}"
     "dlh-superset:${DLH_SUPERSET_PORT:-28088}"
     "dlh-grafana:${DLH_GRAFANA_PORT:-23001}"
   )
@@ -269,7 +266,6 @@ health() {
     "dlh-rustfs:${DLH_RUSTFS_API_PORT:-29100}:RustFS API"
     "dlh-clickhouse:${DLH_CLICKHOUSE_HTTP_PORT:-28123}:ClickHouse"
     "dlh-mage:${DLH_MAGE_PORT:-26789}:Mage"
-    "dlh-nocodb:${DLH_NOCODB_PORT:-28082}:NocoDB"
     "dlh-superset:${DLH_SUPERSET_PORT:-28088}:Superset"
     "dlh-grafana:${DLH_GRAFANA_PORT:-23001}:Grafana"
   )

@@ -63,7 +63,7 @@ services:
       start_period: 30s
 
   # PostgreSQL bootstrap – re-sync app roles/passwords on every `docker compose up`
-  # This keeps Grafana/Mage/NocoDB/Superset aligned even if the data volume already exists.
+  # This keeps Grafana/Mage/Superset aligned even if the data volume already exists.
   postgres-bootstrap:
     <<: *dlh-runtime
     image: postgres:${POSTGRES_IMAGE_VERSION:-17-alpine}
