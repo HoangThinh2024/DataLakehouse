@@ -11,6 +11,7 @@ Validates:
 import sys
 import os
 import socket
+from urllib.parse import urlparse
 
 # Add mage path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -65,6 +66,17 @@ def _local_ip_candidates() -> list[str]:
     return unique
 
 
+def is_port_open(host: str, port: int, timeout: float = 1.0) -> bool:
+    """Check if a TCP port is open."""
+    if not host or not port:
+        return False
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except (socket.timeout, ConnectionRefusedError, OSError):
+        return False
+
+
 def _connect_s3_client():
     """Connect to RustFS, falling back to localhost when running on host."""
     host_ips = _local_ip_candidates()
@@ -82,6 +94,17 @@ def _connect_s3_client():
         if not endpoint or endpoint in seen:
             continue
         seen.add(endpoint)
+
+        # Fast port probe before full boto3 connection
+        try:
+            parsed = urlparse(endpoint)
+            host = parsed.hostname
+            port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+            if not is_port_open(host, port):
+                continue
+        except Exception:
+            pass
+
         client = _s3_client(endpoint)
         try:
             client.list_buckets()
@@ -91,7 +114,8 @@ def _connect_s3_client():
 
     raise RuntimeError(
         'Could not connect to RustFS using any known endpoint. '
-        'Set RUSTFS_ENDPOINT_URL for the current environment.'
+        'Ensure RustFS is running, ports are mapped (9000 internal or 29100 external), '
+        'and credentials in .env (RUSTFS_ACCESS_KEY/SECRET_KEY) are correct.'
     )
 
 
@@ -221,6 +245,8 @@ def check_clickhouse_architecture():
             if not host:
                 continue
             for port in port_candidates:
+                if not is_port_open(host, port):
+                    continue
                 try:
                     ch_client = CH_Client(
                         host=host,
@@ -240,7 +266,11 @@ def check_clickhouse_architecture():
                 break
 
         if ch_client is None:
-            raise RuntimeError(f'Could not connect to ClickHouse: {last_error}')
+            raise RuntimeError(
+                f'Could not connect to ClickHouse: {last_error}. '
+                'Ensure ClickHouse is running, ports are mapped (9000 internal or 29000 external), '
+                'and credentials in .env (CLICKHOUSE_USER/PASSWORD) are correct.'
+            )
         
         # Check that tables exist
         result = ch_client.execute("SHOW TABLES IN analytics")
