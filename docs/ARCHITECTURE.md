@@ -322,6 +322,7 @@ Internet
    ├──▶ dlh-mage:6789     (pipeline UI)
    ├──▶ dlh-superset:8088 (dashboards)
    ├──▶ dlh-grafana:3000  (monitoring)
+   ├──▶ dlh-dockhand:3000 (docker mgmt)
    ├──▶ dlh-rustfs:9001   (object store console)
    └──▶ dlh-authentik:9000 (identity provider)
 
@@ -356,4 +357,6 @@ and embedded in the root `README.md`.
 *For deployment steps see [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md).*
 *For pipeline details see [PIPELINE_GUIDE.md](PIPELINE_GUIDE.md).*
 *For environment variables see [VARIABLES_REFERENCE.md](VARIABLES_REFERENCE.md).*
+*For day-2 operations see [OPERATIONS.md](OPERATIONS.md).*
+CE.md).*
 *For day-2 operations see [OPERATIONS.md](OPERATIONS.md).*
