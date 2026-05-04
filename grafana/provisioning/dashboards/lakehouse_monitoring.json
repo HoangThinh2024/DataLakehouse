@@ -2,10 +2,11 @@
   "__inputs": [],
   "__requires": [
     { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0" },
-    { "type": "datasource", "id": "grafana-clickhouse-datasource", "name": "ClickHouse", "version": "4.0.0" }
+    { "type": "datasource", "id": "grafana-clickhouse-datasource", "name": "ClickHouse", "version": "4.0.0" },
+    { "type": "datasource", "id": "postgres", "name": "PostgreSQL", "version": "1.0.0" }
   ],
   "annotations": { "list": [] },
-  "description": "Demo command center for DataLakehouse: ETL run health, CSV upload quality, and ingestion throughput.",
+  "description": "Comprehensive command center for DataLakehouse: ETL health, Storage stats, and DB performance.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 2,
@@ -246,6 +247,121 @@
     {
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 15,
+      "title": "Storage & Database Health",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "postgres_main" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 6 },
+      "id": 16,
+      "options": {
+        "colorMode": "value",
+        "justifyMode": "center",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "title": "Total Datasets (Metadata)",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "postgres_main" },
+          "format": "table",
+          "rawSql": "SELECT count(*) FROM lakehouse.dataset",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "postgres_main" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 6 },
+      "id": 17,
+      "options": {
+        "colorMode": "value",
+        "justifyMode": "center",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "title": "Total Data Objects (Lake)",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "postgres_main" },
+          "format": "table",
+          "rawSql": "SELECT count(*) FROM lakehouse.data_object",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "orange", "value": null }] },
+          "unit": "decbytes"
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 6 },
+      "id": 18,
+      "options": {
+        "colorMode": "value",
+        "justifyMode": "center",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "title": "ClickHouse Disk Usage",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
+          "format": "table",
+          "rawSql": "SELECT sum(bytes_on_disk) FROM system.parts WHERE active",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }] },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 6 },
+      "id": 19,
+      "options": {
+        "colorMode": "value",
+        "justifyMode": "center",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "title": "Active Parts Count",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
+          "format": "table",
+          "rawSql": "SELECT count() FROM system.parts WHERE active",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 10 },
       "id": 8,
       "title": "Ingestion Trends",
       "type": "row"
@@ -263,7 +379,7 @@
           { "matcher": { "id": "byName", "options": "dropped_rows" }, "properties": [{ "id": "displayName", "value": "Dropped Rows" }] }
         ]
       },
-      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 6 },
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 11 },
       "id": 9,
       "options": {
         "legend": { "displayMode": "table", "placement": "bottom" },
@@ -286,7 +402,7 @@
         "defaults": { "color": { "mode": "palette-classic" } },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 6 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 11 },
       "id": 10,
       "options": {
         "displayLabels": ["percent"],
@@ -313,7 +429,7 @@
           { "matcher": { "id": "byName", "options": "rows_silver" }, "properties": [{ "id": "displayName", "value": "Rows Silver" }] }
         ]
       },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 14 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 19 },
       "id": 11,
       "options": {
         "legend": { "displayMode": "list", "placement": "bottom" },
@@ -332,7 +448,7 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 },
       "id": 12,
       "title": "Operational Details",
       "type": "row"
@@ -362,7 +478,7 @@
           }
         ]
       },
-      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 23 },
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 28 },
       "id": 13,
       "options": {
         "showHeader": true,
@@ -392,7 +508,7 @@
           }
         ]
       },
-      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 23 },
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 28 },
       "id": 14,
       "options": {
         "showHeader": true,
@@ -412,13 +528,13 @@
   ],
   "refresh": "30s",
   "schemaVersion": 38,
-  "tags": ["datalakehouse", "demo", "etl", "csv"],
+  "tags": ["datalakehouse", "monitoring", "etl", "infra"],
   "templating": { "list": [] },
   "time": { "from": "now-7d", "to": "now" },
   "timepicker": {},
   "timezone": "Asia/Ho_Chi_Minh",
-  "title": "DataLakehouse Demo Command Center",
+  "title": "DataLakehouse Command Center",
   "uid": "dlh-etl-monitoring",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }
