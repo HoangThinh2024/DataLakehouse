@@ -471,6 +471,23 @@ services:
     networks:
       - web_network
 
+  # ==========================================================
+  # INFRA: DOCKER MANAGEMENT (Dockhand)
+  # ==========================================================
+  dockhand:
+    image: fnsys/dockhand:latest
+    container_name: dlh-dockhand
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    ports:
+      - "${DLH_APP_BIND_IP:-127.0.0.1}:${DLH_DOCKHAND_PORT:-23000}:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dockhand_data:/app/data
+    networks:
+      - web_network
+
 volumes:
   postgres_data:
     driver: local
@@ -495,6 +512,8 @@ volumes:
   npm_data:
     driver: local
   npm_letsencrypt:
+    driver: local
+  dockhand_data:
     driver: local
 
 networks:

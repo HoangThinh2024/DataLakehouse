@@ -191,3 +191,86 @@ CREATE TABLE IF NOT EXISTS analytics.csv_upload_events
 ENGINE = MergeTree
 PARTITION BY toYYYYMM(processed_at)
 ORDER BY (source_key, etag, processed_at);
+
+-- =============================================================
+-- EXCEL PROJECTS: Task management and reporting
+-- =============================================================
+CREATE TABLE IF NOT EXISTS analytics.project_reports
+(
+    `Tên công việc` Nullable(String),
+    `Người giao việc` Nullable(String),
+    `Người thực hiện` Nullable(String),
+    `Người theo dõi` Nullable(String),
+    `Khẩn cấp` Nullable(String),
+    `Quan trọng` Nullable(String),
+    `Danh sách nhãn` Nullable(String),
+    `Ngày bắt đầu` Nullable(String),
+    `Thời hạn` Nullable(String),
+    `Hoàn thành thực tế` Nullable(String),
+    `Mô tả công việc` Nullable(String),
+    `Trạng thái` Nullable(String),
+    `Kết quả công việc` Nullable(String),
+    `Mục tiêu` Nullable(String),
+    `Mục tiêu hoàn thành` Nullable(String),
+    `Số tiền` Nullable(String),
+    `Diện tích (ha)` Nullable(String),
+    `Chủ trì` Nullable(String),
+    `Phòng ban phối hợp` Nullable(String),
+    `Ghi chú` Nullable(String),
+    `Ngày tạo` Nullable(String),
+    `Mã công việc (ID)` String,
+    `Mã công việc cha (ID)` Nullable(String),
+    `Metatype` Nullable(String),
+    `_pipeline_run_id` Nullable(String),
+    `_source_table` Nullable(String),
+    `_source_file_key` String,
+    `_source_file_etag` Nullable(String),
+    `_extracted_at` Nullable(DateTime64(3)),
+    `_silver_processed_at` Nullable(DateTime64(3)),
+    `_db_processed_at` DateTime64(3) DEFAULT now64(3)
+)
+ENGINE = ReplacingMergeTree(_db_processed_at)
+ORDER BY (_source_file_key, `Mã công việc (ID)`);
+
+CREATE TABLE IF NOT EXISTS analytics.gold_projects_summary
+(
+    `_source_file_key` String,
+    `total_tasks` UInt64,
+    `completed_tasks` UInt64,
+    `ongoing_tasks` UInt64,
+    `overdue_tasks` UInt64,
+    `completion_rate` Float64,
+    `_pipeline_run_id` String,
+    `_gold_processed_at` DateTime64(3),
+    `_db_inserted_at` DateTime64(3) DEFAULT now64(3)
+)
+ENGINE = ReplacingMergeTree(_db_inserted_at)
+ORDER BY _source_file_key;
+
+CREATE TABLE IF NOT EXISTS analytics.gold_workload_report
+(
+    `Người thực hiện` String,
+    `task_count` UInt64,
+    `urgent_tasks` UInt64,
+    `_pipeline_run_id` String,
+    `_gold_processed_at` DateTime64(3),
+    `_db_inserted_at` DateTime64(3) DEFAULT now64(3)
+)
+ENGINE = ReplacingMergeTree(_db_inserted_at)
+ORDER BY `Người thực hiện`;
+
+CREATE TABLE IF NOT EXISTS analytics.excel_upload_events
+(
+    `source_key` String,
+    `etag` String,
+    `source_size` Int64,
+    `source_last_modified` Nullable(DateTime64(3)),
+    `status` String,
+    `row_count` Int64 DEFAULT 0,
+    `processed_at` DateTime64(3) DEFAULT now64(3),
+    `pipeline_run_id` String DEFAULT '',
+    `error_message` Nullable(String)
+)
+ENGINE = MergeTree
+PARTITION BY toYYYYMM(processed_at)
+ORDER BY (source_key, etag, processed_at);

@@ -21,6 +21,7 @@ OLAP analytics, and business intelligence dashboards — all on a single host.
 | **Identity** | Authentik | Centralised SSO and RBAC |
 | **Cache** | Redis (Stack) | Shared cache / queue for Superset and Authentik |
 | **SQL IDE** | CloudBeaver | Web-based SQL client for PostgreSQL and ClickHouse |
+| **Docker Mgmt** | Dockhand | Lightweight web-based Docker management UI |
 | **Proxy** | Nginx Proxy Manager | Optional TLS reverse proxy |
 
 ---
@@ -35,6 +36,7 @@ OLAP analytics, and business intelligence dashboards — all on a single host.
 | Grafana | http://localhost:23001 | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` |
 | Authentik | http://localhost:29090 | `AUTHENTIK_BOOTSTRAP_EMAIL` / `AUTHENTIK_BOOTSTRAP_PASSWORD` |
 | CloudBeaver | http://localhost:28978 | (configured on first login) |
+| Dockhand | http://localhost:23000 | (no auth by default) |
 | Nginx Proxy Manager | http://localhost:28081 | (configured on first login) |
 | PostgreSQL | localhost:25432 | `POSTGRES_USER` / `POSTGRES_PASSWORD` |
 | ClickHouse HTTP | http://localhost:28123 | `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` |
