@@ -138,7 +138,13 @@ bash scripts/stackctl.sh validate-env
 |---|---|---|
 | `DLH_CLOUDBEAVER_PORT` | Host port for CloudBeaver web SQL IDE | `28978` |
 
-## 10. Superset
+## 10. Dockhand
+
+| Variable | Description | Example |
+|---|---|---|
+| `DLH_DOCKHAND_PORT` | Host port for Dockhand (Docker Management UI) | `23000` |
+
+## 11. Superset
 
 | Variable | Description | Example |
 |---|---|---|

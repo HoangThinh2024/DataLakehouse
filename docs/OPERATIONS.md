@@ -138,6 +138,18 @@ See [VARIABLES_REFERENCE.md](VARIABLES_REFERENCE.md) for all available variables
 uv run python scripts/run_etl_and_dashboard.py
 ```
 
+### Loading Sample Data
+
+To verify system stability and table relationships, you can load sample data into the PostgreSQL source table:
+
+```bash
+# Load sample data from the init script
+docker exec -i dlh-postgres psql -U postgres -d datalakehouse < postgres/init/002_sample_data.sql
+
+# Verify rows in the source table
+docker exec dlh-postgres psql -U postgres -d datalakehouse -c "SELECT count(*) FROM public.\"Demo\";"
+```
+
 ### Non-interactive / CI-friendly
 
 ```bash
