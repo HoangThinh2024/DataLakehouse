@@ -4,6 +4,15 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$REPO_ROOT/.env"
 
+error_handler() {
+  local exit_code=$?
+  local line_number=$1
+  err "Error occurred on line $line_number with exit code $exit_code"
+  exit "$exit_code"
+}
+
+trap 'error_handler $LINENO' ERR
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -187,8 +196,11 @@ compose_up() {
 }
 
 compose_down() {
-  info "Stopping stack and cleaning firewall rules..."
-  bash "$REPO_ROOT/scripts/setup_ufw_docker.sh" --down
+  info "Stopping stack..."
+  (cd "$REPO_ROOT" && docker compose down)
+
+  info "Attempting to clean firewall rules (non-blocking)..."
+  bash "$REPO_ROOT/scripts/setup_ufw_docker.sh" --down || warn "Firewall cleanup skipped or failed."
 }
 
 redeploy() {
