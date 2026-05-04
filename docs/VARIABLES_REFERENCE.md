@@ -23,7 +23,7 @@ bash scripts/stackctl.sh validate-env
 |---|---|---|
 | `TZ` | Container timezone | `Asia/Ho_Chi_Minh` |
 | `DLH_BIND_IP` | Host bind IP for published ports | `127.0.0.1` |
-| `DLH_APP_BIND_IP` | Host bind IP for UI/app ports (Mage, NocoDB, Superset, Grafana, RustFS console) | `127.0.0.1` |
+| `DLH_APP_BIND_IP` | Host bind IP for UI/app ports (Mage, Superset, Grafana, RustFS console) | `127.0.0.1` |
 | `DLH_DATA_BIND_IP` | Host bind IP for data/database ports (PostgreSQL, ClickHouse, RustFS API) | `0.0.0.0` |
 | `DLH_LAN_CIDR` | Trusted LAN range for firewall rules | `192.168.1.0/24` |
 | `UFW_ALLOW_DATA_PORTS` | Whether data ports are opened to LAN by firewall script | `false` |
@@ -37,7 +37,6 @@ bash scripts/stackctl.sh validate-env
 | `MINIO_MC_IMAGE_VERSION` | MinIO mc client tag for rustfs-init | `latest` |
 | `CLICKHOUSE_IMAGE_VERSION` | ClickHouse image tag | `latest` |
 | `MAGE_IMAGE_VERSION` | Mage image tag | `latest` |
-| `NOCODB_IMAGE_VERSION` | NocoDB image tag | `latest` |
 | `SUPERSET_IMAGE_VERSION` | Superset image tag | `latest` |
 | `GRAFANA_IMAGE_VERSION` | Grafana image tag | `latest` |
 | `REDIS_STACK_IMAGE_VERSION` | Redis Stack image tag | `7.4.2-v3` |
@@ -73,7 +72,7 @@ bash scripts/stackctl.sh validate-env
 | `DLH_RUSTFS_CONSOLE_PORT` | Host port mapped to RustFS console | `29101` |
 | `RUSTFS_CORS_ALLOWED_ORIGINS` | Allowed origins for RustFS API | `http://127.0.0.1:29100` |
 | `RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS` | Allowed origins for RustFS console | `http://127.0.0.1:29101` |
-| `RUSTFS_BUCKET` | Generic app bucket | `nocodb` |
+| `RUSTFS_BUCKET` | Generic app bucket | `general` |
 | `RUSTFS_BRONZE_BUCKET` | Bronze layer bucket | `bronze` |
 | `RUSTFS_SILVER_BUCKET` | Silver layer bucket | `silver` |
 | `RUSTFS_GOLD_BUCKET` | Gold layer bucket | `gold` |

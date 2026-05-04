@@ -177,7 +177,6 @@ ask RUSTFS_IMAGE_VERSION     "RustFS image tag"             "${RUSTFS_IMAGE_VERS
 ask MINIO_MC_IMAGE_VERSION   "MinIO mc (rustfs-init) tag"   "${MINIO_MC_IMAGE_VERSION:-latest}"
 ask CLICKHOUSE_IMAGE_VERSION "ClickHouse image tag"         "${CLICKHOUSE_IMAGE_VERSION:-latest}"
 ask MAGE_IMAGE_VERSION       "Mage image tag"               "${MAGE_IMAGE_VERSION:-latest}"
-ask NOCODB_IMAGE_VERSION     "NocoDB image tag"             "${NOCODB_IMAGE_VERSION:-latest}"
 ask SUPERSET_IMAGE_VERSION   "Superset image tag"           "${SUPERSET_IMAGE_VERSION:-latest}"
 ask GRAFANA_IMAGE_VERSION    "Grafana image tag"            "${GRAFANA_IMAGE_VERSION:-latest}"
 
@@ -232,13 +231,12 @@ ask DLH_CLICKHOUSE_TCP_PORT   "Host port – ClickHouse TCP"  "${DLH_CLICKHOUSE_
 
 # =============================================================
 header "7 / 8 – App Service Passwords"
-echo "  (Mage, NocoDB, Superset, Grafana metadata DB passwords)"
+echo "  (Mage, Superset, Grafana metadata DB passwords)"
 
 ask MAGE_DB_PASSWORD     "Mage DB password"     "${MAGE_DB_PASSWORD:-change-this-mage-password}"
 ask MAGE_DEFAULT_OWNER_EMAIL "Mage default owner email" "${MAGE_DEFAULT_OWNER_EMAIL:-admin@admin.com}"
 ask MAGE_DEFAULT_OWNER_USERNAME "Mage default owner username" "${MAGE_DEFAULT_OWNER_USERNAME:-admin}"
 ask MAGE_DEFAULT_OWNER_PASSWORD "Mage default owner password" "${MAGE_DEFAULT_OWNER_PASSWORD:-admin}"
-ask NOCODB_DB_PASSWORD   "NocoDB DB password"   "${NOCODB_DB_PASSWORD:-change-this-nocodb-password}"
 ask SUPERSET_SECRET_KEY  "Superset secret key"  "${SUPERSET_SECRET_KEY:-replace-this-secret}"
 ask SUPERSET_DB_PASSWORD "Superset DB password" "${SUPERSET_DB_PASSWORD:-change-this-superset-db-password}"
 ask SUPERSET_ADMIN_USER  "Superset admin user"  "${SUPERSET_ADMIN_USER:-admin}"
@@ -251,7 +249,6 @@ ask GRAFANA_ADMIN_PASSWORD "Grafana admin password" "${GRAFANA_ADMIN_PASSWORD:-a
 header "8 / 8 – Port Assignments"
 
 ask DLH_MAGE_PORT    "Host port – Mage"    "${DLH_MAGE_PORT:-26789}"
-ask DLH_NOCODB_PORT  "Host port – NocoDB"  "${DLH_NOCODB_PORT:-28082}"
 ask DLH_SUPERSET_PORT "Host port – Superset" "${DLH_SUPERSET_PORT:-28088}"
 ask DLH_GRAFANA_PORT  "Host port – Grafana"  "${DLH_GRAFANA_PORT:-23001}"
 
@@ -294,7 +291,6 @@ RUSTFS_IMAGE_VERSION=${RUSTFS_IMAGE_VERSION}
 MINIO_MC_IMAGE_VERSION=${MINIO_MC_IMAGE_VERSION}
 CLICKHOUSE_IMAGE_VERSION=${CLICKHOUSE_IMAGE_VERSION}
 MAGE_IMAGE_VERSION=${MAGE_IMAGE_VERSION}
-NOCODB_IMAGE_VERSION=${NOCODB_IMAGE_VERSION}
 SUPERSET_IMAGE_VERSION=${SUPERSET_IMAGE_VERSION}
 GRAFANA_IMAGE_VERSION=${GRAFANA_IMAGE_VERSION}
 REDIS_STACK_IMAGE_VERSION=${REDIS_STACK_IMAGE_VERSION:-latest}
@@ -320,7 +316,7 @@ DLH_RUSTFS_API_PORT=${DLH_RUSTFS_API_PORT}
 DLH_RUSTFS_CONSOLE_PORT=${DLH_RUSTFS_CONSOLE_PORT}
 RUSTFS_CORS_ALLOWED_ORIGINS=http://${DLH_BIND_IP}:${DLH_RUSTFS_API_PORT}
 RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS=http://${DLH_BIND_IP}:${DLH_RUSTFS_CONSOLE_PORT}
-RUSTFS_BUCKET=nocodb
+RUSTFS_BUCKET=general
 RUSTFS_BRONZE_BUCKET=bronze
 RUSTFS_SILVER_BUCKET=silver
 RUSTFS_GOLD_BUCKET=gold
@@ -369,12 +365,6 @@ CSV_UPLOAD_ALLOW_ANYWHERE=true
 CSV_UPLOAD_SEPARATOR=,
 CSV_UPLOAD_ENCODING=utf-8
 CSV_UPLOAD_SCAN_LIMIT=200
-
-# ─ NocoDB (Database UI) ────────────────────────────────────
-DLH_NOCODB_PORT=${DLH_NOCODB_PORT}
-NOCODB_DB_NAME=dlh_nocodb
-NOCODB_DB_USER=dlh_nocodb_user
-NOCODB_DB_PASSWORD=${NOCODB_DB_PASSWORD}
 
 # ─ Superset (BI and Analytics) ─────────────────────────────
 DLH_SUPERSET_PORT=${DLH_SUPERSET_PORT}
@@ -443,7 +433,6 @@ echo "    PostgreSQL : postgresql://localhost:${DLH_POSTGRES_PORT}"
 echo "    RustFS     : http://localhost:${DLH_RUSTFS_CONSOLE_PORT}"
 echo "    ClickHouse : http://localhost:${DLH_CLICKHOUSE_HTTP_PORT}"
 echo "    Mage       : http://localhost:${DLH_MAGE_PORT}"
-echo "    NocoDB     : http://localhost:${DLH_NOCODB_PORT}"
 echo "    Superset   : http://localhost:${DLH_SUPERSET_PORT}"
 echo "    Authentik  : http://localhost:${DLH_AUTHENTIK_PORT:-29090}"
 echo "    Grafana    : http://localhost:${DLH_GRAFANA_PORT}"

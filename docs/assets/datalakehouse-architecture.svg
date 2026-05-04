@@ -97,7 +97,7 @@
   <text x="1102" y="402" class="lbl">Serving and Observability</text>
   <text x="1102" y="424" class="txt">Superset dashboards</text>
   <text x="1102" y="444" class="txt">Grafana monitoring</text>
-  <text x="1102" y="464" class="txt">NocoDB operations UI</text>
+  <!-- NocoDB removed -->
 
   <line x1="306" y1="458" x2="334" y2="458" class="arrow"/>
   <line x1="556" y1="458" x2="584" y2="458" class="arrow"/>
