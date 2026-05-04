@@ -89,6 +89,7 @@ docker compose logs -f dlh-redis --tail 100
 
 ```bash
 bash scripts/stackctl.sh inspect dlh-clickhouse
+bash scripts/stackctl.sh inspect dlh-dockhand
 docker compose ps
 docker stats                  # real-time CPU/memory
 ```

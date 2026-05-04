@@ -157,7 +157,7 @@ bash scripts/stackctl.sh validate-env
 | `SUPERSET_ADMIN_PASSWORD` | Superset admin password | `admin` |
 | `SUPERSET_ADMIN_EMAIL` | Superset admin email | `admin@superset.local` |
 | `SUPERSET_PREFERRED_URL_SCHEME` | URL scheme behind proxy or direct | `http` |
-| `SUPERSET_PIP_REQUIREMENTS` | Extra Python packages installed at Superset startup | `psycopg2-binary==2.9.9 clickhouse-connect==0.8.3` |
+| `SUPERSET_PIP_REQUIREMENTS` | Extra Python packages installed at Superset startup (must be quoted if multiple packages are listed) | `"psycopg2-binary==2.9.9 clickhouse-connect==0.8.3"` |
 
 ## 11. Authentik
 
