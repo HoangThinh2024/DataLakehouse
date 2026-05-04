@@ -69,7 +69,8 @@
               "options": {
                 "success": { "text": "SUCCESS", "color": "green", "index": 0 },
                 "failed": { "text": "FAILED", "color": "red", "index": 1 },
-                "running": { "text": "RUNNING", "color": "blue", "index": 2 }
+                "running": { "text": "RUNNING", "color": "blue", "index": 2 },
+                "no_data": { "text": "NO DATA", "color": "gray", "index": 3 }
               }
             }
           ],
@@ -93,7 +94,7 @@
       "targets": [
         {
           "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
-          "rawSql": "SELECT status FROM analytics.pipeline_runs ORDER BY started_at DESC LIMIT 1",
+          "rawSql": "SELECT coalesce(status, 'no_data') FROM (SELECT 1) LEFT JOIN (SELECT status FROM analytics.pipeline_runs ORDER BY started_at DESC LIMIT 1) ON 1=1",
           "format": "table",
           "refId": "A"
         }
@@ -131,7 +132,7 @@
       "targets": [
         {
           "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
-          "rawSql": "SELECT raw_rows FROM analytics.csv_quality_metrics ORDER BY processed_at DESC LIMIT 1",
+          "rawSql": "SELECT coalesce(raw_rows, 0) FROM (SELECT 1) LEFT JOIN (SELECT raw_rows FROM analytics.csv_quality_metrics ORDER BY processed_at DESC LIMIT 1) ON 1=1",
           "format": "table",
           "refId": "A"
         }
@@ -170,7 +171,7 @@
       "targets": [
         {
           "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
-          "rawSql": "SELECT if(raw_rows = 0, 0, 100.0 * cleaned_rows / raw_rows) AS quality_score FROM analytics.csv_quality_metrics ORDER BY processed_at DESC LIMIT 1",
+          "rawSql": "SELECT coalesce(if(raw_rows = 0, 0, 100.0 * cleaned_rows / raw_rows), 0) FROM (SELECT 1) LEFT JOIN (SELECT raw_rows, cleaned_rows FROM analytics.csv_quality_metrics ORDER BY processed_at DESC LIMIT 1) ON 1=1",
           "format": "table",
           "refId": "A"
         }
