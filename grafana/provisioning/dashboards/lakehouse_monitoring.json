@@ -53,7 +53,7 @@
       "title": "ClickHouse Memory Load",
       "type": "stat",
       "targets": [
-        { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" }, "rawSql": "SELECT (value / getOSMemoryTotal()) * 100 FROM system.asynchronous_metrics WHERE metric = 'MemoryTotalUsed'", "format": "table", "refId": "A" }
+        { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" }, "rawSql": "SELECT (MAX(CASE WHEN metric = 'MemoryTotalUsed' THEN value END) / MAX(CASE WHEN metric = 'OSMemoryTotal' THEN value END)) * 100 FROM system.asynchronous_metrics", "format": "table", "refId": "A" }
       ]
     },
     {
@@ -88,7 +88,7 @@
       "title": "End-to-End Ingestion Velocity",
       "type": "timeseries",
       "targets": [
-        { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" }, "rawSql": "SELECT started_at AS time, rows_extracted AS \"Bronze (Extracted)\", rows_silver AS \"Silver (Cleaned)\" FROM analytics.pipeline_runs WHERE $__timeFilter(started_at) ORDER BY started_at", "format": "time_series", "refId": "A" }
+        { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" }, "rawSql": "SELECT started_at AS time, rows_extracted AS \"Bronze (Extracted)\", rows_silver AS \"Silver (Cleaned)\" FROM analytics.pipeline_runs WHERE $__timeFilter(started_at) ORDER BY started_at", "format": "table", "refId": "A" }
       ]
     },
     {
@@ -144,7 +144,7 @@
       "title": "Query Latency (P99)",
       "type": "timeseries",
       "targets": [
-        { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" }, "rawSql": "SELECT event_time AS time, query_duration_ms / 1000.0 AS duration FROM system.query_log WHERE type = 'QueryFinish' AND $__timeFilter(event_time) ORDER BY event_time", "format": "time_series", "refId": "A" }
+        { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" }, "rawSql": "SELECT event_time AS time, query_duration_ms / 1000.0 AS duration FROM system.query_log WHERE type = 'QueryFinish' AND $__timeFilter(event_time) ORDER BY event_time", "format": "table", "refId": "A" }
       ]
     },
     {
@@ -158,7 +158,7 @@
       "title": "ClickHouse Memory Consumption Over Time",
       "type": "timeseries",
       "targets": [
-        { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" }, "rawSql": "SELECT event_time AS time, value FROM system.metric_log WHERE metric = 'MemoryTracking' AND $__timeFilter(event_time) ORDER BY event_time", "format": "time_series", "refId": "A" }
+        { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" }, "rawSql": "SELECT event_time AS time, value FROM system.metric_log WHERE metric = 'MemoryTracking' AND $__timeFilter(event_time) ORDER BY event_time", "format": "table", "refId": "A" }
       ]
     },
     {
@@ -194,7 +194,7 @@
   "timepicker": {},
   "timezone": "Asia/Ho_Chi_Minh",
   "title": "DataLakehouse 360° Command Center",
-  "uid": "dlh-360-command-center",
+  "uid": "dlh-360-v2",
   "version": 1,
   "weekStart": ""
 }
