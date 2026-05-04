@@ -53,7 +53,7 @@
       "title": "ClickHouse Memory Load",
       "type": "stat",
       "targets": [
-        { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" }, "rawSql": "SELECT (MAX(CASE WHEN metric = 'MemoryTotalUsed' THEN value END) / MAX(CASE WHEN metric = 'OSMemoryTotal' THEN value END)) * 100 FROM system.asynchronous_metrics", "format": "table", "refId": "A" }
+        { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" }, "rawSql": "SELECT (m.value / a.value) * 100 FROM system.metrics m, system.asynchronous_metrics a WHERE m.metric = 'MemoryTracking' AND a.metric = 'OSMemoryTotal'", "format": "table", "refId": "A" }
       ]
     },
     {
@@ -194,7 +194,7 @@
   "timepicker": {},
   "timezone": "Asia/Ho_Chi_Minh",
   "title": "DataLakehouse 360° Command Center",
-  "uid": "dlh-360-v2",
+  "uid": "dlh-360-final",
   "version": 1,
   "weekStart": ""
 }
