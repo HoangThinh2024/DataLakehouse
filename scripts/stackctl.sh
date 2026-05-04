@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
+set -E
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="$REPO_ROOT/.env"
+readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly ENV_FILE="$REPO_ROOT/.env"
 
 error_handler() {
   local exit_code=$?
   local line_number=$1
-  err "Error occurred on line $line_number with exit code $exit_code"
+  err "Error on line $line_number executing '$BASH_COMMAND' (exit: $exit_code)"
   exit "$exit_code"
 }
 
@@ -200,7 +201,7 @@ compose_down() {
   (cd "$REPO_ROOT" && docker compose down)
 
   info "Attempting to clean firewall rules (non-blocking)..."
-  bash "$REPO_ROOT/scripts/setup_ufw_docker.sh" --down || warn "Firewall cleanup skipped or failed."
+  bash "$REPO_ROOT/scripts/setup_ufw_docker.sh" --remove || warn "Firewall cleanup skipped or failed."
 }
 
 redeploy() {
@@ -304,9 +305,6 @@ logs_cmd() {
   if [[ "$service" == "all" ]]; then
     info "Showing last 50 lines from all services (use Ctrl+C to stop)..."
     (cd "$REPO_ROOT" && docker compose logs --tail=50 -f)
-  elif [[ -z "$service" ]]; then
-    info "Showing docker compose logs help..."
-    (cd "$REPO_ROOT" && docker compose logs --help | head -20)
   else
     info "Showing logs for service: $service"
     (cd "$REPO_ROOT" && docker compose logs --tail=100 -f "$service")
