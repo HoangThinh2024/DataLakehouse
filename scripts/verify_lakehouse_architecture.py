@@ -11,6 +11,8 @@ Validates:
 import sys
 import os
 import socket
+import functools
+from urllib.parse import urlparse
 
 # Add mage path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -38,6 +40,7 @@ def _s3_client(endpoint_url: str | None = None):
     )
 
 
+@functools.lru_cache(maxsize=1)
 def _local_ip_candidates() -> list[str]:
     """Return likely host IPs for reaching Docker-published ports."""
     candidates = []
@@ -65,8 +68,27 @@ def _local_ip_candidates() -> list[str]:
     return unique
 
 
+def is_port_open(host: str, port: int, timeout: float = 1.0) -> bool:
+    """Check if a TCP port is open."""
+    if not host or not port:
+        return False
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except (socket.timeout, ConnectionRefusedError, OSError):
+        return False
+
+
+_cached_s3_client = None
+_cached_s3_endpoint = None
+
+
 def _connect_s3_client():
     """Connect to RustFS, falling back to localhost when running on host."""
+    global _cached_s3_client, _cached_s3_endpoint
+    if _cached_s3_client is not None:
+        return _cached_s3_client, _cached_s3_endpoint
+
     host_ips = _local_ip_candidates()
 
     endpoints = [
@@ -82,27 +104,43 @@ def _connect_s3_client():
         if not endpoint or endpoint in seen:
             continue
         seen.add(endpoint)
+
+        # Fast port probe before full boto3 connection
+        try:
+            parsed = urlparse(endpoint)
+            host = parsed.hostname
+            port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+            if not is_port_open(host, port):
+                continue
+        except Exception:
+            pass
+
         client = _s3_client(endpoint)
         try:
             client.list_buckets()
+            _cached_s3_client = client
+            _cached_s3_endpoint = endpoint
             return client, endpoint
         except Exception:
             continue
 
     raise RuntimeError(
         'Could not connect to RustFS using any known endpoint. '
-        'Set RUSTFS_ENDPOINT_URL for the current environment.'
+        'Ensure RustFS is running, ports are mapped (9000 internal or 29100 external), '
+        'and credentials in .env (RUSTFS_ACCESS_KEY/SECRET_KEY) are correct.'
     )
 
 
-def check_rusfs_layers():
+def check_rusfs_layers() -> bool:
     """Check that RustFS has proper layer structure."""
     try:
         client, endpoint = _connect_s3_client()
         print(f"Using RustFS endpoint: {endpoint}")
     except Exception as exc:
         print(f"✗ RustFS connection failed: {exc}")
-        return
+        return False
+    
+    success = True
     layers = {
         'bronze': os.getenv('RUSTFS_BRONZE_BUCKET', 'bronze'),
         'silver': os.getenv('RUSTFS_SILVER_BUCKET', 'silver'),
@@ -127,9 +165,11 @@ def check_rusfs_layers():
         except ClientError as exc:
             print(f"✗ {layer_name.upper()} bucket missing: {bucket}")
             print(f"  Error: {exc}")
+            success = False
+    return success
 
 
-def check_data_lineage():
+def check_data_lineage() -> bool:
     """Trace a data record from source to ClickHouse."""
     print("\n=== Checking Data Lineage (Bronze → Silver → Gold → ClickHouse) ===")
     
@@ -138,7 +178,9 @@ def check_data_lineage():
         client, _ = _connect_s3_client()
     except Exception as exc:
         print(f"✗ Cannot inspect RustFS lineage: {exc}")
-        return
+        return False
+    
+    success = True
     bronze_bucket = os.getenv('RUSTFS_BRONZE_BUCKET', 'bronze')
     bronze_prefix = os.getenv('RUSTFS_BRONZE_PREFIX', 'demo')
     
@@ -192,9 +234,12 @@ def check_data_lineage():
             print("⚠ Gold: No aggregations found yet (expected on first run)")
     except ClientError as exc:
         print(f"✗ Gold: Error listing objects: {exc}")
+        success = False
+    
+    return success
 
 
-def check_clickhouse_architecture():
+def check_clickhouse_architecture() -> bool:
     """Verify ClickHouse loads from RustFS, not source systems."""
     print("\n=== Checking ClickHouse Independence ===")
     
@@ -221,6 +266,8 @@ def check_clickhouse_architecture():
             if not host:
                 continue
             for port in port_candidates:
+                if not is_port_open(host, port):
+                    continue
                 try:
                     ch_client = CH_Client(
                         host=host,
@@ -240,8 +287,13 @@ def check_clickhouse_architecture():
                 break
 
         if ch_client is None:
-            raise RuntimeError(f'Could not connect to ClickHouse: {last_error}')
+            raise RuntimeError(
+                f'Could not connect to ClickHouse: {last_error}. '
+                'Ensure ClickHouse is running, ports are mapped (9000 internal or 29000 external), '
+                'and credentials in .env (CLICKHOUSE_USER/PASSWORD) are correct.'
+            )
         
+        success = True
         # Check that tables exist
         result = ch_client.execute("SHOW TABLES IN analytics")
         table_names = [row[0] for row in result]
@@ -260,16 +312,29 @@ def check_clickhouse_architecture():
                 count = ch_client.execute(f"SELECT count() FROM {table}")
                 rows = count[0][0] if count else 0
                 print(f"  ✓ {table}: {rows} rows")
+                
+                # Verify that at least one table uses S3 engine
+                if table == 'silver_demo':
+                    create_stmt = ch_client.execute(f"SHOW CREATE TABLE {table}")[0][0]
+                    if "ENGINE = S3" in create_stmt or "ENGINE = DeltaLake" in create_stmt:
+                        print(f"    → Verified: {table} uses S3/Lakehouse engine")
+                    else:
+                        print(f"    ✗ Warning: {table} does NOT use S3/Lakehouse engine")
+                        print(f"      (Found: {create_stmt[:100]}...)")
+                        success = False
             else:
                 print(f"  ✗ {table}: missing")
+                success = False
         
         # Verify no direct PostgreSQL connections in ClickHouse config
         print("\n✓ ClickHouse Architecture: Tables populated from RustFS lake (not PostgreSQL)")
         print("  → All data transformations versioned in RustFS")
         print("  → Full data lineage and recoverability available")
+        return success
         
     except Exception as exc:
         print(f"✗ ClickHouse connection failed: {exc}")
+        return False
 
 
 if __name__ == '__main__':
@@ -277,9 +342,11 @@ if __name__ == '__main__':
     print("DATA LAKEHOUSE ARCHITECTURE VALIDATION")
     print("="*60)
     
-    check_rusfs_layers()
-    check_data_lineage()
-    check_clickhouse_architecture()
+    if check_rusfs_layers():
+        check_data_lineage()
+        check_clickhouse_architecture()
+    else:
+        print("\n✗ Skipping lineage and ClickHouse checks due to RustFS failure.")
     
     print("\n" + "="*60)
     print("For production use, ensure:")

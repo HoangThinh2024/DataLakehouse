@@ -1,61 +1,125 @@
 import os
 import datetime as dt
+import logging
+import sys
 import boto3
 from botocore.client import Config as BotoConfig
+from botocore.exceptions import ClientError
 from clickhouse_driver import Client
 
-# Configuration
-RUSTFS_ENDPOINT = 'http://dlh-rustfs:9000'
-ACCESS_KEY = 'rustfsadmin'
-SECRET_KEY = 'rustfsadmin'
-CLICKHOUSE_HOST = 'dlh-clickhouse'
-DB_NAME = 'analytics'
-BACKUP_BUCKET = 'backups'
-RETENTION_DAYS = 30  # Keep backups and old data for 30 days
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Configuration from environment or defaults
+# RUSTFS_S3_ENDPOINT: Used by this script to communicate with RustFS S3 API (Host/External)
+RUSTFS_S3_ENDPOINT = os.getenv('RUSTFS_S3_ENDPOINT', 'http://127.0.0.1:29100')
+# RUSTFS_INTERNAL_ENDPOINT: Used by ClickHouse server to reach RustFS (Container/Internal)
+RUSTFS_INTERNAL_ENDPOINT = os.getenv('RUSTFS_INTERNAL_ENDPOINT', 'http://dlh-rustfs:9000')
+
+# Secrets should be provided via environment variables
+ACCESS_KEY = os.getenv('RUSTFS_ACCESS_KEY')
+SECRET_KEY = os.getenv('RUSTFS_SECRET_KEY')
+
+CLICKHOUSE_HOST = os.getenv('CLICKHOUSE_HOST', '127.0.0.1')
+CLICKHOUSE_PORT = int(os.getenv('DLH_CLICKHOUSE_TCP_PORT', 29000))
+CLICKHOUSE_USER = os.getenv('CLICKHOUSE_USER')
+CLICKHOUSE_PASSWORD = os.getenv('CLICKHOUSE_PASSWORD')
+DB_NAME = os.getenv('CLICKHOUSE_DB', 'analytics')
+
+BACKUP_BUCKET = os.getenv('BACKUP_BUCKET', 'backups')
+RETENTION_DAYS = int(os.getenv('RETENTION_DAYS', '30'))  # Keep backups and old data for N days
+
+def validate_config():
+    """Validate that all required environment variables are set."""
+    required_vars = {
+        'RUSTFS_ACCESS_KEY': ACCESS_KEY,
+        'RUSTFS_SECRET_KEY': SECRET_KEY,
+        'CLICKHOUSE_USER': CLICKHOUSE_USER,
+        'CLICKHOUSE_PASSWORD': CLICKHOUSE_PASSWORD
+    }
+    
+    missing = [var for var, value in required_vars.items() if not value]
+    
+    if missing:
+        logger.error(f"Missing required environment variables: {', '.join(missing)}")
+        logger.error("Please set these variables before running the script.")
+        sys.exit(1)
+    
+    logger.info("Configuration validated successfully.")
 
 def get_s3_client():
+    """Initialize and return a boto3 S3 client configured for RustFS."""
     return boto3.client(
         's3',
-        endpoint_url=RUSTFS_ENDPOINT,
+        endpoint_url=RUSTFS_S3_ENDPOINT,
         aws_access_key_id=ACCESS_KEY,
         aws_secret_access_key=SECRET_KEY,
         config=BotoConfig(signature_version='s3v4', s3={'addressing_style': 'path'})
     )
 
 def backup_clickhouse():
-    print(f"[{dt.datetime.now()}] Starting ClickHouse backup...")
+    """
+    Perform a native ClickHouse backup to RustFS.
+    
+    This function creates the backup bucket if it doesn't exist and then
+    triggers the BACKUP DATABASE command in ClickHouse.
+    """
+    logger.info("Starting ClickHouse backup...")
     date_str = dt.date.today().isoformat()
     s3_client = get_s3_client()
     
     # Ensure backup bucket exists
     try:
         s3_client.create_bucket(Bucket=BACKUP_BUCKET)
-    except:
-        pass
+    except ClientError as e:
+        # If the bucket already exists, we can ignore the error
+        error_code = e.response.get('Error', {}).get('Code')
+        if error_code not in ('BucketAlreadyExists', 'BucketAlreadyOwnedByYou'):
+            logger.warning(f"Unexpected error creating bucket {BACKUP_BUCKET}: {e}")
+    except Exception as e:
+        logger.warning(f"Non-S3 error while ensuring bucket {BACKUP_BUCKET} exists: {e}")
     
     # ClickHouse Native Backup to S3 (RustFS)
-    # Using the native BACKUP command available in modern ClickHouse
-    backup_path = f"S3('{RUSTFS_ENDPOINT}/{BACKUP_BUCKET}/clickhouse/{date_str}/', '{ACCESS_KEY}', '{SECRET_KEY}')"
+    # The server needs the INTERNAL endpoint to reach RustFS from within the network
+    backup_path = f"S3('{RUSTFS_INTERNAL_ENDPOINT}/{BACKUP_BUCKET}/clickhouse/{date_str}/', '{ACCESS_KEY}', '{SECRET_KEY}')"
     
-    client = Client(
-        host=CLICKHOUSE_HOST,
-        user=os.getenv('CLICKHOUSE_USER', 'default'),
-        password=os.getenv('CLICKHOUSE_PASSWORD', '')
-    )
+    logger.info(f"Connecting to ClickHouse at {CLICKHOUSE_HOST}:{CLICKHOUSE_PORT}...")
+    
     try:
-        client.execute(f"BACKUP DATABASE {DB_NAME} TO {backup_path}")
-        print(f"[{dt.datetime.now()}] Backup successful: s3://{BACKUP_BUCKET}/clickhouse/{date_str}/")
+        with Client(
+            host=CLICKHOUSE_HOST,
+            port=CLICKHOUSE_PORT,
+            user=CLICKHOUSE_USER,
+            password=CLICKHOUSE_PASSWORD
+        ) as client:
+            logger.info(f"Running BACKUP DATABASE {DB_NAME} to RustFS...")
+            client.execute(f"BACKUP DATABASE {DB_NAME} TO {backup_path}")
+            logger.info(f"Backup successful: s3://{BACKUP_BUCKET}/clickhouse/{date_str}/")
     except Exception as e:
-        print(f"[{dt.datetime.now()}] Backup failed: {e}")
+        logger.error(f"Backup failed: {e}")
 
 def cleanup_old_data():
-    print(f"[{dt.datetime.now()}] Starting cleanup tasks...")
+    """
+    Delete objects older than RETENTION_DAYS from specified buckets.
+    
+    Iterates through 'silver', 'gold', and 'backups' buckets and removes
+    any object whose LastModified date is before the cutoff.
+    """
+    logger.info("Starting cleanup tasks...")
     s3_client = get_s3_client()
     cutoff_date = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=RETENTION_DAYS)
     
     buckets = ['silver', 'gold', 'backups']
     for bucket in buckets:
         try:
+            logger.info(f"Checking bucket: {bucket}")
             paginator = s3_client.get_paginator('list_objects_v2')
             for page in paginator.paginate(Bucket=bucket):
                 if 'Contents' not in page:
@@ -64,12 +128,13 @@ def cleanup_old_data():
                 for obj in page['Contents']:
                     last_modified = obj['LastModified']
                     if last_modified < cutoff_date:
-                        print(f"Deleting expired object: s3://{bucket}/{obj['Key']} (Modified: {last_modified})")
+                        logger.info(f"Deleting expired object: s3://{bucket}/{obj['Key']} (Modified: {last_modified})")
                         s3_client.delete_object(Bucket=bucket, Key=obj['Key'])
         except Exception as e:
-            print(f"Error cleaning bucket {bucket}: {e}")
+            logger.error(f"Error cleaning bucket {bucket}: {e}")
 
 if __name__ == "__main__":
+    validate_config()
     backup_clickhouse()
     cleanup_old_data()
-    print(f"[{dt.datetime.now()}] All maintenance tasks completed.")
+    logger.info("All maintenance tasks completed.")
