@@ -8,6 +8,7 @@ and enriches each row with pipeline run metadata before passing downstream.
 import os
 import uuid
 import datetime as dt
+from typing import Optional
 
 import pandas as pd
 import psycopg2
@@ -17,6 +18,42 @@ if 'data_loader' not in dir():
     from mage_ai.data_preparation.decorators import data_loader
 if 'test' not in dir():
     from mage_ai.data_preparation.decorators import test
+
+
+def _get_created_at_watermark() -> Optional[dt.datetime]:
+    """Return the max(created_at) already loaded into ClickHouse silver_demo.
+
+    Used for incremental extraction: only rows with created_at > watermark are
+    fetched from Postgres, avoiding re-processing of already-loaded data.
+
+    Returns None if ClickHouse is unavailable, the table doesn't exist yet,
+    or incremental mode is disabled via INCREMENTAL_EXTRACT=false.
+    """
+    if os.getenv('INCREMENTAL_EXTRACT', 'true').lower() in {'0', 'false', 'no', 'n'}:
+        return None
+    try:
+        from clickhouse_driver import Client as CHClient
+        ch = CHClient(
+            host=os.getenv('CLICKHOUSE_HOST', 'dlh-clickhouse'),
+            port=int(os.getenv('CLICKHOUSE_TCP_PORT', '9000')),
+            database=os.getenv('CLICKHOUSE_DB', 'analytics'),
+            user=os.getenv('CLICKHOUSE_USER', 'default'),
+            password=os.getenv('CLICKHOUSE_PASSWORD', '') or '',
+            connect_timeout=5,
+            send_receive_timeout=30,
+        )
+        db = os.getenv('CLICKHOUSE_DB', 'analytics')
+        rows = ch.execute(f'SELECT max(created_at) FROM {db}.silver_demo FINAL')
+        if rows and rows[0][0] is not None:
+            watermark = rows[0][0]
+            # ClickHouse returns timezone-aware datetimes; normalize to UTC.
+            if hasattr(watermark, 'tzinfo') and watermark.tzinfo is None:
+                watermark = watermark.replace(tzinfo=dt.timezone.utc)
+            print(f'[extract_postgres] Incremental watermark: {watermark}')
+            return watermark
+    except Exception as exc:
+        print(f'[extract_postgres] Watermark check failed ({exc}) – using full load')
+    return None
 
 
 @data_loader
@@ -144,11 +181,40 @@ def load_data(*args, **kwargs):
             )
 
     resolved_table = table_match[0]
-    query = sql.SQL('SELECT * FROM {}.{}').format(
-        sql.Identifier(resolved_schema),
-        sql.Identifier(resolved_table),
-    )
-    df = pd.read_sql(query.as_string(conn), conn)
+
+    # Attempt incremental extraction using a created_at watermark.
+    # Falls back to full load if the column doesn't exist or ClickHouse is
+    # unavailable (watermark = None).
+    watermark = _get_created_at_watermark()
+    df = None
+
+    if watermark:
+        try:
+            incr_query = sql.SQL(
+                'SELECT * FROM {}.{} WHERE created_at > %s'
+            ).format(
+                sql.Identifier(resolved_schema),
+                sql.Identifier(resolved_table),
+            )
+            df = pd.read_sql(incr_query.as_string(conn), conn, params=(watermark,))
+            print(
+                f'[extract_postgres] Incremental load: {len(df)} new rows '
+                f'(created_at > {watermark})  table={resolved_schema}.{resolved_table}'
+            )
+        except Exception as exc:
+            print(
+                f'[extract_postgres] Incremental query failed ({exc}) '
+                '– falling back to full load'
+            )
+            df = None
+
+    if df is None:
+        full_query = sql.SQL('SELECT * FROM {}.{}').format(
+            sql.Identifier(resolved_schema),
+            sql.Identifier(resolved_table),
+        )
+        df = pd.read_sql(full_query.as_string(conn), conn)
+
     conn.close()
 
     # Attach pipeline run metadata columns
@@ -164,5 +230,6 @@ def load_data(*args, **kwargs):
 @test
 def test_output(output, *args):
     assert output is not None, 'Output DataFrame is None'
-    assert len(output) > 0, 'No rows were extracted from source'
+    # In incremental mode the watermark may return 0 new rows – that is not an error.
+    assert isinstance(output, pd.DataFrame), 'Output is not a DataFrame'
     assert '_pipeline_run_id' in output.columns, '_pipeline_run_id column missing'
