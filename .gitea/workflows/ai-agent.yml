@@ -1,0 +1,29 @@
+name: AI Autonomous Agent
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  ai_process:
+    if: contains(github.event.comment.body, '/do-it')
+    runs-on: ubuntu-latest # Hoặc label của runner bạn đặt
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gemini CLI - Analyze and Code
+        run: |
+          # 1. Dùng Gemini CLI để đọc yêu cầu từ Issue comment và sửa file
+          gemini ask "Dựa trên yêu cầu: ${{ github.event.comment.body }}, hãy sửa file code.py" > code.py
+          
+          # 2. Tự động chạy Test
+          python -m pytest || (gemini ask "Test fail rồi, sửa lại code giúp tôi" > code.py && python -m pytest)
+          
+          # 3. Push ngược lại Git
+          git config user.name "Gemini-AI"
+          git config user.email "ai@datalakehouse.io"
+          git add .
+          git commit -m "AI: Automatically updated and tested features"
+          git push
