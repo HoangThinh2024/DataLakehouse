@@ -12,14 +12,17 @@ import sys
 import os
 import socket
 import functools
+import json
+import argparse
 from urllib.parse import urlparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Add mage path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import boto3
 from botocore.client import Config as BotoConfig
-from botocore.exceptions import ClientError, EndpointConnectionError
+from botocore.exceptions import ClientError
 
 
 def _s3_client(endpoint_url: str | None = None):
@@ -33,9 +36,9 @@ def _s3_client(endpoint_url: str | None = None):
         config=BotoConfig(
             signature_version='s3v4',
             s3={'addressing_style': 'path'},
-            connect_timeout=2,
+            connect_timeout=1,
             read_timeout=2,
-            retries={'max_attempts': 1},
+            retries={'max_attempts': 0},
         ),
     )
 
@@ -44,13 +47,11 @@ def _s3_client(endpoint_url: str | None = None):
 def _local_ip_candidates() -> list[str]:
     """Return likely host IPs for reaching Docker-published ports."""
     candidates = []
-
     try:
         hostname_ips = socket.gethostbyname_ex(socket.gethostname())[2]
         candidates.extend(hostname_ips)
     except Exception:
         pass
-
     try:
         probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
@@ -60,7 +61,6 @@ def _local_ip_candidates() -> list[str]:
             probe.close()
     except Exception:
         pass
-
     unique = []
     for candidate in candidates:
         if candidate and candidate not in unique:
@@ -68,7 +68,7 @@ def _local_ip_candidates() -> list[str]:
     return unique
 
 
-def is_port_open(host: str, port: int, timeout: float = 1.0) -> bool:
+def is_port_open(host: str, port: int, timeout: float = 0.5) -> bool:
     """Check if a TCP port is open."""
     if not host or not port:
         return False
@@ -79,18 +79,50 @@ def is_port_open(host: str, port: int, timeout: float = 1.0) -> bool:
         return False
 
 
+def _probe_s3_endpoint(endpoint: str) -> str | None:
+    """Probe a single S3 endpoint and return it if successful."""
+    try:
+        parsed = urlparse(endpoint)
+        if not is_port_open(parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80)):
+            return None
+        client = _s3_client(endpoint)
+        client.list_buckets()
+        return endpoint
+    except Exception:
+        return None
+
+
+def _probe_ch_endpoint(host: str, port: int) -> tuple[str, int] | None:
+    """Probe a single ClickHouse endpoint and return it if successful."""
+    from clickhouse_driver import Client as CH_Client
+    if not is_port_open(host, port):
+        return None
+    try:
+        client = CH_Client(
+            host=host,
+            port=port,
+            database=os.getenv('CLICKHOUSE_DB', 'analytics'),
+            user=os.getenv('CLICKHOUSE_USER', 'default'),
+            password=os.getenv('CLICKHOUSE_PASSWORD', '') or '',
+            connect_timeout=1,
+        )
+        client.execute('SELECT 1')
+        return (host, port)
+    except Exception:
+        return None
+
+
 _cached_s3_client = None
 _cached_s3_endpoint = None
 
 
 def _connect_s3_client():
-    """Connect to RustFS, falling back to localhost when running on host."""
+    """Connect to RustFS using concurrent probing."""
     global _cached_s3_client, _cached_s3_endpoint
     if _cached_s3_client is not None:
         return _cached_s3_client, _cached_s3_endpoint
 
     host_ips = _local_ip_candidates()
-
     endpoints = [
         os.getenv('RUSTFS_ENDPOINT_URL'),
         'http://dlh-rustfs:9000',
@@ -98,44 +130,27 @@ def _connect_s3_client():
         'http://127.0.0.1:29100',
     ]
     endpoints.extend(f'http://{host_ip}:29100' for host_ip in host_ips)
-    seen = set()
+    
+    unique_endpoints = [e for e in dict.fromkeys(endpoints) if e]
 
-    for endpoint in endpoints:
-        if not endpoint or endpoint in seen:
-            continue
-        seen.add(endpoint)
+    with ThreadPoolExecutor(max_workers=len(unique_endpoints)) as executor:
+        futures = {executor.submit(_probe_s3_endpoint, e): e for e in unique_endpoints}
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                _cached_s3_endpoint = result
+                _cached_s3_client = _s3_client(result)
+                return _cached_s3_client, result
 
-        # Fast port probe before full boto3 connection
-        try:
-            parsed = urlparse(endpoint)
-            host = parsed.hostname
-            port = parsed.port or (443 if parsed.scheme == 'https' else 80)
-            if not is_port_open(host, port):
-                continue
-        except Exception:
-            pass
-
-        client = _s3_client(endpoint)
-        try:
-            client.list_buckets()
-            _cached_s3_client = client
-            _cached_s3_endpoint = endpoint
-            return client, endpoint
-        except Exception:
-            continue
-
-    raise RuntimeError(
-        'Could not connect to RustFS using any known endpoint. '
-        'Ensure RustFS is running, ports are mapped (9000 internal or 29100 external), '
-        'and credentials in .env (RUSTFS_ACCESS_KEY/SECRET_KEY) are correct.'
-    )
+    raise RuntimeError('Could not connect to RustFS using any known endpoint.')
 
 
-def check_rusfs_layers() -> bool:
+def check_rusfs_layers(results: dict) -> bool:
     """Check that RustFS has proper layer structure."""
     try:
         client, endpoint = _connect_s3_client()
-        print(f"Using RustFS endpoint: {endpoint}")
+        if not results.get('json_mode'):
+            print(f"Using RustFS endpoint: {endpoint}")
     except Exception as exc:
         print(f"✗ RustFS connection failed: {exc}")
         return False
@@ -147,211 +162,141 @@ def check_rusfs_layers() -> bool:
         'gold': os.getenv('RUSTFS_GOLD_BUCKET', 'gold'),
     }
     
-    print("\n=== Checking RustFS Layer Structure ===")
+    if not results.get('json_mode'):
+        print("\n=== Checking RustFS Layer Structure ===")
     
+    results['layers'] = {}
     for layer_name, bucket in layers.items():
+        layer_res = {'bucket': bucket, 'exists': False, 'object_count': 0, 'samples': []}
         try:
-            response = client.head_bucket(Bucket=bucket)
-            print(f"✓ {layer_name.upper()} bucket exists: {bucket}")
-            
-            # List objects in this bucket
+            client.head_bucket(Bucket=bucket)
+            layer_res['exists'] = True
             objs = client.list_objects_v2(Bucket=bucket, MaxKeys=10)
             count = objs.get('KeyCount', 0)
-            print(f"  → Contains {count} objects")
-            
+            layer_res['object_count'] = count
             if 'Contents' in objs:
-                for obj in objs['Contents'][:3]:
-                    print(f"     - {obj['Key']}")
+                layer_res['samples'] = [obj['Key'] for obj in objs['Contents'][:3]]
+            if not results.get('json_mode'):
+                print(f"✓ {layer_name.upper()} bucket exists: {bucket} ({count} objects)")
         except ClientError as exc:
-            print(f"✗ {layer_name.upper()} bucket missing: {bucket}")
-            print(f"  Error: {exc}")
+            if not results.get('json_mode'):
+                print(f"✗ {layer_name.upper()} bucket missing: {bucket} ({exc})")
+            success = False
+        results['layers'][layer_name] = layer_res
+    return success
+
+
+def check_data_lineage(results: dict) -> bool:
+    """Trace data records across layers."""
+    if not results.get('json_mode'):
+        print("\n=== Checking Data Lineage (Bronze → Silver → Gold) ===")
+    try:
+        client, _ = _connect_s3_client()
+    except Exception:
+        return False
+    
+    success = True
+    results['lineage'] = {}
+    checks = [
+        ('bronze', os.getenv('RUSTFS_BRONZE_BUCKET', 'bronze'), os.getenv('RUSTFS_BRONZE_PREFIX', 'demo')),
+        ('silver', os.getenv('RUSTFS_SILVER_BUCKET', 'silver'), os.getenv('RUSTFS_SILVER_PREFIX', 'demo')),
+        ('gold', os.getenv('RUSTFS_GOLD_BUCKET', 'gold'), ''),
+    ]
+    for layer_name, bucket, prefix in checks:
+        try:
+            response = client.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=5)
+            found = len(response.get('Contents', []))
+            results['lineage'][layer_name] = {'found': found, 'keys': [obj['Key'] for obj in response.get('Contents', [])]}
+            if not results.get('json_mode'):
+                status = "✓" if found > 0 else "⚠"
+                print(f"{status} {layer_name.capitalize()}: Found {found} object(s)")
+        except Exception as exc:
+            if not results.get('json_mode'):
+                print(f"✗ {layer_name.capitalize()} check failed: {exc}")
             success = False
     return success
 
 
-def check_data_lineage() -> bool:
-    """Trace a data record from source to ClickHouse."""
-    print("\n=== Checking Data Lineage (Bronze → Silver → Gold → ClickHouse) ===")
-    
-    # Check Bronze layer for PostgreSQL data
-    try:
-        client, _ = _connect_s3_client()
-    except Exception as exc:
-        print(f"✗ Cannot inspect RustFS lineage: {exc}")
-        return False
-    
-    success = True
-    bronze_bucket = os.getenv('RUSTFS_BRONZE_BUCKET', 'bronze')
-    bronze_prefix = os.getenv('RUSTFS_BRONZE_PREFIX', 'demo')
-    
-    try:
-        response = client.list_objects_v2(
-            Bucket=bronze_bucket,
-            Prefix=bronze_prefix,
-            MaxKeys=5
-        )
-        
-        if 'Contents' in response and len(response['Contents']) > 0:
-            print(f"✓ Bronze: Found {len(response['Contents'])} extraction(s)")
-            for obj in response['Contents']:
-                print(f"  → {obj['Key']}")
-        else:
-            print("⚠ Bronze: No PostgreSQL extractions found yet (expected on first run)")
-    except ClientError as exc:
-        print(f"✗ Bronze: Error listing objects: {exc}")
-    
-    # Check Silver layer for cleaned data
-    silver_bucket = os.getenv('RUSTFS_SILVER_BUCKET', 'silver')
-    silver_prefix = os.getenv('RUSTFS_SILVER_PREFIX', 'demo')
-    
-    try:
-        response = client.list_objects_v2(
-            Bucket=silver_bucket,
-            Prefix=silver_prefix,
-            MaxKeys=5
-        )
-        
-        if 'Contents' in response and len(response['Contents']) > 0:
-            print(f"✓ Silver: Found {len(response['Contents'])} transformation(s)")
-            for obj in response['Contents']:
-                print(f"  → {obj['Key']}")
-        else:
-            print("⚠ Silver: No transformations found yet (expected on first run)")
-    except ClientError as exc:
-        print(f"✗ Silver: Error listing objects: {exc}")
-    
-    # Check Gold layer for aggregations
-    gold_bucket = os.getenv('RUSTFS_GOLD_BUCKET', 'gold')
-    
-    try:
-        response = client.list_objects_v2(Bucket=gold_bucket, MaxKeys=10)
-        
-        if 'Contents' in response and len(response['Contents']) > 0:
-            print(f"✓ Gold: Found {len(response['Contents'])} aggregation(s)")
-            for obj in response['Contents'][:5]:
-                print(f"  → {obj['Key']}")
-        else:
-            print("⚠ Gold: No aggregations found yet (expected on first run)")
-    except ClientError as exc:
-        print(f"✗ Gold: Error listing objects: {exc}")
-        success = False
-    
-    return success
-
-
-def check_clickhouse_architecture() -> bool:
-    """Verify ClickHouse loads from RustFS, not source systems."""
-    print("\n=== Checking ClickHouse Independence ===")
-    
+def check_clickhouse_architecture(results: dict) -> bool:
+    """Verify ClickHouse loads from RustFS using concurrent discovery."""
+    if not results.get('json_mode'):
+        print("\n=== Checking ClickHouse Independence ===")
+    results['clickhouse'] = {'endpoint': None, 'tables': []}
     try:
         from clickhouse_driver import Client as CH_Client
-
-        host_candidates = [
-            os.getenv('CLICKHOUSE_HOST'),
-            'dlh-clickhouse',
-            'localhost',
-            '127.0.0.1',
-        ]
+        host_candidates = [os.getenv('CLICKHOUSE_HOST'), 'dlh-clickhouse', 'localhost', '127.0.0.1']
         host_candidates.extend(_local_ip_candidates())
-
-        port_candidates = [
-            int(os.getenv('CLICKHOUSE_TCP_PORT', '9000')),
-            29000,
-        ]
-
-        ch_client = None
-        last_error = None
-
-        for host in host_candidates:
-            if not host:
-                continue
-            for port in port_candidates:
-                if not is_port_open(host, port):
-                    continue
-                try:
-                    ch_client = CH_Client(
-                        host=host,
-                        port=port,
-                        database=os.getenv('CLICKHOUSE_DB', 'analytics'),
-                        user=os.getenv('CLICKHOUSE_USER', 'default'),
-                        password=os.getenv('CLICKHOUSE_PASSWORD', '') or '',
-                        connect_timeout=2,
-                    )
-                    ch_client.execute('SELECT 1')
-                    print(f'Using ClickHouse host: {host}:{port}')
+        port_candidates = [int(os.getenv('CLICKHOUSE_TCP_PORT', '9000')), 29000]
+        probes = [(h, p) for h in host_candidates if h for p in port_candidates]
+        ch_endpoint = None
+        with ThreadPoolExecutor(max_workers=min(len(probes), 10)) as executor:
+            futures = {executor.submit(_probe_ch_endpoint, h, p): (h, p) for h, p in probes}
+            for future in as_completed(futures):
+                res = future.result()
+                if res:
+                    ch_endpoint = res
                     break
-                except Exception as exc:
-                    last_error = exc
-                    ch_client = None
-            if ch_client is not None:
-                break
+        if not ch_endpoint:
+            raise RuntimeError("Could not connect to ClickHouse")
 
-        if ch_client is None:
-            raise RuntimeError(
-                f'Could not connect to ClickHouse: {last_error}. '
-                'Ensure ClickHouse is running, ports are mapped (9000 internal or 29000 external), '
-                'and credentials in .env (CLICKHOUSE_USER/PASSWORD) are correct.'
-            )
+        host, port = ch_endpoint
+        if not results.get('json_mode'):
+            print(f'Using ClickHouse host: {host}:{port}')
+        results['clickhouse']['endpoint'] = f"{host}:{port}"
+        ch_client = CH_Client(host=host, port=port, database=os.getenv('CLICKHOUSE_DB', 'analytics'),
+                             user=os.getenv('CLICKHOUSE_USER', 'default'), password=os.getenv('CLICKHOUSE_PASSWORD', '') or '')
         
+        table_names = [row[0] for row in ch_client.execute("SHOW TABLES IN analytics")]
+        expected = ['silver_demo', 'gold_demo_daily', 'gold_demo_by_region', 'gold_demo_by_category', 'pipeline_runs']
         success = True
-        # Check that tables exist
-        result = ch_client.execute("SHOW TABLES IN analytics")
-        table_names = [row[0] for row in result]
-        
-        expected_tables = [
-            'silver_demo',
-            'gold_demo_daily',
-            'gold_demo_by_region',
-            'gold_demo_by_category',
-            'pipeline_runs',
-        ]
-        
-        print("✓ ClickHouse tables:")
-        for table in expected_tables:
+        for table in expected:
+            table_res = {'name': table, 'exists': False, 'rows': 0, 'engine_ok': True}
             if table in table_names:
-                count = ch_client.execute(f"SELECT count() FROM {table}")
-                rows = count[0][0] if count else 0
-                print(f"  ✓ {table}: {rows} rows")
-                
-                # Verify that at least one table uses S3 engine
+                table_res['exists'] = True
+                table_res['rows'] = ch_client.execute(f"SELECT count() FROM {table}")[0][0]
+                if not results.get('json_mode'):
+                    print(f"  ✓ {table}: {table_res['rows']} rows")
                 if table == 'silver_demo':
                     create_stmt = ch_client.execute(f"SHOW CREATE TABLE {table}")[0][0]
-                    if "ENGINE = S3" in create_stmt or "ENGINE = DeltaLake" in create_stmt:
-                        print(f"    → Verified: {table} uses S3/Lakehouse engine")
-                    else:
-                        print(f"    ✗ Warning: {table} does NOT use S3/Lakehouse engine")
-                        print(f"      (Found: {create_stmt[:100]}...)")
+                    if "ENGINE = S3" not in create_stmt and "ENGINE = DeltaLake" not in create_stmt:
+                        table_res['engine_ok'] = False
                         success = False
             else:
-                print(f"  ✗ {table}: missing")
+                if not results.get('json_mode'):
+                    print(f"  ✗ {table}: missing")
                 success = False
-        
-        # Verify no direct PostgreSQL connections in ClickHouse config
-        print("\n✓ ClickHouse Architecture: Tables populated from RustFS lake (not PostgreSQL)")
-        print("  → All data transformations versioned in RustFS")
-        print("  → Full data lineage and recoverability available")
+            results['clickhouse']['tables'].append(table_res)
         return success
-        
     except Exception as exc:
-        print(f"✗ ClickHouse connection failed: {exc}")
+        if not results.get('json_mode'):
+            print(f"✗ ClickHouse connection failed: {exc}")
         return False
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Verify Data Lakehouse Architecture")
+    parser.add_argument("--json", action="store_true", help="Output results in JSON format")
+    args = parser.parse_args()
+    results = {'status': 'fail', 'json_mode': args.json, 'layers': {}, 'lineage': {}, 'clickhouse': {}}
+
+    if not args.json:
+        print("\n" + "="*60 + "\nDATA LAKEHOUSE ARCHITECTURE VALIDATION\n" + "="*60)
+    
+    layers_ok = check_rusfs_layers(results)
+    if layers_ok:
+        lineage_ok = check_data_lineage(results)
+        ch_ok = check_clickhouse_architecture(results)
+        if layers_ok and lineage_ok and ch_ok:
+            results['status'] = 'pass'
+        else:
+            results['status'] = 'partial'
+
+    if args.json:
+        del results['json_mode']
+        print(json.dumps(results, indent=2))
+    else:
+        print("\n" + "="*60 + f"\nOVERALL STATUS: {results['status'].upper()}\n" + "="*60 + "\n")
 
 
 if __name__ == '__main__':
-    print("\n" + "="*60)
-    print("DATA LAKEHOUSE ARCHITECTURE VALIDATION")
-    print("="*60)
-    
-    if check_rusfs_layers():
-        check_data_lineage()
-        check_clickhouse_architecture()
-    else:
-        print("\n✗ Skipping lineage and ClickHouse checks due to RustFS failure.")
-    
-    print("\n" + "="*60)
-    print("For production use, ensure:")
-    print("1. All data flows through RustFS (Bronze → Silver → Gold)")
-    print("2. ClickHouse reads ONLY from RustFS layers")
-    print("3. Source systems (PostgreSQL) never queried for analytics")
-    print("4. All parquet files versioned with run_ids and dates")
-    print("="*60 + "\n")
+    main()

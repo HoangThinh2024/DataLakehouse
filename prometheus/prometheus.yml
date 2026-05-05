@@ -1,0 +1,7 @@
+global:
+  scrape_interval: 15s # Cứ 15 giây lấy dữ liệu một lần
+
+scrape_configs:
+  - job_name: 'docker_server'
+    static_configs:
+      - targets: ['node-exporter:9100']

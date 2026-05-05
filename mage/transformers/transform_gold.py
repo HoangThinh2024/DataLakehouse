@@ -22,6 +22,8 @@ def transform_gold(data, *args, **kwargs):
     
     # 0. Robust Column Normalization for Assignee
     assignee_col = 'Người thực hiện'
+    fallback_col = 'Người giao việc'
+    
     if assignee_col not in df.columns:
         # Try to find similar columns if exact match fails
         possible_names = ['assignee', 'người thực hiện', 'người làm', 'nhân sự']
@@ -30,11 +32,19 @@ def transform_gold(data, *args, **kwargs):
                 df[assignee_col] = df[col]
                 break
     
-    if assignee_col not in df.columns:
-        df[assignee_col] = 'Chưa phân công'
-    else:
-        # Fill empty/null with 'Chưa phân công'
+    # Logic: If Performer is missing, use Assigner
+    if assignee_col in df.columns:
+        # Fill missing performer with assigner if available
+        if fallback_col in df.columns:
+            df[assignee_col] = df[assignee_col].fillna(df[fallback_col])
+            df.loc[df[assignee_col].isin(['', 'nan', 'None']), assignee_col] = df.loc[df[assignee_col].isin(['', 'nan', 'None']), fallback_col]
+        
+        # Final cleanup for remaining blanks
         df[assignee_col] = df[assignee_col].fillna('Chưa phân công').replace('', 'Chưa phân công').replace('nan', 'Chưa phân công').replace('None', 'Chưa phân công')
+    else:
+        # If neither exists, fall back to global default
+        df[assignee_col] = df[fallback_col] if fallback_col in df.columns else 'Chưa phân công'
+        df[assignee_col] = df[assignee_col].fillna('Chưa phân công')
 
     # 1. Project Summary (by source file/project)
     project_agg = df.groupby('_source_file_key').agg(

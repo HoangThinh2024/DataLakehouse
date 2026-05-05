@@ -486,8 +486,45 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - dockhand_data:/app/data
+      - /mnt/d:/mnt/d # Optional: bind-mount host directory for Dockhand to manage
     networks:
       - web_network
+    # --- MONITORING LAYER ---
+  
+  # Node Exporter: Thu thập thông số phần cứng từ máy chủ (Host)
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: dlh-node-exporter
+    restart: always
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - web_network
+
+  # Prometheus: Cơ sở dữ liệu lưu trữ lịch sử sức khỏe server
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: dlh-prometheus
+    restart: always
+    user: root
+    volumes:
+      - prometheus_data:/prometheus
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - web_network
+    depends_on:
+      - node-exporter
 
 volumes:
   postgres_data:
@@ -515,6 +552,8 @@ volumes:
   npm_letsencrypt:
     driver: local
   dockhand_data:
+    driver: local
+  prometheus_data:
     driver: local
 
 networks:

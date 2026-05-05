@@ -86,7 +86,8 @@ bash scripts/setup.sh
 ### 3. Verify stack health
 
 ```bash
-bash scripts/stackctl.sh health
+bash scripts/stackctl.sh health       # deep health checks
+bash scripts/stackctl.sh diagnose     # analyze logs and port conflicts
 ```
 
 All services should report healthy within 2–3 minutes of startup.
