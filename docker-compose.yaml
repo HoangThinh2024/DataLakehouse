@@ -421,6 +421,9 @@ services:
     container_name: dlh-grafana
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      GF_SERVER_ROOT_URL: https://grafana.datahcg.duckdns.org
+      GF_SERVER_DOMAIN: grafana.datahcg.duckdns.org
+      GF_AUTH_GENERIC_OAUTH_ENABLED: "true"
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
