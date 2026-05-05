@@ -2,6 +2,11 @@
 -- ClickHouse Analytics Schema
 -- Layers: Bronze (raw) → Silver (clean) → Gold (aggregated)
 -- + Pipeline run tracking table for Grafana monitoring
+--
+-- Silver and Gold tables use ReplacingMergeTree to provide
+-- idempotent/deduplicating loads on repeated pipeline runs.
+-- The version column (_silver_processed_at / _gold_processed_at)
+-- ensures the most-recent write wins on OPTIMIZE … FINAL.
 -- =============================================================
 
 -- Ensure analytics database exists (also set via env CLICKHOUSE_DB)
@@ -33,6 +38,10 @@ ORDER BY (_extracted_at, _pipeline_run_id);
 
 -- =============================================================
 -- SILVER: cleaned & typed data
+-- ReplacingMergeTree deduplicates rows sharing the same
+-- (_pipeline_run_id, _silver_processed_at) key, keeping the row
+-- with the highest _silver_processed_at version.
+-- Note: id is Nullable and therefore cannot appear in ORDER BY.
 -- =============================================================
 CREATE TABLE IF NOT EXISTS analytics.silver_demo
 (
@@ -51,12 +60,13 @@ CREATE TABLE IF NOT EXISTS analytics.silver_demo
     _source_table           String DEFAULT 'Demo',
     _silver_processed_at    DateTime64(3) DEFAULT now64(3)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree(_silver_processed_at)
 PARTITION BY toYYYYMM(toDateTime(_silver_processed_at))
-ORDER BY (_silver_processed_at, _pipeline_run_id);
+ORDER BY (_pipeline_run_id, _silver_processed_at);
 
 -- =============================================================
 -- GOLD: aggregated summaries
+-- ReplacingMergeTree deduplicates repeated runs for same period.
 -- =============================================================
 
 -- Daily sales summary
@@ -73,7 +83,7 @@ CREATE TABLE IF NOT EXISTS analytics.gold_demo_daily
     _pipeline_run_id        String DEFAULT '',
     _gold_processed_at      DateTime64(3) DEFAULT now64(3)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree(_gold_processed_at)
 PARTITION BY toYYYYMM(order_date)
 ORDER BY (order_date, _pipeline_run_id);
 
@@ -89,7 +99,7 @@ CREATE TABLE IF NOT EXISTS analytics.gold_demo_by_region
     _pipeline_run_id        String DEFAULT '',
     _gold_processed_at      DateTime64(3) DEFAULT now64(3)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree(_gold_processed_at)
 PARTITION BY toYYYYMM(report_date)
 ORDER BY (region, report_date, _pipeline_run_id);
 
@@ -105,7 +115,7 @@ CREATE TABLE IF NOT EXISTS analytics.gold_demo_by_category
     _pipeline_run_id        String DEFAULT '',
     _gold_processed_at      DateTime64(3) DEFAULT now64(3)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree(_gold_processed_at)
 PARTITION BY toYYYYMM(report_date)
 ORDER BY (category, report_date, _pipeline_run_id);
 
@@ -177,6 +187,89 @@ CREATE TABLE IF NOT EXISTS analytics.csv_upload_events
     processed_at        DateTime64(3) DEFAULT now64(3),
     pipeline_run_id     String DEFAULT '',
     error_message       Nullable(String)
+)
+ENGINE = MergeTree
+PARTITION BY toYYYYMM(processed_at)
+ORDER BY (source_key, etag, processed_at);
+
+-- =============================================================
+-- EXCEL PROJECTS: Task management and reporting
+-- =============================================================
+CREATE TABLE IF NOT EXISTS analytics.project_reports
+(
+    `Tên công việc` Nullable(String),
+    `Người giao việc` Nullable(String),
+    `Người thực hiện` Nullable(String),
+    `Người theo dõi` Nullable(String),
+    `Khẩn cấp` Nullable(String),
+    `Quan trọng` Nullable(String),
+    `Danh sách nhãn` Nullable(String),
+    `Ngày bắt đầu` Nullable(String),
+    `Thời hạn` Nullable(String),
+    `Hoàn thành thực tế` Nullable(String),
+    `Mô tả công việc` Nullable(String),
+    `Trạng thái` Nullable(String),
+    `Kết quả công việc` Nullable(String),
+    `Mục tiêu` Nullable(String),
+    `Mục tiêu hoàn thành` Nullable(String),
+    `Số tiền` Nullable(String),
+    `Diện tích (ha)` Nullable(String),
+    `Chủ trì` Nullable(String),
+    `Phòng ban phối hợp` Nullable(String),
+    `Ghi chú` Nullable(String),
+    `Ngày tạo` Nullable(String),
+    `Mã công việc (ID)` String,
+    `Mã công việc cha (ID)` Nullable(String),
+    `Metatype` Nullable(String),
+    `_pipeline_run_id` Nullable(String),
+    `_source_table` Nullable(String),
+    `_source_file_key` String,
+    `_source_file_etag` Nullable(String),
+    `_extracted_at` Nullable(DateTime64(3)),
+    `_silver_processed_at` Nullable(DateTime64(3)),
+    `_db_processed_at` DateTime64(3) DEFAULT now64(3)
+)
+ENGINE = ReplacingMergeTree(_db_processed_at)
+ORDER BY (_source_file_key, `Mã công việc (ID)`);
+
+CREATE TABLE IF NOT EXISTS analytics.gold_projects_summary
+(
+    `_source_file_key` String,
+    `total_tasks` UInt64,
+    `completed_tasks` UInt64,
+    `ongoing_tasks` UInt64,
+    `overdue_tasks` UInt64,
+    `completion_rate` Float64,
+    `_pipeline_run_id` String,
+    `_gold_processed_at` DateTime64(3),
+    `_db_inserted_at` DateTime64(3) DEFAULT now64(3)
+)
+ENGINE = ReplacingMergeTree(_db_inserted_at)
+ORDER BY _source_file_key;
+
+CREATE TABLE IF NOT EXISTS analytics.gold_workload_report
+(
+    `Người thực hiện` String,
+    `task_count` UInt64,
+    `urgent_tasks` UInt64,
+    `_pipeline_run_id` String,
+    `_gold_processed_at` DateTime64(3),
+    `_db_inserted_at` DateTime64(3) DEFAULT now64(3)
+)
+ENGINE = ReplacingMergeTree(_db_inserted_at)
+ORDER BY `Người thực hiện`;
+
+CREATE TABLE IF NOT EXISTS analytics.excel_upload_events
+(
+    `source_key` String,
+    `etag` String,
+    `source_size` Int64,
+    `source_last_modified` Nullable(DateTime64(3)),
+    `status` String,
+    `row_count` Int64 DEFAULT 0,
+    `processed_at` DateTime64(3) DEFAULT now64(3),
+    `pipeline_run_id` String DEFAULT '',
+    `error_message` Nullable(String)
 )
 ENGINE = MergeTree
 PARTITION BY toYYYYMM(processed_at)
