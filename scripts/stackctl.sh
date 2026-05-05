@@ -5,6 +5,15 @@ set -E
 readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly ENV_FILE="$REPO_ROOT/.env"
 
+# Source environment library
+if [[ -f "$REPO_ROOT/scripts/lib_env.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "$REPO_ROOT/scripts/lib_env.sh"
+else
+  echo "Error: scripts/lib_env.sh not found" >&2
+  exit 1
+fi
+
 error_handler() {
   local exit_code=$?
   local line_number=$1
@@ -19,10 +28,13 @@ usage() {
 Usage:
   bash scripts/stackctl.sh up                           Start all services
   bash scripts/stackctl.sh down                         Stop all services
-  bash scripts/stackctl.sh redeploy [--with-etl]        Redeploy (stop + start)
+  bash scripts/stackctl.sh redeploy [--with-etl] [--safe] Redeploy (stop + start)
   bash scripts/stackctl.sh status                       Show service status
+
   bash scripts/stackctl.sh health                       Detailed health checks
+  bash scripts/stackctl.sh diagnose                     Run advanced troubleshooting
   bash scripts/stackctl.sh logs [SERVICE]               Show service logs (use 'all' for all)
+
   bash scripts/stackctl.sh reset [--hard]               Clean state (containers) --hard: with volumes
   bash scripts/stackctl.sh check-env                    Validate environment variables
   bash scripts/stackctl.sh check-system                 Quick system health overview
@@ -32,7 +44,9 @@ Usage:
 
 Options:
   --with-etl  Run ETL/dashboard orchestration after redeploy.
+  --safe      Run ClickHouse backup before redeploy.
   -h, --help  Show this help.
+
 
 Examples:
   bash scripts/stackctl.sh logs dlh-mage                # View Mage ETL logs
@@ -43,58 +57,58 @@ Examples:
 EOF
 }
 
-info() { echo "  → $*"; }
-warn() { echo "  ⚠ $*"; }
-err() { echo "  ✗ $*" >&2; }
+# ── Command Handlers ────────────────────────────────────────
 
-load_env_file() {
-  if [[ -f "$ENV_FILE" ]]; then
-    # shellcheck disable=SC1090
-    set -a
-    . "$ENV_FILE"
-    set +a
-  fi
-}
-
-upsert_env_var() {
-  local key="$1"
-  local value="$2"
-
-  if [[ ! -f "$ENV_FILE" ]]; then
-    touch "$ENV_FILE"
+compose_up() {
+  info "Ensuring Docker network web_network exists..."
+  if ! docker network inspect web_network >/dev/null 2>&1; then
+    docker network create web_network >/dev/null
   fi
 
-  if grep -q "^${key}=" "$ENV_FILE"; then
-    sed -i "s#^${key}=.*#${key}=${value}#" "$ENV_FILE"
-  else
-    printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+  info "Starting stack with docker compose up -d..."
+  (cd "$REPO_ROOT" && docker compose up -d)
+}
+
+compose_down() {
+  info "Stopping stack..."
+  (cd "$REPO_ROOT" && docker compose down)
+
+  info "Attempting to clean firewall rules (non-blocking)..."
+  bash "$REPO_ROOT/scripts/setup_ufw_docker.sh" --remove || warn "Firewall cleanup skipped or failed."
+}
+
+redeploy() {
+  local with_etl="$1"
+  local safe_mode="$2"
+
+  if [[ "$safe_mode" == "true" ]]; then
+    header "Safe Redeploy: Triggering Pre-deployment Backup"
+    if command -v uv >/dev/null 2>&1; then
+      info "Running maintenance_tasks.py backup..."
+      (cd "$REPO_ROOT" && uv run python scripts/maintenance_tasks.py) || warn "Backup failed, continuing with redeploy..."
+    else
+      warn "uv not found, skipping pre-deployment backup."
+    fi
   fi
+
+  compose_down || true
+  compose_up
+
+
+  if [[ "$with_etl" == "true" ]]; then
+    if command -v uv >/dev/null 2>&1; then
+      info "Running ETL and dashboard orchestration..."
+      (cd "$REPO_ROOT" && uv run python scripts/run_etl_and_dashboard.py --auto)
+    else
+      warn "uv is not installed; skipping ETL/dashboard orchestration."
+    fi
+  fi
+
+  check_system
 }
 
-ask_input() {
-  local prompt="$1"
-  local default_value="$2"
-  local value
-  read -r -p "$prompt [$default_value]: " value
-  value="${value:-$default_value}"
-  printf '%s' "$value"
-}
-
-trim_value() {
-  local value="$1"
-  value="${value#${value%%[![:space:]]*}}"
-  value="${value%${value##*[![:space:]]}}"
-  printf '%s' "$value"
-}
-
-is_valid_cidr() {
-  local cidr="$1"
-  [[ "$cidr" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/([0-9]|[12][0-9]|3[0-2])$ ]]
-}
-
-is_valid_port() {
-  local port="$1"
-  [[ "$port" =~ ^[0-9]+$ ]] && (( port >= 1 && port <= 65535 ))
+status() {
+  (cd "$REPO_ROOT" && docker compose ps)
 }
 
 print_env_value() {
@@ -184,45 +198,6 @@ sync_env() {
   info ".env updated."
 }
 
-compose_up() {
-  info "Ensuring Docker network web_network exists..."
-  if ! docker network inspect web_network >/dev/null 2>&1; then
-    docker network create web_network >/dev/null
-  fi
-
-  info "Starting stack with docker compose up -d..."
-  (cd "$REPO_ROOT" && docker compose up -d)
-}
-
-compose_down() {
-  info "Stopping stack..."
-  (cd "$REPO_ROOT" && docker compose down)
-
-  info "Attempting to clean firewall rules (non-blocking)..."
-  bash "$REPO_ROOT/scripts/setup_ufw_docker.sh" --remove || warn "Firewall cleanup skipped or failed."
-}
-
-redeploy() {
-  local with_etl="$1"
-  compose_down || true
-  compose_up
-
-  if [[ "$with_etl" == "true" ]]; then
-    if command -v uv >/dev/null 2>&1; then
-      info "Running ETL and dashboard orchestration..."
-      (cd "$REPO_ROOT" && uv run python scripts/run_etl_and_dashboard.py --auto)
-    else
-      warn "uv is not installed; skipping ETL/dashboard orchestration."
-    fi
-  fi
-
-  check_system
-}
-
-status() {
-  (cd "$REPO_ROOT" && docker compose ps)
-}
-
 check_system() {
   (cd "$REPO_ROOT" && docker compose ps)
   echo
@@ -256,6 +231,8 @@ check_system() {
 # Enhanced health check with detailed diagnostics
 health() {
   load_env_file
+  header "System Health Check"
+  
   echo "=== Docker Compose Status ==="
   (cd "$REPO_ROOT" && docker compose ps)
   echo
@@ -294,7 +271,67 @@ health() {
   fi
 }
 
-# View logs from services
+# Advanced diagnostics for troubleshooting
+diagnose() {
+  load_env_file
+  header "DataLakehouse Diagnostic Report"
+
+  info "1. Checking host-side port conflicts..."
+  local ports=(
+    "DLH_POSTGRES_PORT:${DLH_POSTGRES_PORT:-25432}"
+    "DLH_RUSTFS_API_PORT:${DLH_RUSTFS_API_PORT:-29100}"
+    "DLH_RUSTFS_CONSOLE_PORT:${DLH_RUSTFS_CONSOLE_PORT:-29101}"
+    "DLH_CLICKHOUSE_HTTP_PORT:${DLH_CLICKHOUSE_HTTP_PORT:-28123}"
+    "DLH_CLICKHOUSE_TCP_PORT:${DLH_CLICKHOUSE_TCP_PORT:-29000}"
+    "DLH_MAGE_PORT:${DLH_MAGE_PORT:-26789}"
+    "DLH_SUPERSET_PORT:${DLH_SUPERSET_PORT:-28088}"
+    "DLH_GRAFANA_PORT:${DLH_GRAFANA_PORT:-23001}"
+  )
+
+  for p in "${ports[@]}"; do
+    local var="${p%%:*}"
+    local val="${p##*:}"
+    if is_port_in_use "$val"; then
+      # We check if it's OUR container using it
+      local container
+      container=$(docker ps --format '{{.Names}}' --filter "publish=${val}")
+      if [[ -n "$container" ]]; then
+        info "  [OK] Port $val ($var) is used by $container"
+      else
+        err "  [CONFLICT] Port $val ($var) is used by an external process!"
+      fi
+    else
+      warn "  [OFFLINE] Port $val ($var) is not listening"
+    fi
+  done
+
+  echo
+  info "2. Scanning logs for critical errors (last 100 lines)..."
+  local errors
+  errors=$(docker compose logs --tail=100 | grep -iE "error|exception|fail|refused|denied" | grep -v "DEBUG" | tail -10)
+  if [[ -n "$errors" ]]; then
+    err "  Found recent suspicious log entries:"
+    echo "$errors" | sed 's/^/    /'
+  else
+    info "  No obvious critical errors found in recent logs."
+  fi
+
+  echo
+  info "3. Checking Docker resources..."
+  local disk_usage
+  disk_usage=$(docker system df --format "{{.Type}}: {{.Size}} ({{.Reclaimable}} reclaimable)")
+  echo "$disk_usage" | sed 's/^/    /'
+
+  echo
+  info "4. Validating network..."
+  if docker network inspect web_network >/dev/null 2>&1; then
+    info "  [OK] web_network exists"
+  else
+    err "  [MISSING] web_network is missing!"
+  fi
+}
+
+
 logs_cmd() {
   local service="${1:-all}"
   
@@ -307,7 +344,6 @@ logs_cmd() {
   fi
 }
 
-# Inspect detailed service information
 inspect() {
   local service="${1:-}"
   
@@ -328,9 +364,8 @@ inspect() {
   (cd "$REPO_ROOT" && docker compose logs --tail=30 "$service") || true
 }
 
-# Reset stack state (containers, optionally volumes)
 reset() {
-  local hard="$1"
+  local hard="${1:-}"
   
   echo "=== Stack Reset ==="
   
@@ -360,7 +395,6 @@ reset() {
   fi
 }
 
-# Strict environment validation with suggestions
 validate_env() {
   load_env_file
   local issues=0
@@ -368,7 +402,6 @@ validate_env() {
   echo "=== Strict Environment Validation ==="
   echo
 
-  # Check critical variables
   local critical_vars=(
     "DLH_BIND_IP"
     "DLH_APP_BIND_IP"
@@ -389,7 +422,6 @@ validate_env() {
     fi
   done
 
-  # Check port uniqueness
   echo
   info "Checking port uniqueness..."
   local ports=(
@@ -399,7 +431,6 @@ validate_env() {
     "DLH_CLICKHOUSE_HTTP_PORT"
     "DLH_CLICKHOUSE_TCP_PORT"
     "DLH_MAGE_PORT"
-    "DLH_NOCODB_PORT"
     "DLH_SUPERSET_PORT"
     "DLH_GRAFANA_PORT"
   )
@@ -418,7 +449,6 @@ validate_env() {
     fi
   done
 
-  # Check CIDR format
   if ! is_valid_cidr "${DLH_LAN_CIDR:-}"; then
     err "Invalid CIDR format: DLH_LAN_CIDR=${DLH_LAN_CIDR:-}"
     issues=$((issues + 1))
@@ -426,7 +456,6 @@ validate_env() {
     info "CIDR format valid: ${DLH_LAN_CIDR}"
   fi
 
-  # Check if docker is installed
   if ! command -v docker >/dev/null 2>&1; then
     err "Docker is not installed or not in PATH"
     issues=$((issues + 1))
@@ -434,7 +463,6 @@ validate_env() {
     info "Docker found: $(docker --version)"
   fi
 
-  # Check if docker compose is available
   if ! docker compose version >/dev/null 2>&1; then
     err "Docker Compose is not available"
     issues=$((issues + 1))
@@ -442,7 +470,6 @@ validate_env() {
     info "Docker Compose found: $(docker compose version | head -1)"
   fi
 
-  # Check if uv is installed
   if ! command -v uv >/dev/null 2>&1; then
     warn "uv is not installed (optional but recommended for Python script execution)"
   else
@@ -458,10 +485,12 @@ validate_env() {
   fi
 }
 
+# ── Main ────────────────────────────────────────────────────
 
 main() {
   local command="${1:-}"
   local with_etl="false"
+  local safe_mode="false"
 
   case "$command" in
     up)
@@ -478,6 +507,10 @@ main() {
             with_etl="true"
             shift
             ;;
+          --safe)
+            safe_mode="true"
+            shift
+            ;;
           -h|--help)
             usage
             exit 0
@@ -489,7 +522,7 @@ main() {
             ;;
         esac
       done
-      redeploy "$with_etl"
+      redeploy "$with_etl" "$safe_mode"
       ;;
     status)
       status
@@ -497,7 +530,11 @@ main() {
     health)
       health
       ;;
+    diagnose)
+      diagnose
+      ;;
     logs)
+
       shift || true
       logs_cmd "$@"
       ;;

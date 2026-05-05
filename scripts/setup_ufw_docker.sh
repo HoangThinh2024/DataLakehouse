@@ -26,79 +26,27 @@ Options:
 EOF
 }
 
-info() { echo "  → $*"; }
-warn() { echo "  ⚠ $*"; }
-err() { echo "  ✗ $*" >&2; }
-
-ask_input() {
-  local prompt="$1"
-  local default_value="$2"
-  local value
-  read -r -p "$prompt [$default_value]: " value
-  value="${value:-$default_value}"
-  printf '%s' "$value"
-}
-
-ask_yn() {
-  local prompt="$1"
-  local default="${2:-n}"
-  local answer
-  read -r -p "$prompt [$default]: " answer
-  answer="${answer:-$default}"
-  [[ "$answer" =~ ^[Yy]$ ]]
-}
-
-upsert_env_var() {
-  local key="$1"
-  local value="$2"
-
-  if [[ ! -f "$ENV_FILE" ]]; then
-    touch "$ENV_FILE"
-  fi
-
-  if grep -q "^${key}=" "$ENV_FILE"; then
-    sed -i "s#^${key}=.*#${key}=${value}#" "$ENV_FILE"
-  else
-    printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
-  fi
-}
-
-load_env_file() {
-  if [[ -f "$ENV_FILE" ]]; then
-    # shellcheck disable=SC1090
-    set -a
-    . "$ENV_FILE"
-    set +a
-  fi
-}
-
-trim_value() {
-  local value="$1"
-  value="${value#${value%%[![:space:]]*}}"
-  value="${value%${value##*[![:space:]]}}"
-  printf '%s' "$value"
-}
-
-is_valid_cidr() {
-  local cidr="$1"
-  [[ "$cidr" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/([0-9]|[12][0-9]|3[0-2])$ ]]
-}
-
-is_valid_port() {
-  local port="$1"
-  [[ "$port" =~ ^[0-9]+$ ]] && (( port >= 1 && port <= 65535 ))
-}
+# Source environment library
+if [[ -f "$REPO_ROOT/scripts/lib_env.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "$REPO_ROOT/scripts/lib_env.sh"
+else
+  echo "Error: scripts/lib_env.sh not found" >&2
+  exit 1
+fi
 
 split_custom_ports() {
   local raw="$1"
   CUSTOM_PORTS=()
-  raw="$(trim_value "$raw")"
+  raw="${raw#"${raw%%[![:space:]]*}"}"
+  raw="${raw%"${raw##*[![:space:]]}"}"
   [[ -z "$raw" ]] && return 0
 
   local port
   IFS=',' read -r -a CUSTOM_PORTS <<< "$raw"
   for port in "${CUSTOM_PORTS[@]}"; do
-    port="$(trim_value "$port")"
+    port="${port#"${port%%[![:space:]]*}"}"
+    port="${port%"${port##*[![:space:]]}"}"
     [[ -z "$port" ]] && continue
     if ! is_valid_port "$port"; then
       err "Invalid custom port: $port"
@@ -112,7 +60,6 @@ ensure_sudo() {
     err "Please run this script as a normal user with sudo, not as root."
     exit 1
   fi
-
   if ! command -v sudo >/dev/null 2>&1; then
     err "sudo is required."
     exit 1

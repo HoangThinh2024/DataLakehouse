@@ -39,8 +39,18 @@ bash scripts/stackctl.sh down
 # Pull latest images, recreate containers
 bash scripts/stackctl.sh redeploy
 
+# Safe redeploy (runs backup before restarting containers)
+bash scripts/stackctl.sh redeploy --safe
+
 # Redeploy + run ETL pipeline automatically
 bash scripts/stackctl.sh redeploy --with-etl
+```
+
+### Diagnostics
+
+```bash
+# Analyze the system for port conflicts and critical errors in logs
+bash scripts/stackctl.sh diagnose
 ```
 
 ### Reset
@@ -100,6 +110,8 @@ docker stats                  # real-time CPU/memory
 bash scripts/stackctl.sh check-system
 # or run directly:
 uv run python scripts/verify_lakehouse_architecture.py
+# for machine-readable output:
+uv run python scripts/verify_lakehouse_architecture.py --json
 ```
 
 The validation script checks connectivity to all services and verifies data is
