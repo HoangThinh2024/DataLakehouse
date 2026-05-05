@@ -9,6 +9,7 @@
 #   docker compose logs -f <service>
 # ============================================================
 
+
 x-dlh-runtime: &dlh-runtime
   networks:
     - web_network
@@ -16,6 +17,21 @@ x-dlh-runtime: &dlh-runtime
 
 x-dlh-timezone: &dlh-timezone
   TZ: ${TZ:-Asia/Ho_Chi_Minh}
+
+x-authentik-env: &authentik-env
+  TZ: ${TZ:-Asia/Ho_Chi_Minh}
+  AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-change-this-authentik-secret-key}
+  AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+  AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
+  AUTHENTIK_REDIS__HOST: ${REDIS_HOST:-dlh-redis}
+  AUTHENTIK_REDIS__PORT: 6379
+  AUTHENTIK_REDIS__PASSWORD: ${REDIS_PASSWORD:-change-this-redis-password}
+  AUTHENTIK_REDIS__DB: ${REDIS_AUTHENTIK_DB:-1}
+  AUTHENTIK_POSTGRESQL__HOST: ${POSTGRES_HOST:-dlh-postgres}
+  AUTHENTIK_POSTGRESQL__PORT: 5432
+  AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_DB_NAME:-${POSTGRES_DB:-postgres}}
+  AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_DB_USER:-${POSTGRES_USER:-postgres}}
+  AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_DB_PASSWORD:-${POSTGRES_PASSWORD:-postgres}}
 
 services:
   # ==========================================================
@@ -48,7 +64,7 @@ services:
       start_period: 30s
 
   # PostgreSQL bootstrap – re-sync app roles/passwords on every `docker compose up`
-  # This keeps Grafana/Mage/NocoDB/Superset aligned even if the data volume already exists.
+  # This keeps Grafana/Mage/Superset aligned even if the data volume already exists.
   postgres-bootstrap:
     <<: *dlh-runtime
     image: postgres:${POSTGRES_IMAGE_VERSION:-17-alpine}
@@ -156,6 +172,65 @@ services:
       retries: 5
       start_period: 30s
 
+  # Redis – shared cache/queue backend for platform services
+  dlh-redis:
+    <<: *dlh-runtime
+    image: redis/redis-stack:${REDIS_STACK_IMAGE_VERSION:-latest}
+    container_name: dlh-redis
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    command:
+      - redis-stack-server
+      - --bind
+      - 0.0.0.0
+      - --protected-mode
+      - ${REDIS_PROTECTED_MODE:-yes}
+      - --appendonly
+      - ${REDIS_APPENDONLY:-yes}
+      - --save
+      - "60"
+      - "1"
+      - --loglevel
+      - warning
+      - --requirepass
+      - ${REDIS_PASSWORD:-change-this-redis-password}
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-512mb}
+      - --maxmemory-policy
+      - ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
+    ports:
+      - "${REDIS_BIND_IP:-127.0.0.1}:${DLH_REDIS_PORT:-26379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-change-this-redis-password} ping | grep -q PONG"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redisinsight:
+    <<: *dlh-runtime
+    image: redis/redisinsight:${REDISINSIGHT_IMAGE_VERSION:-latest}
+    container_name: dlh-redisinsight
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    ports:
+      - "${REDIS_BIND_IP:-127.0.0.1}:${DLH_REDIS_GUI_PORT:-25540}:5540"
+    volumes:
+      - redisinsight_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:5540/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      dlh-redis:
+        condition: service_healthy
+
   # ==========================================================
   # LAYER 3: PROCESSING
   # ==========================================================
@@ -211,6 +286,12 @@ services:
       - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_MAGE_PORT:-26789}:6789"
     volumes:
       - ./mage:/home/src
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:6789/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     depends_on:
       postgres-bootstrap:
         condition: service_completed_successfully
@@ -224,22 +305,16 @@ services:
   # LAYER 4: SERVING
   # ==========================================================
 
-  nocodb:
+  cloudbeaver:
     <<: *dlh-runtime
-    image: nocodb/nocodb:${NOCODB_IMAGE_VERSION:-latest}
-    container_name: dlh-nocodb
+    image: dbeaver/cloudbeaver:latest
+    container_name: dlh-cloudbeaver
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
-      NC_DB: pg://${POSTGRES_HOST:-dlh-postgres}:5432?u=${NOCODB_DB_USER:-dlh_nocodb_user}&p=${NOCODB_DB_PASSWORD:-change-me}&d=${NOCODB_DB_NAME:-dlh_nocodb}
-      NC_PUBLIC_URL: ${NOCODB_PUBLIC_URL:-http://${DLH_BIND_IP:-127.0.0.1}:${DLH_NOCODB_PORT:-28082}}
-      NUXT_PUBLIC_NC_BACKEND_URL: ${NOCODB_BACKEND_URL:-http://${DLH_BIND_IP:-127.0.0.1}:${DLH_NOCODB_PORT:-28082}}
-      LITESTREAM_S3_BUCKET: ${RUSTFS_BUCKET:-nocodb}
-      LITESTREAM_S3_ENDPOINT: ${LITESTREAM_S3_ENDPOINT:-http://dlh-rustfs:9000}
-      LITESTREAM_S3_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
-      LITESTREAM_S3_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
-      NC_ALLOW_LOCAL_EXTERNAL_DBS: true
     ports:
-      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_NOCODB_PORT:-28082}:8080"
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_CLOUDBEAVER_PORT:-28978}:8978"
+    volumes:
+      - cloudbeaver_data:/opt/cloudbeaver/workspace
     depends_on:
       postgres-bootstrap:
         condition: service_completed_successfully
@@ -255,12 +330,19 @@ services:
     user: root
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      PYTHONPATH: /app/pythonpath:/app/.venv/lib/python3.10/site-packages
       SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
       SUPERSET_CONFIG_PATH: ${SUPERSET_CONFIG_PATH:-/app/pythonpath/superset_config.py}
       SUPERSET_LOAD_EXAMPLES: "${SUPERSET_LOAD_EXAMPLES:-no}"
       SUPERSET_DB_NAME: ${SUPERSET_DB_NAME:-dlh_superset}
       SUPERSET_DB_USER: ${SUPERSET_DB_USER:-dlh_superset_user}
       SUPERSET_DB_PASSWORD: ${SUPERSET_DB_PASSWORD:-change-me}
+      REDIS_HOST: ${REDIS_HOST:-dlh-redis}
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-change-this-redis-password}
+      SUPERSET_REDIS_CACHE_DB: ${SUPERSET_REDIS_CACHE_DB:-2}
+      SUPERSET_REDIS_RESULTS_DB: ${SUPERSET_REDIS_RESULTS_DB:-3}
+      _PIP_ADDITIONAL_REQUIREMENTS: ${SUPERSET_PIP_REQUIREMENTS:-psycopg2-binary==2.9.9 clickhouse-connect==0.8.3}
     ports:
       - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_SUPERSET_PORT:-28088}:8088"
     volumes:
@@ -269,15 +351,69 @@ services:
     depends_on:
       postgres-bootstrap:
         condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
+      dlh-redis:
+        condition: service_healthy
     command: >
       /bin/sh -c "
-      /app/.venv/bin/python -m ensurepip --upgrade &&
-      /app/.venv/bin/python -m pip install --no-cache-dir psycopg2-binary==2.9.9 clickhouse-connect==0.8.3 &&
-      superset db upgrade &&
-      superset fab create-admin --username ${SUPERSET_ADMIN_USER:-admin} --firstname Admin --lastname User --email ${SUPERSET_ADMIN_EMAIL:-admin@superset.local} --password ${SUPERSET_ADMIN_PASSWORD:-admin} || true &&
-      superset init &&
-      superset run -h 0.0.0.0 -p 8088 --with-threads
+      /usr/local/bin/pip install --target /app/.venv/lib/python3.10/site-packages $${_PIP_ADDITIONAL_REQUIREMENTS} && \
+      /app/.venv/bin/superset db upgrade && \
+      /app/.venv/bin/superset fab create-admin --username ${SUPERSET_ADMIN_USER:-admin} --firstname Admin --lastname User --email ${SUPERSET_ADMIN_EMAIL:-admin@superset.local} --password ${SUPERSET_ADMIN_PASSWORD:-admin} || true && \
+      /app/.venv/bin/superset init && \
+      /app/.venv/bin/superset run -h 0.0.0.0 -p 8088 --with-threads
       "
+
+  # ==========================================================
+  # INFRA: AUTHENTICATION (Authentik)
+  # ==========================================================
+
+  authentik-server:
+    <<: *dlh-runtime
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_IMAGE_VERSION:-2026.2.1}
+    container_name: dlh-authentik-server
+    env_file:
+      - .env
+    environment:
+      <<: *authentik-env
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-admin@authentik.local}
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-admin}
+      AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-}
+    command: server
+    ports:
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_AUTHENTIK_PORT:-29090}:9000"
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+    depends_on:
+      postgres-bootstrap:
+        condition: service_completed_successfully
+      dlh-redis:
+        condition: service_healthy
+
+  authentik-worker:
+    <<: *dlh-runtime
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_IMAGE_VERSION:-2026.2.1}
+    container_name: dlh-authentik-worker
+    env_file:
+      - .env
+    environment:
+      <<: *authentik-env
+    command: worker
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      postgres-bootstrap:
+        condition: service_completed_successfully
+      dlh-redis:
+        condition: service_healthy
 
   grafana:
     <<: *dlh-runtime
@@ -285,6 +421,9 @@ services:
     container_name: dlh-grafana
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      GF_SERVER_ROOT_URL: https://grafana.datahcg.duckdns.org
+      GF_SERVER_DOMAIN: grafana.datahcg.duckdns.org
+      GF_AUTH_GENERIC_OAUTH_ENABLED: "true"
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
@@ -318,23 +457,77 @@ services:
   # OPTIONAL: Nginx Proxy Manager
   # Uncomment this block when you need reverse proxy / SSL.
   # ----------------------------------------------------------
-  # nginx-proxy-manager:
-  #   image: jc21/nginx-proxy-manager:latest
-  #   container_name: dlh-nginx-proxy-manager
-  #   restart: unless-stopped
-  #   ports:
-  #     - "${DLH_NPM_HTTP_PORT:-28080}:80"
-  #     - "${DLH_NPM_HTTPS_PORT:-28443}:443"
-  #     - "${DLH_NPM_ADMIN_PORT:-28081}:81"
-  #   environment:
-  #     TZ: ${TZ:-Asia/Ho_Chi_Minh}
-  #     DB_SQLITE_FILE: /data/database.sqlite
-  #     DISABLE_IPV6: "true"
-  #   volumes:
-  #     - npm_data:/data
-  #     - npm_letsencrypt:/etc/letsencrypt
-  #   networks:
-  #     - web_network
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: dlh-nginx-proxy-manager
+    restart: always
+    ports:
+      - "${DLH_NPM_HTTP_PORT:-80}:80"
+      - "${DLH_NPM_HTTPS_PORT:-443}:443"
+      - "${DLH_NPM_ADMIN_PORT:-28081}:81"
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      DB_SQLITE_FILE: /data/database.sqlite
+      DISABLE_IPV6: "true"
+    volumes:
+      - npm_data:/data
+      - npm_letsencrypt:/etc/letsencrypt
+    networks:
+      - web_network
+
+  # ==========================================================
+  # INFRA: DOCKER MANAGEMENT (Dockhand)
+  # ==========================================================
+  dockhand:
+    image: fnsys/dockhand:latest
+    container_name: dlh-dockhand
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    ports:
+      - "${DLH_APP_BIND_IP:-127.0.0.1}:${DLH_DOCKHAND_PORT:-23000}:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dockhand_data:/app/data
+      - /mnt/d:/mnt/d # Optional: bind-mount host directory for Dockhand to manage
+    networks:
+      - web_network
+    # --- MONITORING LAYER ---
+  
+  # Node Exporter: Thu thập thông số phần cứng từ máy chủ (Host)
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: dlh-node-exporter
+    restart: always
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - web_network
+
+  # Prometheus: Cơ sở dữ liệu lưu trữ lịch sử sức khỏe server
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: dlh-prometheus
+    restart: always
+    user: root
+    volumes:
+      - prometheus_data:/prometheus
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - web_network
+    depends_on:
+      - node-exporter
 
 volumes:
   postgres_data:
@@ -347,9 +540,23 @@ volumes:
     driver: local
   grafana_data:
     driver: local
+  redis_data:
+    driver: local
+  redisinsight_data:
+    driver: local
+  cloudbeaver_data:
+    driver: local
+  authentik_media:
+    driver: local
+  authentik_templates:
+    driver: local
   npm_data:
     driver: local
   npm_letsencrypt:
+    driver: local
+  dockhand_data:
+    driver: local
+  prometheus_data:
     driver: local
 
 networks:

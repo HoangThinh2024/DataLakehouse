@@ -1,11 +1,6 @@
 {
-  "__inputs": [],
-  "__requires": [
-    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0" },
-    { "type": "datasource", "id": "grafana-clickhouse-datasource", "name": "ClickHouse", "version": "4.0.0" }
-  ],
   "annotations": { "list": [] },
-  "description": "Demo command center for DataLakehouse: ETL run health, CSV upload quality, and ingestion throughput.",
+  "description": "360-degree monitoring for DataLakehouse: Infra, Storage, Pipelines, and DB Performance.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 2,
@@ -16,409 +11,190 @@
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
       "id": 1,
-      "title": "System Pulse",
+      "title": "🌐 Global Infrastructure Health",
       "type": "row"
     },
     {
       "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
       "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "#6BC46D", "value": null },
-              { "color": "#F2C96D", "value": 1 },
-              { "color": "#E24D42", "value": 5 }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
+        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }, "unit": "short" }
       },
-      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
       "id": 2,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "textMode": "value_and_name"
-      },
-      "title": "Total ETL Runs",
+      "options": { "colorMode": "background", "justifyMode": "center", "textMode": "value_and_name" },
+      "title": "Total Pipelines Active",
       "type": "stat",
       "targets": [
-        {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
-          "rawSql": "SELECT count() AS total_runs FROM analytics.pipeline_runs",
-          "format": "table",
-          "refId": "A"
-        }
+        { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" }, "rawSql": "SELECT count(DISTINCT pipeline_name) FROM analytics.pipeline_runs", "format": "table", "refId": "A" }
       ]
     },
     {
       "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
       "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "success": { "text": "SUCCESS", "color": "green", "index": 0 },
-                "failed": { "text": "FAILED", "color": "red", "index": 1 },
-                "running": { "text": "RUNNING", "color": "blue", "index": 2 }
-              }
-            }
-          ],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
-          "unit": "string"
-        },
-        "overrides": []
+        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }, "unit": "decbytes" }
       },
-      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
       "id": 3,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "textMode": "value_and_name"
-      },
-      "title": "Last Run Status",
+      "options": { "colorMode": "background", "justifyMode": "center", "textMode": "value_and_name" },
+      "title": "Total Lakehouse Size",
       "type": "stat",
       "targets": [
-        {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
-          "rawSql": "SELECT status FROM analytics.pipeline_runs ORDER BY started_at DESC LIMIT 1",
-          "format": "table",
-          "refId": "A"
-        }
+        { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" }, "rawSql": "SELECT sum(bytes_on_disk) FROM system.parts WHERE active", "format": "table", "refId": "A" }
       ]
     },
     {
       "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
       "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "#6BC46D", "value": null },
-              { "color": "#F2C96D", "value": 10000 },
-              { "color": "#E24D42", "value": 50000 }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
+        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "orange", "value": null }, { "color": "red", "value": 80 }] }, "unit": "percent" }
       },
-      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
       "id": 4,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "textMode": "value_and_name"
-      },
-      "title": "Last CSV Raw Rows",
+      "options": { "colorMode": "background", "justifyMode": "center", "textMode": "value_and_name" },
+      "title": "ClickHouse Memory Load",
       "type": "stat",
       "targets": [
-        {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
-          "rawSql": "SELECT raw_rows FROM analytics.csv_quality_metrics ORDER BY processed_at DESC LIMIT 1",
-          "format": "table",
-          "refId": "A"
-        }
+        { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" }, "rawSql": "SELECT (m.value / a.value) * 100 FROM system.metrics m, system.asynchronous_metrics a WHERE m.metric = 'MemoryTracking' AND a.metric = 'OSMemoryTotal'", "format": "table", "refId": "A" }
       ]
     },
     {
       "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
       "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "decimals": 2,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "#E24D42", "value": null },
-              { "color": "#F2C96D", "value": 90 },
-              { "color": "#6BC46D", "value": 98 }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
+        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }] }, "unit": "short" }
       },
-      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
       "id": 5,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "textMode": "value_and_name"
-      },
-      "title": "Last CSV Quality Score",
+      "options": { "colorMode": "background", "justifyMode": "center", "textMode": "value_and_name" },
+      "title": "Active DB Connections",
       "type": "stat",
       "targets": [
-        {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
-          "rawSql": "SELECT if(raw_rows = 0, 0, 100.0 * cleaned_rows / raw_rows) AS quality_score FROM analytics.csv_quality_metrics ORDER BY processed_at DESC LIMIT 1",
-          "format": "table",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "#6BC46D", "value": null }] },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
-      "id": 6,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "textMode": "value_and_name"
-      },
-      "title": "CSV Files Processed",
-      "type": "stat",
-      "targets": [
-        {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
-          "rawSql": "SELECT countIf(status = 'success') AS files_processed FROM analytics.csv_upload_events",
-          "format": "table",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "#6BC46D", "value": null },
-              { "color": "#E24D42", "value": 1 }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
-      "id": 7,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "textMode": "value_and_name"
-      },
-      "title": "CSV Failed Files",
-      "type": "stat",
-      "targets": [
-        {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
-          "rawSql": "SELECT countIf(status = 'failed') AS failed_files FROM analytics.csv_upload_events",
-          "format": "table",
-          "refId": "A"
-        }
+        { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" }, "rawSql": "SELECT value FROM system.metrics WHERE metric = 'TCPConnection' OR metric = 'HTTPConnection' LIMIT 1", "format": "table", "refId": "A" }
       ]
     },
     {
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
-      "id": 8,
-      "title": "Ingestion Trends",
+      "id": 6,
+      "title": "📐 Medallion Data Flow (Bronze → Silver → Gold)",
       "type": "row"
     },
     {
       "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
       "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": { "lineWidth": 2, "fillOpacity": 20 }
-        },
-        "overrides": [
-          { "matcher": { "id": "byName", "options": "raw_rows" }, "properties": [{ "id": "displayName", "value": "CSV Raw Rows" }] },
-          { "matcher": { "id": "byName", "options": "cleaned_rows" }, "properties": [{ "id": "displayName", "value": "CSV Cleaned Rows" }] },
-          { "matcher": { "id": "byName", "options": "dropped_rows" }, "properties": [{ "id": "displayName", "value": "Dropped Rows" }] }
-        ]
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 2, "fillOpacity": 20 }, "unit": "short" }
       },
-      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 6 },
-      "id": 9,
-      "options": {
-        "legend": { "displayMode": "table", "placement": "bottom" },
-        "tooltip": { "mode": "multi" }
-      },
-      "title": "CSV Quality Over Time",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 6 },
+      "id": 7,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "title": "End-to-End Ingestion Velocity",
       "type": "timeseries",
       "targets": [
-        {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
-          "rawSql": "SELECT processed_at AS time, raw_rows, cleaned_rows, dropped_rows FROM analytics.csv_quality_metrics WHERE $__timeFilter(processed_at) ORDER BY processed_at",
-          "format": "time_series",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
-      "fieldConfig": {
-        "defaults": { "color": { "mode": "palette-classic" } },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 6 },
-      "id": 10,
-      "options": {
-        "displayLabels": ["percent"],
-        "legend": { "displayMode": "list", "placement": "right" },
-        "pieType": "donut"
-      },
-      "title": "CSV Upload Status Mix",
-      "type": "piechart",
-      "targets": [
-        {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
-          "rawSql": "SELECT status, count() AS cnt FROM analytics.csv_upload_events WHERE $__timeFilter(processed_at) GROUP BY status",
-          "format": "table",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
-      "fieldConfig": {
-        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 2, "fillOpacity": 10 } },
-        "overrides": [
-          { "matcher": { "id": "byName", "options": "rows_extracted" }, "properties": [{ "id": "displayName", "value": "Rows Extracted" }] },
-          { "matcher": { "id": "byName", "options": "rows_silver" }, "properties": [{ "id": "displayName", "value": "Rows Silver" }] }
-        ]
-      },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 14 },
-      "id": 11,
-      "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi" }
-      },
-      "title": "Pipeline Throughput (All Pipelines)",
-      "type": "timeseries",
-      "targets": [
-        {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
-          "rawSql": "SELECT started_at AS time, rows_extracted, rows_silver FROM analytics.pipeline_runs WHERE $__timeFilter(started_at) ORDER BY started_at",
-          "format": "time_series",
-          "refId": "A"
-        }
+        { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" }, "rawSql": "SELECT started_at AS time, rows_extracted AS \"Bronze (Extracted)\", rows_silver AS \"Silver (Cleaned)\" FROM analytics.pipeline_runs WHERE $__timeFilter(started_at) ORDER BY started_at", "format": "table", "refId": "A" }
       ]
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
-      "id": 12,
-      "title": "Operational Details",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "id": 8,
+      "title": "🪣 Storage Layer (RustFS S3)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "postgres_main" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" } }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "id": 9,
+      "options": { "displayLabels": ["percent"], "legend": { "displayMode": "list", "placement": "right" }, "pieType": "donut" },
+      "title": "Object Distribution by Layer",
+      "type": "piechart",
+      "targets": [
+        { "datasource": { "type": "postgres", "uid": "postgres_main" }, "format": "table", "rawSql": "SELECT storage_layer, count(*) FROM lakehouse.data_object GROUP BY storage_layer", "refId": "A" }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "postgres_main" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" } }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "id": 10,
+      "options": { "displayLabels": ["percent"], "legend": { "displayMode": "list", "placement": "right" }, "pieType": "donut" },
+      "title": "Format Distribution",
+      "type": "piechart",
+      "targets": [
+        { "datasource": { "type": "postgres", "uid": "postgres_main" }, "format": "table", "rawSql": "SELECT object_format, count(*) FROM lakehouse.data_object GROUP BY object_format", "refId": "A" }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "id": 11,
+      "title": "⚡ Database Engine Performance",
       "type": "row"
     },
     {
       "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
       "fieldConfig": {
-        "defaults": { "custom": { "align": "auto", "displayMode": "auto" } },
-        "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "status" },
-            "properties": [
-              { "id": "custom.displayMode", "value": "color-background" },
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "value",
-                    "options": {
-                      "success": { "color": "green", "index": 0, "text": "SUCCESS" },
-                      "failed": { "color": "red", "index": 1, "text": "FAILED" }
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        ]
+        "defaults": { "color": { "mode": "continuous-GrYlRd" }, "unit": "s" }
       },
-      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 23 },
-      "id": 13,
-      "options": {
-        "showHeader": true,
-        "sortBy": [{ "desc": true, "displayName": "processed_at" }]
-      },
-      "title": "Recent CSV Upload Events",
-      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "id": 12,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "title": "Query Latency (P99)",
+      "type": "timeseries",
       "targets": [
-        {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
-          "rawSql": "SELECT source_key, status, row_count, duplicate_rows, dropped_rows, processed_at, pipeline_run_id, error_message FROM analytics.csv_upload_events ORDER BY processed_at DESC LIMIT 30",
-          "format": "table",
-          "refId": "A"
-        }
+        { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" }, "rawSql": "SELECT event_time AS time, query_duration_ms / 1000.0 AS duration FROM system.query_log WHERE type = 'QueryFinish' AND $__timeFilter(event_time) ORDER BY event_time", "format": "table", "refId": "A" }
       ]
     },
     {
       "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
       "fieldConfig": {
-        "defaults": { "custom": { "align": "auto", "displayMode": "auto" } },
+        "defaults": { "color": { "mode": "palette-classic" }, "unit": "decbytes" }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "id": 13,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "title": "ClickHouse Memory Consumption Over Time",
+      "type": "timeseries",
+      "targets": [
+        { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" }, "rawSql": "SELECT event_time AS time, value FROM system.metric_log WHERE metric = 'MemoryTracking' AND $__timeFilter(event_time) ORDER BY event_time", "format": "table", "refId": "A" }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+      "id": 14,
+      "title": "📋 Audit & Pipeline History",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
+      "fieldConfig": {
+        "defaults": { "custom": { "displayMode": "auto" } },
         "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "status" },
-            "properties": [
-              { "id": "custom.displayMode", "value": "color-background" }
-            ]
-          }
+          { "matcher": { "id": "byName", "options": "status" }, "properties": [{ "id": "custom.displayMode", "value": "color-background" }, { "id": "mappings", "value": [{ "options": { "success": { "color": "green", "text": "SUCCESS" }, "failed": { "color": "red", "text": "FAILED" } }, "type": "value" }] }] }
         ]
       },
-      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 23 },
-      "id": 14,
-      "options": {
-        "showHeader": true,
-        "sortBy": [{ "desc": true, "displayName": "started_at" }]
-      },
-      "title": "Recent Pipeline Runs",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 33 },
+      "id": 15,
+      "options": { "showHeader": true },
+      "title": "Recent System-Wide Pipeline Runs",
       "type": "table",
       "targets": [
-        {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" },
-          "rawSql": "SELECT run_id, pipeline_name, status, started_at, ended_at, dateDiff('second', started_at, coalesce(ended_at, now())) AS duration_sec, rows_extracted, rows_silver, error_message FROM analytics.pipeline_runs ORDER BY started_at DESC LIMIT 30",
-          "format": "table",
-          "refId": "A"
-        }
+        { "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse_main" }, "rawSql": "SELECT run_id, pipeline_name, status, started_at, rows_extracted, rows_silver, error_message FROM analytics.pipeline_runs ORDER BY started_at DESC LIMIT 50", "format": "table", "refId": "A" }
       ]
     }
   ],
-  "refresh": "30s",
+  "refresh": "15s",
   "schemaVersion": 38,
-  "tags": ["datalakehouse", "demo", "etl", "csv"],
+  "tags": ["datalakehouse", "full-stack", "infra", "storage"],
   "templating": { "list": [] },
-  "time": { "from": "now-7d", "to": "now" },
+  "time": { "from": "now-24h", "to": "now" },
   "timepicker": {},
   "timezone": "Asia/Ho_Chi_Minh",
-  "title": "DataLakehouse Demo Command Center",
-  "uid": "dlh-etl-monitoring",
-  "version": 2,
+  "title": "DataLakehouse 360° Command Center",
+  "uid": "dlh-360-final",
+  "version": 1,
   "weekStart": ""
 }

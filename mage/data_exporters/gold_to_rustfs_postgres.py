@@ -1,5 +1,5 @@
 """
-Data Exporter – Upload Project Gold data to RustFS.
+Data Exporter – Upload Postgres Gold data to RustFS.
 """
 
 import io
@@ -8,7 +8,6 @@ import datetime as dt
 import pandas as pd
 import boto3
 from botocore.client import Config as BotoConfig
-from botocore.exceptions import ClientError
 
 if 'data_exporter' not in dir():
     from mage_ai.data_preparation.decorators import data_exporter
@@ -29,18 +28,19 @@ def _upload_df(client, bucket, key, df):
     df.to_parquet(buffer, index=False, engine='pyarrow')
     buffer.seek(0)
     client.put_object(Bucket=bucket, Key=key, Body=buffer.getvalue())
-    print(f"[gold_to_rustfs] Uploaded {len(df)} rows → s3://{bucket}/{key}")
+    print(f"[gold_to_rustfs_postgres] Uploaded {len(df)} rows → s3://{bucket}/{key}")
 
 @data_exporter
-def export_gold(data, *args, **kwargs):
-    if not isinstance(data, dict) or data.get('skip'): return data
+def export_gold_postgres(data, *args, **kwargs):
+    if not isinstance(data, dict) or not data: return data
     
     bucket = os.getenv('RUSTFS_GOLD_BUCKET', 'gold')
     run_id = data.get('pipeline_run_id', 'unknown')
     date_str = dt.date.today().isoformat()
     client = _s3_client()
 
-    _upload_df(client, bucket, f'projects/dt={date_str}/{run_id}.parquet', data['gold_projects'])
-    _upload_df(client, bucket, f'workload/dt={date_str}/{run_id}.parquet', data['gold_workload'])
+    _upload_df(client, bucket, f'demo_daily/dt={date_str}/{run_id}.parquet', data.get('gold_daily'))
+    _upload_df(client, bucket, f'demo_by_region/dt={date_str}/{run_id}.parquet', data.get('gold_region'))
+    _upload_df(client, bucket, f'demo_by_category/dt={date_str}/{run_id}.parquet', data.get('gold_category'))
 
     return data

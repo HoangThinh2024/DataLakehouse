@@ -1,12 +1,21 @@
 # Variables Reference
 
-This document defines the environment variables used by the DataLakehouse stack.
+Complete reference for all environment variables used by the DataLakehouse stack.
 
-Source of truth:
+Sources of truth:
 
-- `.env.example` for defaults
-- `.env` for active deployment values
-- `scripts/setup.sh` and `scripts/stackctl.sh sync-env` for managed updates
+| File | Purpose |
+|------|---------|
+| `.env.example` | Default values template — copy to `.env` and customise |
+| `.env` | Active deployment configuration (not committed to git) |
+| `scripts/setup.sh` | Generates `.env` interactively on first setup |
+| `scripts/stackctl.sh sync-env` | Updates individual `.env` values without full re-setup |
+
+Quick validation:
+
+```bash
+bash scripts/stackctl.sh validate-env
+```
 
 ## 1. Global
 
@@ -14,7 +23,7 @@ Source of truth:
 |---|---|---|
 | `TZ` | Container timezone | `Asia/Ho_Chi_Minh` |
 | `DLH_BIND_IP` | Host bind IP for published ports | `127.0.0.1` |
-| `DLH_APP_BIND_IP` | Host bind IP for UI/app ports (Mage, NocoDB, Superset, Grafana, RustFS console) | `127.0.0.1` |
+| `DLH_APP_BIND_IP` | Host bind IP for UI/app ports (Mage, Superset, Grafana, RustFS console) | `127.0.0.1` |
 | `DLH_DATA_BIND_IP` | Host bind IP for data/database ports (PostgreSQL, ClickHouse, RustFS API) | `0.0.0.0` |
 | `DLH_LAN_CIDR` | Trusted LAN range for firewall rules | `192.168.1.0/24` |
 | `UFW_ALLOW_DATA_PORTS` | Whether data ports are opened to LAN by firewall script | `false` |
@@ -28,9 +37,11 @@ Source of truth:
 | `MINIO_MC_IMAGE_VERSION` | MinIO mc client tag for rustfs-init | `latest` |
 | `CLICKHOUSE_IMAGE_VERSION` | ClickHouse image tag | `latest` |
 | `MAGE_IMAGE_VERSION` | Mage image tag | `latest` |
-| `NOCODB_IMAGE_VERSION` | NocoDB image tag | `latest` |
 | `SUPERSET_IMAGE_VERSION` | Superset image tag | `latest` |
 | `GRAFANA_IMAGE_VERSION` | Grafana image tag | `latest` |
+| `REDIS_STACK_IMAGE_VERSION` | Redis Stack image tag | `7.4.2-v3` |
+| `REDISINSIGHT_IMAGE_VERSION` | Redis Insight image tag | `2.66.0` |
+| `AUTHENTIK_IMAGE_VERSION` | Authentik image tag | `2026.2.1` |
 
 ## 3. Core PostgreSQL
 
@@ -61,7 +72,7 @@ Source of truth:
 | `DLH_RUSTFS_CONSOLE_PORT` | Host port mapped to RustFS console | `29101` |
 | `RUSTFS_CORS_ALLOWED_ORIGINS` | Allowed origins for RustFS API | `http://127.0.0.1:29100` |
 | `RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS` | Allowed origins for RustFS console | `http://127.0.0.1:29101` |
-| `RUSTFS_BUCKET` | Generic app bucket | `nocodb` |
+| `RUSTFS_BUCKET` | Generic app bucket | `general` |
 | `RUSTFS_BRONZE_BUCKET` | Bronze layer bucket | `bronze` |
 | `RUSTFS_SILVER_BUCKET` | Silver layer bucket | `silver` |
 | `RUSTFS_GOLD_BUCKET` | Gold layer bucket | `gold` |
@@ -101,16 +112,38 @@ Source of truth:
 | `CSV_UPLOAD_ENCODING` | CSV encoding | `utf-8` |
 | `CSV_UPLOAD_SCAN_LIMIT` | Max files scanned per run | `200` |
 
-## 8. NocoDB
+## 8. Redis
 
 | Variable | Description | Example |
 |---|---|---|
-| `DLH_NOCODB_PORT` | Host port for NocoDB | `28082` |
-| `NOCODB_DB_NAME` | NocoDB metadata DB | `dlh_nocodb` |
-| `NOCODB_DB_USER` | NocoDB metadata user | `dlh_nocodb_user` |
-| `NOCODB_DB_PASSWORD` | NocoDB metadata password | `change-this-nocodb-password` |
+| `REDIS_HOST` | Internal Redis hostname used by services | `dlh-redis` |
+| `REDIS_BIND_IP` | Host bind IP for published Redis port (set `127.0.0.1` for local-only) | `127.0.0.1` |
+| `DLH_REDIS_PORT` | Host port mapped to Redis `6379` | `26379` |
+| `REDIS_PASSWORD` | Shared Redis password | `change-this-redis-password` |
+| `REDIS_PROTECTED_MODE` | Redis protected mode flag | `yes` |
+| `REDIS_APPENDONLY` | Enable append-only persistence | `yes` |
+| `REDIS_MAXMEMORY` | Memory ceiling for Redis container | `512mb` |
+| `REDIS_MAXMEMORY_POLICY` | Eviction policy when memory is full | `allkeys-lru` |
+| `REDIS_VM_OVERCOMMIT_MEMORY` | Container sysctl value for `vm.overcommit_memory` | `1` |
+| `REDIS_STACK_IMAGE_VERSION` | Redis Stack image tag | `latest` |
+| `DLH_REDIS_GUI_PORT` | Host port for Redis Insight UI | `25540` |
+| `REDIS_AUTHENTIK_DB` | Redis logical DB index used by Authentik | `1` |
+| `SUPERSET_REDIS_CACHE_DB` | Redis logical DB index used by Superset cache | `2` |
+| `SUPERSET_REDIS_RESULTS_DB` | Redis logical DB index used by Superset SQL Lab results | `3` |
 
-## 9. Superset
+## 9. CloudBeaver
+
+| Variable | Description | Example |
+|---|---|---|
+| `DLH_CLOUDBEAVER_PORT` | Host port for CloudBeaver web SQL IDE | `28978` |
+
+## 10. Dockhand
+
+| Variable | Description | Example |
+|---|---|---|
+| `DLH_DOCKHAND_PORT` | Host port for Dockhand (Docker Management UI) | `23000` |
+
+## 11. Superset
 
 | Variable | Description | Example |
 |---|---|---|
@@ -123,8 +156,22 @@ Source of truth:
 | `SUPERSET_ADMIN_PASSWORD` | Superset admin password | `admin` |
 | `SUPERSET_ADMIN_EMAIL` | Superset admin email | `admin@superset.local` |
 | `SUPERSET_PREFERRED_URL_SCHEME` | URL scheme behind proxy or direct | `http` |
+| `SUPERSET_PIP_REQUIREMENTS` | Extra Python packages installed at Superset startup (must be quoted if multiple packages are listed) | `"psycopg2-binary==2.9.9 clickhouse-connect==0.8.3"` |
 
-## 10. Grafana
+## 11. Authentik
+
+| Variable | Description | Example |
+|---|---|---|
+| `DLH_AUTHENTIK_PORT` | Host port for Authentik web UI/API | `29090` |
+| `AUTHENTIK_SECRET_KEY` | Authentik cryptographic secret key | `replace-this-with-a-long-random-secret` |
+| `AUTHENTIK_DB_NAME` | Authentik metadata DB name | `dlh_authentik` |
+| `AUTHENTIK_DB_USER` | Authentik metadata DB user | `dlh_authentik_user` |
+| `AUTHENTIK_DB_PASSWORD` | Authentik metadata DB password | `change-this-authentik-db-password` |
+| `AUTHENTIK_BOOTSTRAP_EMAIL` | Initial admin email for first bootstrap | `admin@authentik.local` |
+| `AUTHENTIK_BOOTSTRAP_PASSWORD` | Initial admin password for first bootstrap | `admin` |
+| `AUTHENTIK_BOOTSTRAP_TOKEN` | Optional first-run bootstrap token | `` |
+
+## 12. Grafana
 
 | Variable | Description | Example |
 |---|---|---|
@@ -135,7 +182,7 @@ Source of truth:
 | `GRAFANA_ADMIN_USER` | Grafana admin username | `admin` |
 | `GRAFANA_ADMIN_PASSWORD` | Grafana admin password | `admin` |
 
-## 11. Optional Reverse Proxy
+## 13. Optional Reverse Proxy
 
 | Variable | Description | Example |
 |---|---|---|
@@ -143,7 +190,7 @@ Source of truth:
 | `DLH_NPM_HTTPS_PORT` | Nginx Proxy Manager HTTPS port | `28443` |
 | `DLH_NPM_ADMIN_PORT` | Nginx Proxy Manager admin UI port | `28081` |
 
-## 12. Validation Checklist
+## 14. Validation Checklist
 
 Before deploying, verify:
 

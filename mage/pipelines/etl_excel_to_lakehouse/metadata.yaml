@@ -3,36 +3,18 @@ blocks:
   color: null
   configuration: {}
   downstream_blocks:
-  - bronze_to_rustfs
+  - clean_excel_data
   executor_config: null
   executor_type: local_python
   has_callback: false
   language: python
-  name: Extract Postgres
+  name: Extract Excel from RustFS
   retry_config: null
-  status: not_executed
+  status: executed
   timeout: null
   type: data_loader
   upstream_blocks: []
-  uuid: extract_postgres
-
-- all_upstream_blocks_executed: true
-  color: null
-  configuration: {}
-  downstream_blocks:
-  - transform_silver
-  executor_config: null
-  executor_type: local_python
-  has_callback: false
-  language: python
-  name: Bronze to RustFS
-  retry_config: null
-  status: not_executed
-  timeout: null
-  type: data_exporter
-  upstream_blocks:
-  - extract_postgres
-  uuid: bronze_to_rustfs
+  uuid: extract_excel_from_rustfs
 
 - all_upstream_blocks_executed: true
   color: null
@@ -43,14 +25,14 @@ blocks:
   executor_type: local_python
   has_callback: false
   language: python
-  name: Transform Silver
+  name: Clean Excel Data
   retry_config: null
-  status: not_executed
+  status: executed
   timeout: null
   type: transformer
   upstream_blocks:
-  - bronze_to_rustfs
-  uuid: transform_silver
+  - extract_excel_from_rustfs
+  uuid: clean_excel_data
 
 - all_upstream_blocks_executed: true
   color: null
@@ -63,31 +45,66 @@ blocks:
   language: python
   name: Silver to RustFS
   retry_config: null
-  status: not_executed
+  status: executed
   timeout: null
   type: data_exporter
   upstream_blocks:
-  - transform_silver
+  - clean_excel_data
   uuid: silver_to_rustfs
 
 - all_upstream_blocks_executed: true
   color: null
   configuration: {}
   downstream_blocks:
-  - gold_to_rustfs_postgres
-  - load_to_clickhouse
+  - gold_to_rustfs
   executor_config: null
   executor_type: local_python
   has_callback: false
   language: python
-  name: Transform Gold Postgres
+  name: Transform Gold
   retry_config: null
-  status: not_executed
+  status: executed
   timeout: null
   type: transformer
   upstream_blocks:
   - silver_to_rustfs
-  uuid: transform_gold_postgres
+  uuid: transform_gold
+
+- all_upstream_blocks_executed: true
+  color: null
+  configuration: {}
+  downstream_blocks:
+  - load_gold_to_clickhouse
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: Gold to RustFS
+  retry_config: null
+  status: executed
+  timeout: null
+  type: data_exporter
+  upstream_blocks:
+  - transform_gold
+  uuid: gold_to_rustfs
+
+- all_upstream_blocks_executed: true
+  color: null
+  configuration: {}
+  downstream_blocks:
+  - load_excel_to_clickhouse
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: Load Gold to ClickHouse
+  retry_config: null
+  status: executed
+  timeout: null
+  type: data_exporter
+  upstream_blocks:
+  - gold_to_rustfs
+  uuid: load_gold_to_clickhouse
 
 - all_upstream_blocks_executed: true
   color: null
@@ -97,32 +114,15 @@ blocks:
   executor_type: local_python
   has_callback: false
   language: python
-  name: Gold to RustFS Postgres
+  name: Load Excel to ClickHouse
   retry_config: null
-  status: not_executed
+  status: executed
   timeout: null
   type: data_exporter
   upstream_blocks:
-  - transform_gold_postgres
-  uuid: gold_to_rustfs_postgres
+  - load_gold_to_clickhouse
+  uuid: load_excel_to_clickhouse
 
-- all_upstream_blocks_executed: true
-  color: null
-  configuration: {}
-  downstream_blocks: []
-  executor_config: null
-  executor_type: local_python
-  has_callback: false
-  language: python
-  name: Load to ClickHouse
-  retry_config: null
-  status: not_executed
-  timeout: null
-  type: data_exporter
-  upstream_blocks:
-  - transform_gold_postgres
-  uuid: load_to_clickhouse
-
-name: ETL Postgres to Lakehouse
+name: ETL Excel to Lakehouse
 type: python
-uuid: etl_postgres_to_lakehouse
+uuid: etl_excel_to_lakehouse
