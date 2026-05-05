@@ -43,7 +43,19 @@ def transform_silver(df: pd.DataFrame, *args, **kwargs):
     # 1. Drop exact duplicates (keep first)
     before = len(df)
     df = df.drop_duplicates()
-    print(f"[transform_silver] Duplicates removed: {before - len(df)}")
+    print(f"[transform_silver] Exact duplicates removed: {before - len(df)}")
+
+    # 1b. Deduplicate by business key (id), keeping the row with the latest
+    #     _extracted_at.  This prevents the same source record appearing
+    #     multiple times when the upstream extract contains repeated ids.
+    if 'id' in df.columns:
+        before_biz = len(df)
+        sort_cols = ['_extracted_at', 'id'] if '_extracted_at' in df.columns else ['id']
+        df = df.sort_values(sort_cols, ascending=True, na_position='first')
+        df = df.drop_duplicates(subset=['id'], keep='last').reset_index(drop=True)
+        removed = before_biz - len(df)
+        if removed:
+            print(f"[transform_silver] Business-key (id) dedup removed: {removed}")
 
     # 2. Clean text columns
     for col in ('name', 'notes'):

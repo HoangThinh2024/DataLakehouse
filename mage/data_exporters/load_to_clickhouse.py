@@ -14,6 +14,8 @@ This ensures:
   - Data lineage is traceable
   - ClickHouse never queries PostgreSQL directly (lake is single source of truth)
   - Full recoverability: can always re-read from RustFS
+  - Duplicate prevention: TRUNCATE + full-refresh each run so old run data
+    never accumulates; pre-insert dedup by business keys as a safety net.
 
 Uses clickhouse-driver for the native TCP protocol (port 9000).
 """
@@ -103,7 +105,12 @@ def _insert(client: Client, table: str, df: pd.DataFrame, columns: list[str]) ->
 
 
 def _ensure_clickhouse_objects(client: Client, db: str) -> None:
-    """Create required database/tables with ReplacingMergeTree for idempotency."""
+    """Create required database/tables with ReplacingMergeTree for idempotency.
+
+    ORDER BY keys deliberately exclude _pipeline_run_id so that
+    ReplacingMergeTree can collapse multiple runs for the same business key
+    into a single row (keeping the latest _db_processed_at version).
+    """
     ddl = [
         f'CREATE DATABASE IF NOT EXISTS {db}',
         f'''
@@ -126,7 +133,7 @@ def _ensure_clickhouse_objects(client: Client, db: str) -> None:
             _db_processed_at DateTime64(3) DEFAULT now64(3)
         )
         ENGINE = ReplacingMergeTree(_db_processed_at)
-        ORDER BY (order_date, id, _pipeline_run_id)
+        ORDER BY (order_date, id)
         ''',
         f'''
         CREATE TABLE IF NOT EXISTS {db}.gold_demo_daily
@@ -144,7 +151,7 @@ def _ensure_clickhouse_objects(client: Client, db: str) -> None:
             _db_processed_at DateTime64(3) DEFAULT now64(3)
         )
         ENGINE = ReplacingMergeTree(_db_processed_at)
-        ORDER BY (order_date, _pipeline_run_id)
+        ORDER BY (order_date)
         ''',
         f'''
         CREATE TABLE IF NOT EXISTS {db}.gold_demo_by_region
@@ -160,7 +167,7 @@ def _ensure_clickhouse_objects(client: Client, db: str) -> None:
             _db_processed_at DateTime64(3) DEFAULT now64(3)
         )
         ENGINE = ReplacingMergeTree(_db_processed_at)
-        ORDER BY (region, report_date, _pipeline_run_id)
+        ORDER BY (region, report_date)
         ''',
         f'''
         CREATE TABLE IF NOT EXISTS {db}.gold_demo_by_category
@@ -176,7 +183,7 @@ def _ensure_clickhouse_objects(client: Client, db: str) -> None:
             _db_processed_at DateTime64(3) DEFAULT now64(3)
         )
         ENGINE = ReplacingMergeTree(_db_processed_at)
-        ORDER BY (category, report_date, _pipeline_run_id)
+        ORDER BY (category, report_date)
         ''',
         f'''
         CREATE TABLE IF NOT EXISTS {db}.pipeline_runs
@@ -203,25 +210,78 @@ def _ensure_clickhouse_objects(client: Client, db: str) -> None:
         client.execute(statement)
 
 
+def _truncate_analytics_tables(client: Client, db: str) -> None:
+    """Truncate analytics tables before full-refresh to prevent cross-run duplicates.
+
+    ClickHouse is the serving layer; RustFS is the source of truth.
+    A full-refresh (TRUNCATE + INSERT) is correct and keeps storage bounded.
+    """
+    for tbl in ['silver_demo', 'gold_demo_daily', 'gold_demo_by_region', 'gold_demo_by_category']:
+        try:
+            client.execute(f'TRUNCATE TABLE {db}.{tbl}')
+        except Exception as exc:
+            print(f'[load_to_clickhouse] TRUNCATE {db}.{tbl} warning: {exc}')
+
+
+def _dedup_by_keys(df: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
+    """Deduplicate DataFrame by business keys, keeping the most recent row.
+
+    Sorts by _db_processed_at (if present) so the latest version survives.
+    This is a safety net before INSERT even though TRUNCATE already removes old runs.
+    """
+    if df is None or len(df) == 0:
+        return df
+    present_keys = [k for k in keys if k in df.columns]
+    if not present_keys:
+        return df
+    before = len(df)
+    sort_col = '_db_processed_at' if '_db_processed_at' in df.columns else (
+        '_silver_processed_at' if '_silver_processed_at' in df.columns else None
+    )
+    if sort_col:
+        df = df.sort_values(sort_col, ascending=True, na_position='first')
+    df = df.drop_duplicates(subset=present_keys, keep='last').reset_index(drop=True)
+    removed = before - len(df)
+    if removed:
+        print(f'[load_to_clickhouse] Pre-insert dedup ({present_keys}): removed {removed} duplicates')
+    return df
+
+
 @data_exporter
 def load_clickhouse(data, *args, **kwargs):
-    """Load latest Silver and Gold data from RustFS into ClickHouse."""
+    """Load latest Silver and Gold data from RustFS into ClickHouse.
+
+    Uses TRUNCATE + full-refresh to guarantee no cross-run duplicates.
+    Pre-insert dedup by business keys guards against within-run duplicates.
+    """
     started_at = dt.datetime.now(dt.timezone.utc)
     client = _ch_client()
     db = os.getenv('CLICKHOUSE_DB', 'analytics')
     _ensure_clickhouse_objects(client, db)
-    
+
     rows_silver = rows_daily = rows_region = rows_category = 0
     error_msg = None
     run_id = 'auto-load'
     status = 'unknown'
-    
+
     try:
-        # 1. Read and Load Silver
+        # 1. Read Silver and Gold from RustFS BEFORE truncating, so we only
+        #    truncate when we have data to replace the tables with.
         silver_df = read_latest_silver()
+        gold_data = read_all_gold()
+        gold_daily = gold_data.get('gold_daily', pd.DataFrame())
+        gold_region = gold_data.get('gold_region', pd.DataFrame())
+        gold_category = gold_data.get('gold_category', pd.DataFrame())
+
+        # 2. Truncate analytics tables for a clean full-refresh (prevents
+        #    duplicate rows accumulating across pipeline runs).
+        _truncate_analytics_tables(client, db)
+
+        # 3. Insert Silver (deduplicated by business key first)
         if len(silver_df) > 0:
             if '_pipeline_run_id' in silver_df.columns:
                 run_id = silver_df['_pipeline_run_id'].iloc[0]
+            silver_df = _dedup_by_keys(silver_df, ['order_date', 'id'])
             silver_cols = [
                 'id', 'name', 'category', 'value', 'quantity', 'order_date',
                 'region', 'status', 'customer_email', 'notes', 'created_at',
@@ -229,34 +289,31 @@ def load_clickhouse(data, *args, **kwargs):
             ]
             rows_silver = _insert(client, f'{db}.silver_demo', silver_df, silver_cols)
 
-        # 2. Read and Load Gold
-        gold_data = read_all_gold()
-        # Fallback to direct keys if multi-table dict isn't present
-        gold_daily = gold_data.get('gold_daily', pd.DataFrame())
-        gold_region = gold_data.get('gold_region', pd.DataFrame())
-        gold_category = gold_data.get('gold_category', pd.DataFrame())
-        
+        # 4. Insert Gold (deduplicated by business key first)
         if len(gold_daily) > 0:
+            gold_daily = _dedup_by_keys(gold_daily, ['order_date'])
             rows_daily = _insert(client, f'{db}.gold_demo_daily', gold_daily, [
                 'order_date', 'order_count', 'total_revenue', 'avg_order_value',
                 'total_quantity', 'unique_customers', 'unique_regions', 'unique_categories',
                 '_pipeline_run_id', '_gold_processed_at'
             ])
         if len(gold_region) > 0:
+            gold_region = _dedup_by_keys(gold_region, ['region', 'report_date'])
             rows_region = _insert(client, f'{db}.gold_demo_by_region', gold_region, [
                 'region', 'order_count', 'total_revenue', 'avg_order_value',
                 'total_quantity', 'report_date', '_pipeline_run_id', '_gold_processed_at'
             ])
         if len(gold_category) > 0:
+            gold_category = _dedup_by_keys(gold_category, ['category', 'report_date'])
             rows_category = _insert(client, f'{db}.gold_demo_by_category', gold_category, [
                 'category', 'order_count', 'total_revenue', 'avg_order_value',
                 'total_quantity', 'report_date', '_pipeline_run_id', '_gold_processed_at'
             ])
-        
+
         status = 'success'
         for tbl in ['silver_demo', 'gold_demo_daily', 'gold_demo_by_region', 'gold_demo_by_category']:
             client.execute(f'OPTIMIZE TABLE {db}.{tbl} FINAL')
-            
+
     except Exception as exc:
         error_msg = str(exc)
         status = 'failed'
