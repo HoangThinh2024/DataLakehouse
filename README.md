@@ -19,7 +19,7 @@ OLAP analytics, and business intelligence dashboards — all on a single host.
 | **Dashboards** | Apache Superset | Business intelligence dashboards |
 | **Monitoring** | Grafana | Pipeline operational monitoring |
 | **Identity** | Authentik | Centralised SSO and RBAC |
-| **Cache** | Redis (Stack) | Shared cache / queue for Superset and Authentik |
+| **Cache / GUI** | Redis Stack | Shared cache/queue for Superset and Authentik + built-in Redis Insight UI |
 | **SQL IDE** | CloudBeaver | Web-based SQL client for PostgreSQL and ClickHouse |
 | **Docker Mgmt** | Dockhand | Lightweight web-based Docker management UI |
 | **Proxy** | Nginx Proxy Manager | Optional TLS reverse proxy |
@@ -41,7 +41,12 @@ OLAP analytics, and business intelligence dashboards — all on a single host.
 | PostgreSQL | localhost:25432 | `POSTGRES_USER` / `POSTGRES_PASSWORD` |
 | ClickHouse HTTP | http://localhost:28123 | `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` |
 | Redis | localhost:26379 | `REDIS_PASSWORD` |
-| Redis Insight | http://localhost:25540 | (no auth by default) |
+| Redis Insight | http://localhost:25540 | (add connection manually; use `REDIS_HOST` / `REDIS_PASSWORD`) |
+
+> **Redis Insight** is built into the `redis/redis-stack` image and served from the same
+> container as Redis (port 8001 inside the container, mapped to `DLH_REDIS_GUI_PORT`).
+> No separate container is required.  On first visit add a connection to
+> `dlh-redis:6379` (or `127.0.0.1:6379` from the host) with your `REDIS_PASSWORD`.
 
 All credentials are set in `.env`. Default values are for local development only —
 **rotate all passwords before production use.**
@@ -289,6 +294,22 @@ uv run python scripts/run_etl_and_dashboard.py --auto
 ```
 
 The runner handles BOM/Windows encodings and malformed inherited env values automatically.
+
+### Redis Insight not accessible
+
+Redis Insight is served by the `dlh-redis` container itself (built into `redis/redis-stack`).
+It is **not** a separate container. If the UI at `http://localhost:25540` is unreachable:
+
+```bash
+# Check that dlh-redis is healthy and port 8001 is mapped
+docker compose ps dlh-redis
+docker compose logs dlh-redis --tail 50
+```
+
+On first visit you will be prompted to add a Redis connection. Use:
+- **Host**: `127.0.0.1` (or the container hostname `dlh-redis` from within the stack)
+- **Port**: `6379`
+- **Password**: value of `REDIS_PASSWORD` in your `.env`
 
 ### ClickHouse data missing
 

@@ -91,7 +91,7 @@ Supporting infrastructure (cuts across all layers):
 | `dlh-rustfs` | `rustfs/rustfs` | S3-compatible object storage (Bronze / Silver / Gold lake buckets) | API `29100`, Console `29101` |
 | `dlh-rustfs-init` | `minio/mc` | One-shot init: creates `bronze`, `silver`, `gold` buckets | — |
 | `dlh-clickhouse` | `clickhouse/clickhouse-server:25.4-alpine` | Columnar OLAP engine — analytics serving layer | HTTP `28123`, TCP `29000` |
-| `dlh-redis` | `redis/redis-stack` | Shared cache/queue (Superset cache+results, Authentik queue) + Redis Insight GUI | `26379` (Redis), `25540` (GUI) |
+| `dlh-redis` | `redis/redis-stack:7.4.2-v3` | Shared cache/queue (Superset cache+results, Authentik queue) + Redis Insight GUI (built-in) | `26379` (Redis), `25540` (Redis Insight GUI) |
 | `dlh-mage` | `mageai/mageai:0.9.76` | ETL orchestration — runs and schedules pipelines | `26789` |
 | `dlh-superset` | `apache/superset:4.1.2` | Business intelligence / dashboard UI connected to ClickHouse | `28088` |
 | `dlh-grafana` | `grafana/grafana:12.0.0` | Operational monitoring; ingests `analytics.pipeline_runs` | `23001` |

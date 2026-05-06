@@ -173,9 +173,10 @@ services:
       start_period: 30s
 
   # Redis – shared cache/queue backend for platform services
+  # redis/redis-stack bundles Redis server + Redis Stack modules + Redis Insight GUI (port 8001)
   dlh-redis:
     <<: *dlh-runtime
-    image: redis/redis-stack:${REDIS_STACK_IMAGE_VERSION:-latest}
+    image: redis/redis-stack:${REDIS_STACK_IMAGE_VERSION:-7.4.2-v3}
     container_name: dlh-redis
     env_file:
       - .env
@@ -202,6 +203,7 @@ services:
       - ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
     ports:
       - "${REDIS_BIND_IP:-127.0.0.1}:${DLH_REDIS_PORT:-26379}:6379"
+      - "${REDIS_BIND_IP:-127.0.0.1}:${DLH_REDIS_GUI_PORT:-25540}:8001"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -210,26 +212,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-
-  redisinsight:
-    <<: *dlh-runtime
-    image: redis/redisinsight:${REDISINSIGHT_IMAGE_VERSION:-latest}
-    container_name: dlh-redisinsight
-    environment:
-      TZ: ${TZ:-Asia/Ho_Chi_Minh}
-    ports:
-      - "${REDIS_BIND_IP:-127.0.0.1}:${DLH_REDIS_GUI_PORT:-25540}:5540"
-    volumes:
-      - redisinsight_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:5540/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    depends_on:
-      dlh-redis:
-        condition: service_healthy
 
   # ==========================================================
   # LAYER 3: PROCESSING
@@ -541,8 +523,6 @@ volumes:
   grafana_data:
     driver: local
   redis_data:
-    driver: local
-  redisinsight_data:
     driver: local
   cloudbeaver_data:
     driver: local
