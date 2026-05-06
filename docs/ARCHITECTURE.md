@@ -99,6 +99,8 @@ Supporting infrastructure (cuts across all layers):
 | `dlh-authentik-worker` | `goauthentik/server:2026.2.1` | Background worker for Authentik tasks | — |
 | `dlh-cloudbeaver` | `dbeaver/cloudbeaver` | Web SQL IDE for exploring PostgreSQL and ClickHouse | `28978` |
 | `dlh-dockhand` | `fnsys/dockhand:latest` | Lightweight web-based Docker management UI | `23000` |
+| `dlh-guacamole` | `guacamole/guacamole:latest` | Clientless remote desktop gateway (RDP/VNC/SSH via browser) | `28090` |
+| `dlh-guacd` | `guacamole/guacd:latest` | Guacamole proxy daemon handling remote protocol translation | — |
 | `dlh-nginx-proxy-manager` | `jc21/nginx-proxy-manager` | Optional reverse proxy + TLS termination | `80`, `443`, admin `28081` |
 
 All containers share the external Docker network `web_network`.

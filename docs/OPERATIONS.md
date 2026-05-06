@@ -15,11 +15,12 @@ operations, and maintenance procedures.
 5. [Realtime File Watcher](#5-realtime-file-watcher)
 6. [Redis Operations](#6-redis-operations)
 7. [Authentik Operations](#7-authentik-operations)
-8. [Backup and Restore](#8-backup-and-restore)
-9. [Maintenance and Cleanup](#9-maintenance-and-cleanup)
-10. [Firewall Management](#10-firewall-management)
-11. [Common Recovery Procedures](#11-common-recovery-procedures)
-12. [Production Checklist](#12-production-checklist)
+8. [Apache Guacamole Operations](#8-apache-guacamole-operations)
+9. [Backup and Restore](#9-backup-and-restore)
+10. [Maintenance and Cleanup](#10-maintenance-and-cleanup)
+11. [Firewall Management](#11-firewall-management)
+12. [Common Recovery Procedures](#12-common-recovery-procedures)
+13. [Production Checklist](#13-production-checklist)
 
 ---
 
@@ -351,7 +352,46 @@ Access the setup wizard at `http://localhost:29090/if/flow/initial-setup/`.
 
 ---
 
-## 8. Backup and Restore
+## 8. Apache Guacamole Operations
+
+Apache Guacamole provides clientless remote desktop access (RDP, VNC, SSH) to the DataLakehouse server via any web browser.
+
+### Access
+
+- **URL**: `http://localhost:28090/guacamole/`
+- **Default Credentials**: `guacadmin` / `guacadmin`
+
+> **Security Warning:** Change the default password immediately after first login.
+
+### Service health
+
+```bash
+docker compose ps dlh-guacamole dlh-guacd
+# Both should be 'Up' and 'Healthy'
+```
+
+### View logs
+
+```bash
+docker compose logs dlh-guacamole --tail 100
+docker compose logs dlh-guacd --tail 100
+```
+
+### Database management
+
+Guacamole stores connection data in a dedicated PostgreSQL database:
+- **DB Name**: `dlh_guacamole` (set via `GUACAMOLE_DB_NAME`)
+- **DB User**: `dlh_guacamole_user` (set via `GUACAMOLE_DB_USER`)
+
+### Adding connections
+
+1. Log in to Guacamole as an administrator.
+2. Go to **Settings** -> **Connections** -> **New Connection**.
+3. For **SSH access** to the host, use hostname `host.docker.internal` (if enabled) or the LAN IP of the server.
+
+---
+
+## 9. Backup and Restore
 
 ### ClickHouse backup
 
