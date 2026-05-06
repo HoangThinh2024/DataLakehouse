@@ -247,6 +247,28 @@ docker compose exec dlh-redis redis-cli -a "$REDIS_PASSWORD" ping
 docker compose logs dlh-redis --tail 100
 ```
 
+### Redis Insight GUI
+
+Redis Insight is bundled inside the `redis/redis-stack` image and runs on container port **8001**,
+mapped to `DLH_REDIS_GUI_PORT` (default `25540`) on the host.
+
+```
+http://localhost:25540
+```
+
+There is no separate `redisinsight` container. On first visit, add a connection:
+
+- **Host**: `127.0.0.1`
+- **Port**: `6379`
+- **Password**: value of `REDIS_PASSWORD` in `.env`
+
+If Redis Insight is not reachable, verify the port mapping is active:
+
+```bash
+docker compose ps dlh-redis        # should show port 0.0.0.0:25540->8001/tcp
+docker compose logs dlh-redis --tail 30
+```
+
 ### Inspect Redis databases
 
 ```bash

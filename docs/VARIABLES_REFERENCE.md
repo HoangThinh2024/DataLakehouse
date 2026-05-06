@@ -40,7 +40,6 @@ bash scripts/stackctl.sh validate-env
 | `SUPERSET_IMAGE_VERSION` | Superset image tag | `latest` |
 | `GRAFANA_IMAGE_VERSION` | Grafana image tag | `latest` |
 | `REDIS_STACK_IMAGE_VERSION` | Redis Stack image tag | `7.4.2-v3` |
-| `REDISINSIGHT_IMAGE_VERSION` | Redis Insight image tag | `2.66.0` |
 | `AUTHENTIK_IMAGE_VERSION` | Authentik image tag | `2026.2.1` |
 
 ## 3. Core PostgreSQL
@@ -126,7 +125,7 @@ bash scripts/stackctl.sh validate-env
 | `REDIS_MAXMEMORY_POLICY` | Eviction policy when memory is full | `allkeys-lru` |
 | `REDIS_VM_OVERCOMMIT_MEMORY` | Container sysctl value for `vm.overcommit_memory` | `1` |
 | `REDIS_STACK_IMAGE_VERSION` | Redis Stack image tag | `latest` |
-| `DLH_REDIS_GUI_PORT` | Host port for Redis Insight UI | `25540` |
+| `DLH_REDIS_GUI_PORT` | Host port for Redis Insight UI (built into `redis/redis-stack`, container port 8001) | `25540` |
 | `REDIS_AUTHENTIK_DB` | Redis logical DB index used by Authentik | `1` |
 | `SUPERSET_REDIS_CACHE_DB` | Redis logical DB index used by Superset cache | `2` |
 | `SUPERSET_REDIS_RESULTS_DB` | Redis logical DB index used by Superset SQL Lab results | `3` |
