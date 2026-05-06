@@ -124,7 +124,7 @@ bash scripts/stackctl.sh validate-env
 | `REDIS_MAXMEMORY` | Memory ceiling for Redis container | `512mb` |
 | `REDIS_MAXMEMORY_POLICY` | Eviction policy when memory is full | `allkeys-lru` |
 | `REDIS_VM_OVERCOMMIT_MEMORY` | Container sysctl value for `vm.overcommit_memory` | `1` |
-| `REDIS_STACK_IMAGE_VERSION` | Redis Stack image tag | `latest` |
+| `REDIS_STACK_IMAGE_VERSION` | Redis Stack image tag | `7.4.2-v3` |
 | `DLH_REDIS_GUI_PORT` | Host port for Redis Insight UI (built into `redis/redis-stack`, container port 8001) | `25540` |
 | `REDIS_AUTHENTIK_DB` | Redis logical DB index used by Authentik | `1` |
 | `SUPERSET_REDIS_CACHE_DB` | Redis logical DB index used by Superset cache | `2` |
