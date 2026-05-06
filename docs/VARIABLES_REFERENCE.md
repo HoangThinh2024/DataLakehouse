@@ -170,7 +170,17 @@ bash scripts/stackctl.sh validate-env
 | `AUTHENTIK_BOOTSTRAP_PASSWORD` | Initial admin password for first bootstrap | `admin` |
 | `AUTHENTIK_BOOTSTRAP_TOKEN` | Optional first-run bootstrap token | `` |
 
-## 12. Grafana
+## 12. Apache Guacamole
+
+| Variable | Description | Example |
+|---|---|---|
+| `GUACAMOLE_IMAGE_VERSION` | Apache Guacamole and guacd image tag | `latest` |
+| `DLH_GUACAMOLE_PORT` | Host port for Guacamole web UI | `28090` |
+| `GUACAMOLE_DB_NAME` | Guacamole metadata database name | `dlh_guacamole` |
+| `GUACAMOLE_DB_USER` | Guacamole metadata DB user | `dlh_guacamole_user` |
+| `GUACAMOLE_DB_PASSWORD` | Guacamole metadata DB password | `change-me` |
+
+## 13. Grafana
 
 | Variable | Description | Example |
 |---|---|---|
