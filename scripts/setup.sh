@@ -211,6 +211,7 @@ SUPERSET_ADMIN_PASSWORD=$(ask_input "Superset admin password" "${SUPERSET_ADMIN_
 GRAFANA_DB_PASSWORD=$(ask_input "Grafana DB password" "${GRAFANA_DB_PASSWORD:-change-this-grafana-db-password}")
 GRAFANA_ADMIN_USER=$(ask_input "Grafana admin user" "${GRAFANA_ADMIN_USER:-admin}")
 GRAFANA_ADMIN_PASSWORD=$(ask_input "Grafana admin password" "${GRAFANA_ADMIN_PASSWORD:-admin}")
+GUACAMOLE_DB_PASSWORD=$(ask_input "Guacamole DB password" "${GUACAMOLE_DB_PASSWORD:-change-this-guacamole-db-password}")
 
 # =============================================================
 header "8 / 8 – Port Assignments"
@@ -221,6 +222,8 @@ SUGGESTED_SUPERSET_PORT=$(suggest_port "${DLH_SUPERSET_PORT:-28088}")
 DLH_SUPERSET_PORT=$(ask_input "Host port – Superset" "$SUGGESTED_SUPERSET_PORT")
 SUGGESTED_GRAFANA_PORT=$(suggest_port "${DLH_GRAFANA_PORT:-23001}")
 DLH_GRAFANA_PORT=$(ask_input "Host port – Grafana" "$SUGGESTED_GRAFANA_PORT")
+SUGGESTED_GUACAMOLE_PORT=$(suggest_port "${DLH_GUACAMOLE_PORT:-28090}")
+DLH_GUACAMOLE_PORT=$(ask_input "Host port – Guacamole" "$SUGGESTED_GUACAMOLE_PORT")
 
 
 # =============================================================
@@ -366,6 +369,13 @@ GRAFANA_DB_USER=dlh_grafana_user
 GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD}
 GRAFANA_ADMIN_USER=${GRAFANA_ADMIN_USER}
 GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+
+# ─ Apache Guacamole (Browser-based Remote Desktop Gateway) ─
+GUACAMOLE_IMAGE_VERSION=${GUACAMOLE_IMAGE_VERSION:-latest}
+DLH_GUACAMOLE_PORT=${DLH_GUACAMOLE_PORT}
+GUACAMOLE_DB_NAME=dlh_guacamole
+GUACAMOLE_DB_USER=dlh_guacamole_user
+GUACAMOLE_DB_PASSWORD=${GUACAMOLE_DB_PASSWORD}
 
 # ─ Nginx Proxy Manager (optional, for reverse proxy) ───────
 DLH_NPM_HTTP_PORT=28080
