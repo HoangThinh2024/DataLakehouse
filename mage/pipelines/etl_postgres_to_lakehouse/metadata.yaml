@@ -56,7 +56,7 @@ blocks:
   color: null
   configuration: {}
   downstream_blocks:
-  - transform_gold
+  - transform_gold_postgres
   executor_config: null
   executor_type: local_python
   has_callback: false
