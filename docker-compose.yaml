@@ -305,6 +305,9 @@ services:
     restart: "no"
 
   # guacamole-db-apply: run the schema SQL against PostgreSQL (idempotent)
+  # Runs as the PostgreSQL admin so that all DDL in initdb.sql succeeds, then
+  # explicitly grants the app user the access it needs.  This avoids permission
+  # denied errors when Guacamole tries to change passwords or add users.
   guacamole-db-apply:
     image: postgres:${POSTGRES_IMAGE_VERSION:-17-alpine}
     container_name: dlh-guacamole-db-apply
@@ -317,15 +320,23 @@ services:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
       PGHOST: ${POSTGRES_HOST:-dlh-postgres}
       PGPORT: 5432
-      PGUSER: ${GUACAMOLE_DB_USER:-dlh_guacamole_user}
-      PGPASSWORD: ${GUACAMOLE_DB_PASSWORD:-change-me}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
       PGDATABASE: ${GUACAMOLE_DB_NAME:-dlh_guacamole}
+      GUACAMOLE_DB_USER: ${GUACAMOLE_DB_USER:-dlh_guacamole_user}
     volumes:
       - guacamole_init:/init:ro
     entrypoint:
       - /bin/sh
       - -c
-      - psql -c "SELECT 1 FROM guacamole_user LIMIT 1" 2>/dev/null || psql -f /init/initdb.sql
+      - |
+        if psql -c "SELECT 1 FROM guacamole_user LIMIT 1" >/dev/null 2>&1; then
+          echo "guacamole schema already initialized, skipping"
+          exit 0
+        fi
+        psql -f /init/initdb.sql &&
+        psql -c "GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO \"$$GUACAMOLE_DB_USER\"" &&
+        psql -c "GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA public TO \"$$GUACAMOLE_DB_USER\""
     networks:
       - web_network
     restart: "no"
