@@ -291,6 +291,7 @@ services:
   guacamole-db-init:
     image: guacamole/guacamole:${GUACAMOLE_IMAGE_VERSION:-latest}
     container_name: dlh-guacamole-db-init
+    user: root
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
     volumes:
