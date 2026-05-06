@@ -21,6 +21,7 @@ OLAP analytics, and business intelligence dashboards — all on a single host.
 | **Identity** | Authentik | Centralised SSO and RBAC |
 | **Cache / GUI** | Redis Stack | Shared cache/queue for Superset and Authentik + built-in Redis Insight UI |
 | **SQL IDE** | CloudBeaver | Web-based SQL client for PostgreSQL and ClickHouse |
+| **Remote Desktop** | Apache Guacamole | Browser-based VNC / RDP / SSH remote desktop gateway |
 | **Docker Mgmt** | Dockhand | Lightweight web-based Docker management UI |
 | **Proxy** | Nginx Proxy Manager | Optional TLS reverse proxy |
 
@@ -36,6 +37,7 @@ OLAP analytics, and business intelligence dashboards — all on a single host.
 | Grafana | http://localhost:23001 | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` |
 | Authentik | http://localhost:29090 | `AUTHENTIK_BOOTSTRAP_EMAIL` / `AUTHENTIK_BOOTSTRAP_PASSWORD` |
 | CloudBeaver | http://localhost:28978 | (configured on first login) |
+| Guacamole | http://localhost:28090/guacamole/ | `guacadmin` / `guacadmin` (change on first login) |
 | Dockhand | http://localhost:23000 | (no auth by default) |
 | Nginx Proxy Manager | http://localhost:28081 | (configured on first login) |
 | PostgreSQL | localhost:25432 | `POSTGRES_USER` / `POSTGRES_PASSWORD` |

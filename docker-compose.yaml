@@ -284,6 +284,88 @@ services:
     command: mage start
 
   # ==========================================================
+  # INFRA: REMOTE DESKTOP GATEWAY (Apache Guacamole)
+  # ==========================================================
+
+  # guacamole-db-init: extract the PostgreSQL schema SQL from the Guacamole image
+  guacamole-db-init:
+    image: guacamole/guacamole:${GUACAMOLE_IMAGE_VERSION:-latest}
+    container_name: dlh-guacamole-db-init
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    volumes:
+      - guacamole_init:/init
+    entrypoint:
+      - /bin/sh
+      - -c
+      - test -f /init/initdb.sql || /opt/guacamole/bin/initdb.sh --postgresql > /init/initdb.sql
+    networks:
+      - web_network
+    restart: "no"
+
+  # guacamole-db-apply: run the schema SQL against PostgreSQL (idempotent)
+  guacamole-db-apply:
+    image: postgres:${POSTGRES_IMAGE_VERSION:-17-alpine}
+    container_name: dlh-guacamole-db-apply
+    depends_on:
+      guacamole-db-init:
+        condition: service_completed_successfully
+      postgres-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      PGHOST: ${POSTGRES_HOST:-dlh-postgres}
+      PGPORT: 5432
+      PGUSER: ${GUACAMOLE_DB_USER:-dlh_guacamole_user}
+      PGPASSWORD: ${GUACAMOLE_DB_PASSWORD:-change-me}
+      PGDATABASE: ${GUACAMOLE_DB_NAME:-dlh_guacamole}
+    volumes:
+      - guacamole_init:/init:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - psql -c "SELECT 1 FROM guacamole_user LIMIT 1" 2>/dev/null || psql -f /init/initdb.sql
+    networks:
+      - web_network
+    restart: "no"
+
+  # guacd: Guacamole proxy daemon (handles VNC/RDP/SSH connections)
+  guacd:
+    <<: *dlh-runtime
+    image: guacamole/guacd:${GUACAMOLE_IMAGE_VERSION:-latest}
+    container_name: dlh-guacd
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+
+  # guacamole: Guacamole web application (browser-based remote desktop UI)
+  guacamole:
+    <<: *dlh-runtime
+    image: guacamole/guacamole:${GUACAMOLE_IMAGE_VERSION:-latest}
+    container_name: dlh-guacamole
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      GUACD_HOSTNAME: dlh-guacd
+      GUACD_PORT: 4822
+      POSTGRESQL_HOSTNAME: ${POSTGRES_HOST:-dlh-postgres}
+      POSTGRESQL_PORT: 5432
+      POSTGRESQL_DATABASE: ${GUACAMOLE_DB_NAME:-dlh_guacamole}
+      POSTGRESQL_USERNAME: ${GUACAMOLE_DB_USER:-dlh_guacamole_user}
+      POSTGRESQL_PASSWORD: ${GUACAMOLE_DB_PASSWORD:-change-me}
+    ports:
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_GUACAMOLE_PORT:-28090}:8080"
+    depends_on:
+      guacd:
+        condition: service_started
+      guacamole-db-apply:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/guacamole/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ==========================================================
   # LAYER 4: SERVING
   # ==========================================================
 
@@ -537,6 +619,8 @@ volumes:
   dockhand_data:
     driver: local
   prometheus_data:
+    driver: local
+  guacamole_init:
     driver: local
 
 networks:
