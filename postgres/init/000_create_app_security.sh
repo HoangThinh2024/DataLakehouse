@@ -6,6 +6,7 @@ APP_CONFIGS=(
   "${SUPERSET_DB_NAME:-dlh_superset}|${SUPERSET_DB_USER:-dlh_superset_user}|${SUPERSET_DB_PASSWORD:-change-me}"
   "${GRAFANA_DB_NAME:-dlh_grafana}|${GRAFANA_DB_USER:-dlh_grafana_user}|${GRAFANA_DB_PASSWORD:-change-me}"
   "${AUTHENTIK_DB_NAME:-dlh_authentik}|${AUTHENTIK_DB_USER:-dlh_authentik_user}|${AUTHENTIK_DB_PASSWORD:-change-me}"
+  "${GUACAMOLE_DB_NAME:-dlh_guacamole}|${GUACAMOLE_DB_USER:-dlh_guacamole_user}|${GUACAMOLE_DB_PASSWORD:-change-me}"
 )
 
 check_admin_access() {
