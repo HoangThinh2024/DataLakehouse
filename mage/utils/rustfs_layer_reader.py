@@ -179,6 +179,33 @@ def read_all_gold() -> dict:
     }
 
 
+def read_latest_excel_silver(date_str: Optional[str] = None) -> pd.DataFrame:
+    """Read latest Excel projects Silver layer data."""
+    bucket = os.getenv('RUSTFS_SILVER_BUCKET', 'silver')
+    prefix = 'excel_projects'
+    return read_latest_layer(bucket, prefix, date_str)
+
+
+def read_latest_excel_gold_projects(date_str: Optional[str] = None) -> pd.DataFrame:
+    """Read latest Excel Gold projects summary aggregation."""
+    bucket = os.getenv('RUSTFS_GOLD_BUCKET', 'gold')
+    return read_latest_layer(bucket, 'projects', date_str)
+
+
+def read_latest_excel_gold_workload(date_str: Optional[str] = None) -> pd.DataFrame:
+    """Read latest Excel Gold workload aggregation."""
+    bucket = os.getenv('RUSTFS_GOLD_BUCKET', 'gold')
+    return read_latest_layer(bucket, 'workload', date_str)
+
+
+def read_all_excel_gold() -> dict:
+    """Read all Excel Gold layer tables as a dict."""
+    return {
+        'gold_projects': read_latest_excel_gold_projects(),
+        'gold_workload': read_latest_excel_gold_workload(),
+    }
+
+
 def read_latest_csv_silver(date_str: Optional[str] = None) -> pd.DataFrame:
     """Read latest CSV Silver layer data (cleaned uploaded CSV)."""
     bucket = os.getenv('RUSTFS_SILVER_BUCKET', 'silver')

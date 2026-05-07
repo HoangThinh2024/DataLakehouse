@@ -139,10 +139,23 @@ PostgreSQL source table
 Excel file uploaded to RustFS bronze/excel_upload/ (via RustFS Console or watcher)
     │
     ▼  [extract_excel_from_rustfs.py]
+    DataFrame + metadata
+    │
     ▼  [clean_excel_data.py]
-    ▼  [load_excel_to_clickhouse.py]  →  ClickHouse analytics.project_reports
-                                          analytics.gold_projects_summary
-                                          analytics.gold_workload_report
+    Cleaned DataFrame (Silver)
+    │
+    ├──▶ [excel_silver_to_rustfs.py] → s3://silver/excel_projects/dt=YYYY-MM-DD/
+    │
+    ▼  [transform_gold.py]
+    Aggregated DataFrames (Projects, Workload)
+    │
+    ├──▶ [excel_gold_to_rustfs.py]   → s3://gold/projects/dt=YYYY-MM-DD/
+    │                                 s3://gold/workload/dt=YYYY-MM-DD/
+    │
+    ▼  [load_gold_to_clickhouse.py]  → ClickHouse analytics.gold_projects_summary
+    │                                            analytics.gold_workload_report
+    │
+    ▼  [load_excel_to_clickhouse.py] → ClickHouse analytics.project_reports
 ```
 
 ### 4c. CSV upload → Reporting
@@ -205,6 +218,10 @@ container creates all roles and schemas on every `docker compose up`:
 |-------|------|------|
 | `extract_excel_from_rustfs` | data_loader | `mage/data_loaders/extract_excel_from_rustfs.py` |
 | `clean_excel_data` | transformer | `mage/transformers/clean_excel_data.py` |
+| `excel_silver_to_rustfs` | data_exporter | `mage/data_exporters/excel_silver_to_rustfs.py` |
+| `transform_gold` | transformer | `mage/transformers/transform_gold.py` |
+| `excel_gold_to_rustfs` | data_exporter | `mage/data_exporters/excel_gold_to_rustfs.py` |
+| `load_gold_to_clickhouse` | data_exporter | `mage/data_exporters/load_gold_to_clickhouse.py` |
 | `load_excel_to_clickhouse` | data_exporter | `mage/data_exporters/load_excel_to_clickhouse.py` |
 
 ### Pipeline 3: `etl_csv_upload_to_reporting`
