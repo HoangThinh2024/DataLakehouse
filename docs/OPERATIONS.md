@@ -2,11 +2,19 @@
 
 Day-to-day operations reference for managing the DataLakehouse stack lifecycle.
 
-All lifecycle operations go through `scripts/stackctl.sh`.
+All lifecycle operations go through `scripts/stackctl.sh`, which is powered by a robust, cross-platform environment library (`scripts/lib_env.sh`).
 
 ---
 
 ## Lifecycle Management
+
+### Initial Setup
+
+For fresh deployments or full rebuilds, use `setup.sh`. It includes **pre-flight checks** (for Docker and `uv`) and **intelligent port suggestions** to prevent conflicts before they occur.
+
+```bash
+bash scripts/setup.sh
+```
 
 ### Start and stop
 
@@ -88,6 +96,8 @@ docker stats    # real-time CPU/memory usage
 
 ### Architecture validation
 
+The validation script runs high-performance concurrent checks across all services.
+
 ```bash
 bash scripts/stackctl.sh check-system
 # or directly:
@@ -98,9 +108,36 @@ uv run python scripts/verify_lakehouse_architecture.py --json
 
 ---
 
+## Data Integrity and Self-Healing
+
+The stack includes an automated "Healer" mechanism to detect and repair data inconsistencies between the physical lake (RustFS) and the analytics layer (ClickHouse).
+
+### Reconciliation Script
+
+`scripts/reconcile_data.py` performs a three-way check:
+1.  **Bronze vs events:** Ensures every raw file in Bronze has a corresponding successful processing event.
+2.  **Events vs Gold/Silver:** Ensures the row count in ClickHouse tables matches the expected sum from all successful pipeline runs.
+3.  **Healing:** Automatically triggers Mage pipelines to backfill missing files or repair truncated tables.
+
+```bash
+# Run a one-time integrity check and repair
+uv run python scripts/reconcile_data.py
+
+# Run in background watch mode (checks every 5 minutes by default)
+nohup uv run python scripts/reconcile_data.py --watch >> /var/log/dlh-healer.log 2>&1 &
+```
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HEALER_CHECK_INTERVAL` | `300` | Seconds between periodic checks in `--watch` mode |
+
+---
+
 ## Environment Management
 
-`.env` is the single source of truth for all service configuration.
+`.env` is the single source of truth for all service configuration. The core script `lib_env.sh` automatically handles CRLF/BOM encoding issues, making it safe to edit `.env` on Windows/WSL.
 
 ```bash
 # Print current .env values
@@ -172,7 +209,7 @@ docker exec -i dlh-postgres psql -U postgres -d datalakehouse < postgres/init/00
 
 ## Realtime File Watcher
 
-`scripts/realtime_watcher.sh` monitors the RustFS Docker volume and triggers ETL automatically when files are uploaded.
+`scripts/realtime_watcher.sh` monitors the RustFS Docker volume and triggers ETL automatically when files are uploaded. It includes **lock file protection** to prevent race conditions during simultaneous uploads.
 
 ```bash
 # Foreground

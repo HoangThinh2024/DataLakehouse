@@ -55,16 +55,22 @@ uv sync --all-groups
 bash scripts/setup.sh
 ```
 
-`setup.sh` will:
-1. Prompt for all configuration values (bind IPs, ports, passwords).
-2. Write a complete `.env` file.
-3. Create the `web_network` Docker network.
-4. Start all services with `docker compose up -d`.
-5. Optionally run the ETL pipeline and provision Superset dashboards.
+`setup.sh` is a smart, interactive script that will:
+1.  **Run pre-flight checks** to ensure `docker` and `uv` are installed.
+2.  **Check for port conflicts** and suggest alternative ports if needed.
+3.  Prompt for all configuration values (bind IPs, ports, passwords).
+4.  Write a complete, cross-platform-safe `.env` file.
+5.  Create the `web_network` Docker network.
+6.  Start all services with `docker compose up -d`.
+7.  Optionally run the ETL pipeline and provision Superset dashboards.
 
 ### Step 3 – Verify stack health
 
 ```bash
+# Run the primary diagnostic tool first
+bash scripts/stackctl.sh diagnose
+
+# If diagnose reports no errors, run a deeper health check
 bash scripts/stackctl.sh health
 ```
 
@@ -100,7 +106,7 @@ docker network create web_network
 docker compose up -d
 
 # 5. Check health
-bash scripts/stackctl.sh health
+bash scripts/stackctl.sh diagnose
 ```
 
 ---
@@ -157,12 +163,15 @@ docker compose exec dlh-mage magic run etl_postgres_to_lakehouse
 
 ## Verifying the Deployment
 
-Run the end-to-end architecture validation script:
+Run the end-to-end architecture validation script. This script runs high-performance
+concurrent checks across all services.
 
 ```bash
 bash scripts/stackctl.sh check-system
-# or directly:
+# or directly for human-readable output:
 uv run python scripts/verify_lakehouse_architecture.py
+# or for JSON output (useful in automation/CI):
+uv run python scripts/verify_lakehouse_architecture.py --json
 ```
 
 Exit code `0` means all services are connected and data is flowing correctly.

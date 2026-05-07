@@ -84,17 +84,19 @@ bash scripts/setup.sh
 ```
 
 `setup.sh` will:
-1. Prompt for all configuration values (or accept defaults).
-2. Write a complete `.env` file.
-3. Create the `web_network` Docker network.
-4. Start all services with `docker compose up -d`.
-5. Optionally run the ETL pipeline and provision Superset dashboards.
+1.  **Run pre-flight checks** for `docker` and `uv`.
+2.  **Check for port conflicts** and suggest alternatives.
+3.  Prompt for all configuration values (or accept defaults).
+4.  Write a complete, cross-platform-safe `.env` file.
+5.  Create the `web_network` Docker network.
+6.  Start all services with `docker compose up -d`.
+7.  Optionally run the ETL pipeline and provision Superset dashboards.
 
 ### 3. Verify stack health
 
 ```bash
-bash scripts/stackctl.sh health       # deep health checks
 bash scripts/stackctl.sh diagnose     # analyze logs and port conflicts
+bash scripts/stackctl.sh health       # deep health checks
 ```
 
 All services should report healthy within 2–3 minutes of startup.
@@ -140,9 +142,11 @@ All day-2 operations go through `scripts/stackctl.sh`:
 bash scripts/stackctl.sh up                  # start all services
 bash scripts/stackctl.sh down                # stop all services
 bash scripts/stackctl.sh redeploy            # pull images + recreate containers
+bash scripts/stackctl.sh redeploy --safe     # backup volumes before recreating
 bash scripts/stackctl.sh redeploy --with-etl # redeploy + run ETL automatically
 bash scripts/stackctl.sh status              # container status
 bash scripts/stackctl.sh health              # deep health checks
+bash scripts/stackctl.sh diagnose            # check for port conflicts and errors
 bash scripts/stackctl.sh logs all            # stream all logs
 bash scripts/stackctl.sh logs dlh-mage       # single service logs
 bash scripts/stackctl.sh validate-env        # validate .env (port conflicts, blanks)
@@ -171,6 +175,7 @@ DataLakehouse/
 ├── samples/                    # Sample Excel/CSV files for testing ETL pipelines
 │
 ├── scripts/                    # Operational scripts
+│   ├── lib_env.sh              # Core environment library (logging, env loading)
 │   ├── setup.sh                # Guided initial setup
 │   ├── stackctl.sh             # Lifecycle management (up/down/health/logs/reset)
 │   ├── run_etl_and_dashboard.py        # ETL trigger + Superset provisioning
@@ -268,6 +273,7 @@ See [`mage/README.md`](mage/README.md) and [`docs/PIPELINE_GUIDE.md`](docs/PIPEL
 ### Services not healthy
 
 ```bash
+bash scripts/stackctl.sh diagnose
 bash scripts/stackctl.sh health
 bash scripts/stackctl.sh logs all
 ```
@@ -275,7 +281,7 @@ bash scripts/stackctl.sh logs all
 ### Port conflicts
 
 ```bash
-bash scripts/stackctl.sh validate-env
+bash scripts/stackctl.sh diagnose
 bash scripts/stackctl.sh sync-env
 bash scripts/stackctl.sh redeploy
 ```
@@ -287,13 +293,13 @@ bash scripts/stackctl.sh reset --hard
 bash scripts/setup.sh
 ```
 
-### WSL encoding errors in `.env`
+### WSL/.env Encoding Errors
 
-```bash
-uv run python scripts/run_etl_and_dashboard.py --auto
-```
+This issue is **automatically resolved** by the refactored script layer.
 
-The runner handles BOM/Windows encodings and malformed inherited env values automatically.
+All operational scripts use a shared environment library (`scripts/lib_env.sh`)
+that safely reads `.env` files, automatically detecting and sanitizing UTF-8 BOM
+and CRLF line endings. **No manual steps are required.**
 
 ### Redis Insight not accessible
 

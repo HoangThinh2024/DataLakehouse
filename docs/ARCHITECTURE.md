@@ -44,6 +44,7 @@ Supporting infrastructure (cuts across all layers):
 - **Authentik** – centralised identity provider (SSO, RBAC).
 - **CloudBeaver** – web SQL IDE for PostgreSQL and ClickHouse.
 - **Nginx Proxy Manager** – optional reverse proxy with automatic TLS.
+- **Data Healer** – autonomous reconciliation service that ensures Lake-to-Warehouse consistency.
 
 ---
 

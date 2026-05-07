@@ -3,25 +3,45 @@
 Operational scripts for bootstrapping, lifecycle management, ETL automation,
 firewall configuration, and system validation.
 
+**Core Philosophy:** All scripts source a unified environment library (`lib_env.sh`)
+that provides consistent logging, error handling, and robust cross-platform
+support (including WSL/Windows CRLF/BOM safety).
+
 ---
 
 ## Script Reference
 
+### `lib_env.sh` – Core Environment Library (sourced, not executed)
+
+A centralized, non-executable shell library that provides core functions for all
+other operational scripts. You do not run this script directly.
+
+What it provides:
+1.  **Unified Logging**: Consistent log format with `log_info`, `log_warn`, `log_error`.
+2.  **Environment Loading**: Safely loads `.env` files, automatically handling
+    UTF-8 BOM and CRLF line endings common in Windows environments.
+3.  **Dependency Checks**: Functions to verify required commands (e.g., `docker`, `uv`).
+
+---
+
 ### `setup.sh` – Initial bootstrap (run once)
 
-Interactive guided setup for a fresh deployment.
+Smart, interactive guided setup for a fresh deployment.
 
 ```bash
 bash scripts/setup.sh
 ```
 
 What it does:
-1. Reads existing `.env` values if present.
-2. Prompts for mutable settings (bind IPs, ports, credentials, image tags).
-3. Writes a complete `.env` file.
-4. Creates the external Docker network `web_network` if missing.
-5. Runs `docker compose up -d`.
-6. Optionally runs ETL and Superset dashboard provisioning.
+1.  **Pre-flight Checks**: Verifies `docker` and `uv` are installed.
+2.  Reads existing `.env` values if present.
+3.  **Intelligent Suggestions**: Checks for port conflicts on the host and suggests
+    alternatives if the default ports are in use.
+4.  Prompts for mutable settings (bind IPs, ports, credentials, image tags).
+5.  Writes a complete `.env` file (CRLF/BOM safe).
+6.  Creates the external Docker network `web_network` if missing.
+7.  Runs `docker compose up -d`.
+8.  Optionally runs ETL and Superset dashboard provisioning.
 
 ---
 
@@ -38,9 +58,11 @@ bash scripts/stackctl.sh <command> [options]
 | `up` | Start all services |
 | `down` | Stop all services |
 | `redeploy` | Pull latest images and recreate containers |
-| `redeploy --with-etl` | Redeploy + run ETL pipeline automatically |
+| `redeploy --safe` | **Backup volumes** before recreating containers |
+| `redeploy --with-etl`| Redeploy + run ETL pipeline automatically |
 | `status` | Show container status (`docker compose ps`) |
 | `health` | Run Docker healthchecks on all services |
+| `diagnose` | Check for port conflicts and other common issues |
 | `logs <service\|all>` | Stream logs (tail 50 by default) |
 | `inspect <service>` | Show full container config |
 | `check-env` | Print active `.env` values |
@@ -106,11 +128,16 @@ uv run python scripts/demo_to_lakehouse.py
 
 ### `verify_lakehouse_architecture.py` – Architecture validator
 
-End-to-end health check script. Tests connectivity to all services and verifies
-data is flowing through the lake layers correctly.
+High-performance, end-to-end health check script. Concurrently tests
+connectivity to all services and verifies data is flowing through the lake layers
+correctly.
 
 ```bash
+# Human-readable output
 uv run python scripts/verify_lakehouse_architecture.py
+
+# JSON output for automation
+uv run python scripts/verify_lakehouse_architecture.py --json
 ```
 
 Exit codes:
@@ -122,12 +149,36 @@ inside and outside the container network.
 
 ---
 
+### `reconcile_data.py` – Data healer and sync checker
+
+Ensures data integrity across the lakehouse layers by comparing source files in
+Bronze with processed records in ClickHouse.
+
+```bash
+# Run a one-time repair
+uv run python scripts/reconcile_data.py
+
+# Run in watch mode (background sync)
+uv run python scripts/reconcile_data.py --watch
+```
+
+What it does:
+1. **Detects missing files:** Compares RustFS Bronze files with ClickHouse processing events.
+2. **Detects sync gaps:** Compares the actual row count in ClickHouse Gold/Silver tables with the expected row count from processed events.
+3. **Automated Healing:** Automatically triggers the Mage ETL pipeline to process missing data or repair inconsistent layers.
+
+---
+
 ### `maintenance_tasks.py` – Backup and cleanup
 
-Performs scheduled maintenance:
-1. **Backup:** Native ClickHouse `BACKUP DATABASE analytics` to RustFS `s3://backups/`.
-2. **Cleanup:** Removes Parquet files older than 30 days from Silver and Gold layers.
-3. **Cleanup:** Removes ClickHouse backup snapshots older than 30 days.
+Performs scheduled maintenance with improved reliability.
+
+1.  **Backup:** Native ClickHouse `BACKUP DATABASE analytics` to RustFS `s3://backups/`.
+2.  **Cleanup:** Removes Parquet files older than 30 days from Silver and Gold layers.
+3.  **Cleanup:** Removes ClickHouse backup snapshots older than 30 days.
+
+**Note:** Host discovery and S3 connection handling have been improved for
+greater robustness in different network environments.
 
 ```bash
 # Run manually
@@ -144,6 +195,9 @@ docker exec dlh-mage python3 /home/src/scripts/maintenance_tasks.py
 Monitors the RustFS Docker volume using `inotifywait`. When a new Excel or CSV
 file is detected, it immediately triggers the corresponding Mage pipeline.
 
+**Now includes lock file protection** to prevent race conditions from multiple
+simultaneous uploads.
+
 ```bash
 bash scripts/realtime_watcher.sh
 ```
@@ -159,7 +213,7 @@ need near-real-time ETL without waiting for the scheduled run.
 ### `setup_ufw_docker.sh` – Firewall management
 
 Manages Docker-aware UFW rules using `ufw-docker` workflow. Reads CIDR and
-port settings from `.env`.
+port settings from the unified environment provided by `lib_env.sh`.
 
 ```bash
 # Apply rules

@@ -6,11 +6,17 @@ Common issues, their causes, and how to fix them.
 
 ## Quick Diagnostics
 
-Before digging into a specific issue, run the built-in diagnostics:
+Before digging into a specific issue, run the new, powerful `diagnose` command.
+It checks for port conflicts, analyzes logs for recent errors, and provides a
+concise summary of potential problems.
 
 ```bash
+bash scripts/stackctl.sh diagnose
+```
+
+If `diagnose` doesn't reveal the issue, proceed with other checks:
+```bash
 bash scripts/stackctl.sh health          # deep health checks
-bash scripts/stackctl.sh diagnose        # analyze logs + port conflicts
 bash scripts/stackctl.sh logs all        # tail all service logs
 ```
 
@@ -47,12 +53,12 @@ bash scripts/stackctl.sh logs all        # tail all service logs
 
 ### Symptoms
 - Services fail to start with `bind: address already in use`
-- `validate-env` reports duplicate ports
+- `validate-env` or `diagnose` reports duplicate ports
 
 ### Steps
 
 ```bash
-bash scripts/stackctl.sh validate-env   # shows which ports conflict
+bash scripts/stackctl.sh diagnose       # shows which ports conflict
 bash scripts/stackctl.sh sync-env       # interactively change port values
 bash scripts/stackctl.sh redeploy       # apply new ports
 ```
@@ -119,19 +125,22 @@ If pipelines disappear after a redeploy, ensure the `mage/` directory is correct
 
 ---
 
-## WSL Encoding Errors
+## `.env` File Encoding (WSL/Windows)
 
 ### Symptoms
-- `invalid UTF-8` or surrogate encoding errors on PostgreSQL connection
-- Errors during `.env` reading on WSL2
+- `invalid UTF-8` or surrogate encoding errors on PostgreSQL connection.
+- Errors during `.env` reading on WSL2, often after editing the file on Windows.
 
-### Fix
+### Solution: Handled Automatically
 
-Use the automation script which sanitizes BOM/Windows encodings automatically:
+This issue is **automatically resolved** by the refactored script layer.
 
-```bash
-uv run python scripts/run_etl_and_dashboard.py --auto
-```
+All operational scripts (like `stackctl.sh` and `setup.sh`) use a shared
+environment library (`scripts/lib_env.sh`) that safely reads `.env` files. It
+automatically detects and sanitizes UTF-8 BOM and CRLF line endings, ensuring
+seamless cross-platform compatibility.
+
+**No manual steps are required.**
 
 ---
 
@@ -287,7 +296,6 @@ When reporting an issue, include the output of:
 
 ```bash
 bash scripts/stackctl.sh health
-bash scripts/stackctl.sh diagnose
 bash scripts/stackctl.sh logs all 2>&1 | tail -200
 uv run python scripts/verify_lakehouse_architecture.py --json
 ```

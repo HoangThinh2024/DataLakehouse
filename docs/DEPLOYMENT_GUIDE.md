@@ -70,29 +70,31 @@ uv sync --all-groups
 bash scripts/setup.sh
 ```
 
-`setup.sh` walks through:
+`setup.sh` is a smart, interactive script that walks through:
 
-1. **Bind IP settings** — local-only (`127.0.0.1`) vs LAN (`0.0.0.0` or your LAN IP).
-2. **Port assignments** — all services default to `2xxxx` range to avoid conflicts.
-3. **Credentials** — passwords for PostgreSQL, ClickHouse, Redis, Superset, Grafana, Authentik, RustFS.
-4. **Image versions** — override `latest` tags with pinned versions.
-5. Writes a complete `.env` file.
-6. Creates `web_network` Docker network.
-7. Runs `docker compose up -d`.
-8. Optionally runs ETL pipeline + Superset dashboard provisioning.
+1.  **Pre-flight Checks**: Verifies `docker` and `uv` are installed.
+2.  **Bind IP settings** — local-only (`127.0.0.1`) vs LAN (`0.0.0.0`).
+3.  **Port Assignments** — Checks for port conflicts on the host and suggests
+    free ports if the defaults are taken.
+4.  **Credentials** — for PostgreSQL, ClickHouse, Redis, Superset, etc.
+5.  **Image versions** — override `latest` tags with pinned versions.
+6.  Writes a complete, cross-platform-safe `.env` file (handles WSL/Windows CRLF/BOM issues).
+7.  Creates `web_network` Docker network.
+8.  Runs `docker compose up -d`.
+9.  Optionally runs the ETL pipeline and provisions Superset dashboards.
 
 ### Step 3 – Verify health
 
 ```bash
+# Run the primary diagnostic tool first
+bash scripts/stackctl.sh diagnose
+
+# If diagnose reports no errors, run a deeper health check
 bash scripts/stackctl.sh health
 ```
 
 All services should reach `healthy` status within 2–3 minutes.
-If any service fails, check logs:
-
-```bash
-bash scripts/stackctl.sh logs <service-name>
-```
+If any service fails, `diagnose` will often point to the root cause in the logs.
 
 ---
 
@@ -105,6 +107,7 @@ If you prefer to configure manually:
 cp .env.example .env
 
 # 2. Edit .env — replace all change-* and replace-* values
+#    On Windows/WSL, ensure you save with Unix (LF) line endings and UTF-8 without BOM.
 nano .env
 
 # 3. Create external Docker network
@@ -114,7 +117,7 @@ docker network create web_network
 docker compose up -d
 
 # 5. Check health
-bash scripts/stackctl.sh health
+bash scripts/stackctl.sh diagnose
 ```
 
 ---
@@ -129,12 +132,14 @@ All lifecycle operations are managed through `scripts/stackctl.sh`.
 bash scripts/stackctl.sh up                    # start all services
 bash scripts/stackctl.sh down                  # stop all services
 bash scripts/stackctl.sh redeploy              # pull images + recreate containers
+bash scripts/stackctl.sh redeploy --safe       # backup volumes before recreating
 bash scripts/stackctl.sh redeploy --with-etl   # redeploy + run ETL
 ```
 
 ### Health, logs, and diagnostics
 
 ```bash
+bash scripts/stackctl.sh diagnose              # check port conflicts and recent errors
 bash scripts/stackctl.sh status                # container state (up/down/restarting)
 bash scripts/stackctl.sh health                # deep health checks
 bash scripts/stackctl.sh logs all              # tail all service logs
@@ -164,7 +169,8 @@ bash scripts/stackctl.sh reset --hard
 
 ## 5. Firewall and LAN Access
 
-Configure Docker-aware UFW firewall rules:
+Configure Docker-aware UFW firewall rules. This script now sources the
+centralized `lib_env.sh` for consistent environment loading.
 
 ```bash
 bash scripts/setup_ufw_docker.sh
@@ -272,6 +278,9 @@ bash scripts/stackctl.sh redeploy --with-etl
 
 ### Enable realtime processing for file uploads
 
+The watcher script now includes **lock file protection** to prevent race
+conditions from multiple simultaneous file uploads.
+
 ```bash
 # Start in foreground
 bash scripts/realtime_watcher.sh
@@ -286,10 +295,14 @@ nohup bash scripts/realtime_watcher.sh >> /var/log/dlh-watcher.log 2>&1 &
 
 ### Full architecture check
 
+The verification script is now significantly faster and supports JSON output.
+
 ```bash
+# Human-readable output
 bash scripts/stackctl.sh check-system
-# or directly:
-uv run python scripts/verify_lakehouse_architecture.py
+
+# JSON output for automation
+uv run python scripts/verify_lakehouse_architecture.py --json
 ```
 
 ### Quick connectivity checks
@@ -311,7 +324,7 @@ for the full list. Quick reference below.
 ### Service unhealthy
 
 ```bash
-bash scripts/stackctl.sh health
+bash scripts/stackctl.sh diagnose
 bash scripts/stackctl.sh logs <service>
 docker compose up -d <service>       # restart a single service
 ```
@@ -319,7 +332,7 @@ docker compose up -d <service>       # restart a single service
 ### Port conflict
 
 ```bash
-bash scripts/stackctl.sh validate-env
+bash scripts/stackctl.sh diagnose
 bash scripts/stackctl.sh sync-env
 bash scripts/stackctl.sh redeploy
 ```
@@ -331,11 +344,16 @@ bash scripts/stackctl.sh reset --hard
 bash scripts/setup.sh
 ```
 
-### WSL encoding errors
+### WSL / .env Encoding Errors
 
-```bash
-uv run python scripts/run_etl_and_dashboard.py --auto
-```
+This issue is **automatically resolved** by the refactored script layer.
+
+All operational scripts (`setup.sh`, `stackctl.sh`, etc.) use a shared
+environment library (`scripts/lib_env.sh`) that safely reads `.env` files. It
+automatically detects and sanitizes UTF-8 BOM and CRLF line endings common in
+Windows environments.
+
+**No manual steps are required.**
 
 ---
 

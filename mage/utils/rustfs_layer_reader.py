@@ -94,16 +94,13 @@ def read_latest_layer(bucket: str, prefix: str, date_str: Optional[str] = None) 
         if not parquet_objects:
             return pd.DataFrame()
 
-        latest_object = max(
-            parquet_objects,
-            key=lambda obj: (obj.get('LastModified') or dt.datetime.min, obj.get('Key', '')),
-        )
-        key = latest_object['Key']
-        obj_response = client.get_object(Bucket=bucket, Key=key)
-        buffer = io.BytesIO(obj_response['Body'].read())
-        df = pd.read_parquet(buffer, engine='pyarrow')
-        dfs.append(df)
-        print(f"[read_latest_layer] Read {len(df)} rows from s3://{bucket}/{key}")
+        for obj in parquet_objects:
+            key = obj['Key']
+            obj_response = client.get_object(Bucket=bucket, Key=key)
+            buffer = io.BytesIO(obj_response['Body'].read())
+            df = pd.read_parquet(buffer, engine='pyarrow')
+            dfs.append(df)
+            print(f"[read_latest_layer] Read {len(df)} rows from s3://{bucket}/{key}")
     
     except ClientError as exc:
         print(f"[read_latest_layer] Error reading s3://{bucket}/{layer_path}: {exc}")

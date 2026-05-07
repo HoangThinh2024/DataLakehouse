@@ -17,11 +17,20 @@ cp .env.example .env
 nano .env
 ```
 
-Alternatively, the interactive setup script prompts for every value and writes `.env` automatically:
+Alternatively, the interactive setup script is highly recommended. It includes
+**intelligent port conflict detection** and prompts for every value, writing the
+`.env` file automatically:
 
 ```bash
 bash scripts/setup.sh
 ```
+
+### Robust Environment Loading
+
+The entire operational script layer uses a centralized library (`scripts/lib_env.sh`)
+that automatically detects and sanitizes UTF-8 BOM and CRLF line endings. This
+means `.env` files edited on Windows/WSL will work seamlessly without manual
+encoding fixes.
 
 ### Validate and sync
 
@@ -156,7 +165,7 @@ All ports are in the `2xxxx` range to avoid conflicts with common system service
 | `DLH_CLICKHOUSE_HTTP_PORT` | `28123` | ClickHouse HTTP API |
 | `DLH_CLICKHOUSE_TCP_PORT` | `29000` | ClickHouse native TCP |
 | `DLH_RUSTFS_API_PORT` | `29100` | RustFS S3 API |
-| `DLH_RUSTFS_GUI_PORT` | `29101` | RustFS Console |
+| `DLH_RUSTFS_CONSOLE_PORT` | `29101` | RustFS Console |
 | `DLH_MAGE_PORT` | `26789` | Mage |
 | `DLH_SUPERSET_PORT` | `28088` | Superset |
 | `DLH_GRAFANA_PORT` | `23001` | Grafana |
