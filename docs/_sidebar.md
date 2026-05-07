@@ -1,0 +1,8 @@
+* [🏠 Home](/)
+* [📐 Architecture](ARCHITECTURE)
+* [🚀 Deployment Guide](DEPLOYMENT_GUIDE)
+* [⚙️ ETL Pipelines](PIPELINE_GUIDE)
+* [🔧 Environment Variables](VARIABLES_REFERENCE)
+* [🛠️ Operations](OPERATIONS)
+* [📦 RustFS Layer Reader](RUSTFS_LAYER_READER_GUIDE)
+* [✅ Testing Checklist](TESTING_CHECKLIST)
