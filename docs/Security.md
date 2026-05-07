@@ -158,7 +158,7 @@ MINIO_MC_IMAGE_VERSION=RELEASE.2025-04-16T18-13-26Z
 ClickHouse backups are stored in RustFS (`s3://backups/`). Ensure:
 
 - `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY` are strong random values.
-- The RustFS Console (`DLH_RUSTFS_GUI_PORT`) is not publicly accessible.
+- The RustFS Console (`DLH_RUSTFS_CONSOLE_PORT`) is not publicly accessible.
 - For production, consider replicating RustFS data offsite using `mc mirror`.
 
 ---

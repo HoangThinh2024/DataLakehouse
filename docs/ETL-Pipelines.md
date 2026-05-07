@@ -168,6 +168,10 @@ bash scripts/stackctl.sh redeploy --with-etl
 
 `scripts/realtime_watcher.sh` uses `inotifywait` to watch the Docker volume mount path for RustFS and triggers the appropriate pipeline within seconds of a file upload.
 
+**Important:** The watcher now includes **lock file protection** to prevent
+race conditions and duplicate pipeline triggers if multiple files are uploaded
+simultaneously.
+
 | File type | Pipeline triggered |
 |-----------|-------------------|
 | `*.xlsx` | `etl_excel_to_lakehouse` |

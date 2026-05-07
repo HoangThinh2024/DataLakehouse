@@ -240,11 +240,16 @@ docker exec -i dlh-postgres psql -U postgres -d datalakehouse \
 
 ## Running the Architecture Validator
 
-After making changes, verify the stack is healthy end-to-end:
+After making changes, verify the stack is healthy end-to-end. The verification
+script now uses high-performance concurrent checking.
 
 ```bash
 uv run python scripts/verify_lakehouse_architecture.py
-# or:
+
+# for JSON output (useful in CI/CD pipelines):
+uv run python scripts/verify_lakehouse_architecture.py --json
+
+# or via stackctl:
 bash scripts/stackctl.sh check-system
 ```
 
@@ -254,12 +259,16 @@ bash scripts/stackctl.sh check-system
 
 | Script | Description |
 |--------|-------------|
+| `scripts/lib_env.sh` | Core environment library (CRLF/BOM safe) |
+| `scripts/setup.sh` | Guided initial setup with pre-flight checks |
+| `scripts/stackctl.sh` | Lifecycle management (up/down/diagnose/health/logs) |
 | `scripts/run_etl_and_dashboard.py` | End-to-end ETL + Superset provisioning |
 | `scripts/create_superset_demo_dashboard.py` | Programmatic Superset dashboard creation via API |
 | `scripts/demo_to_lakehouse.py` | Load sample data into PostgreSQL and run ETL |
 | `scripts/verify_lakehouse_architecture.py` | End-to-end architecture health check |
 | `scripts/maintenance_tasks.py` | ClickHouse backup + RustFS cleanup |
-| `scripts/realtime_watcher.sh` | File-upload event watcher → ETL trigger |
+| `scripts/realtime_watcher.sh` | File-upload event watcher → ETL trigger (with lock file protection) |
+| `scripts/setup_ufw_docker.sh` | Docker-aware UFW firewall management |
 
 ---
 
