@@ -343,6 +343,8 @@ services:
     <<: *dlh-runtime
     image: guacamole/guacamole:${GUACAMOLE_IMAGE_VERSION:-latest}
     container_name: dlh-guacamole
+    volumes:
+      - /home/johndoe/guacamole/fonts:/usr/share/fonts/truetype/jetbrains:ro
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
       GUACD_HOSTNAME: dlh-guacd

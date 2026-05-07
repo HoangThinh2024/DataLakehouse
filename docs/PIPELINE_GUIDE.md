@@ -366,7 +366,46 @@ gold/demo_by_category/dt=YYYY-MM-DD/<run_id>.parquet
 
 ---
 
-## 3. Pipeline 2: etl_csv_upload_to_reporting
+## 3. Pipeline 2: etl_excel_to_lakehouse
+
+**File:** `mage/pipelines/etl_excel_to_lakehouse/`
+**Trigger:** Manual or file-upload watcher
+**Source:** Excel files in RustFS `bronze/excel_upload/`
+**Destination:** RustFS (Silver/Gold) + ClickHouse
+
+This pipeline handles the "12 projects" reporting. It enforces a strict Medallion flow where Excel data is cleaned, stored as Silver Parquet, aggregated, stored as Gold Parquet, and finally loaded into ClickHouse.
+
+### Block 1: `extract_excel_from_rustfs.py` (Data Loader)
+
+**Description:** Scans RustFS `bronze` bucket for Excel files. Unlike earlier versions, it **never** falls back to local files, ensuring strict S3-based ingestion.
+
+### Block 2: `clean_excel_data.py` (Transformer)
+
+**Description:** Performs column normalization and basic cleaning on the Excel DataFrame.
+
+### Block 3: `excel_silver_to_rustfs.py` (Data Exporter)
+
+**Description:** Writes the cleaned Excel data to `silver/excel_projects/` in RustFS.
+
+### Block 4: `transform_gold.py` (Transformer)
+
+**Description:** Aggregates task data into project summaries and assignee workload metrics.
+
+### Block 5: `excel_gold_to_rustfs.py` (Data Exporter)
+
+**Description:** Writes the aggregated metrics to `gold/projects/` and `gold/workload/` in RustFS.
+
+### Block 6: `load_gold_to_clickhouse.py` (Data Exporter)
+
+**Description:** Reads Gold Parquet from RustFS and populates `analytics.gold_projects_summary` and `analytics.gold_workload_report`.
+
+### Block 7: `load_excel_to_clickhouse.py` (Data Exporter)
+
+**Description:** Reads Silver Parquet from RustFS and populates `analytics.project_reports`.
+
+---
+
+## 4. Pipeline 3: etl_csv_upload_to_reporting
 
 **File:** `mage/pipelines/etl_csv_upload_to_reporting/`
 **Schedule:** Every 5 minutes (cron: `*/5 * * * *`)

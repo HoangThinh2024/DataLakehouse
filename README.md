@@ -116,21 +116,19 @@ uv run python scripts/run_etl_and_dashboard.py --auto
 ```
 PostgreSQL / Excel / CSV
         │
-        ▼  [Mage ETL]
+        ▼ [Mage ETL]
  RustFS Bronze  →  Silver  →  Gold   (Parquet, partitioned by date)
         │
-        ▼  [load_to_clickhouse]
+        ▼ [Serving Layer]
     ClickHouse analytics DB
         │
         ├──▶ Superset  (business dashboards)
         └──▶ Grafana   (pipeline monitoring)
-
-Redis  →  Superset cache/results + Authentik queue/cache
 ```
 
-The RustFS object store is the **source of truth** — ClickHouse can be fully
-rebuilt from it at any time. All data is never overwritten; each pipeline run
-creates a new date-partitioned Parquet file.
+The system enforces a **strict Medallion architecture** where all data must reside in the RustFS object store (the **single source of truth**) before any transformation. intermediate states (Silver/Gold) are persisted as Parquet files, allowing ClickHouse to be fully rebuilt from the lake at any time.
+
+Redis  →  Superset cache/results + Authentik queue/cache
 
 ---
 

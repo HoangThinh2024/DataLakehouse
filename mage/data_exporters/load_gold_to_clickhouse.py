@@ -3,11 +3,18 @@ Data Exporter – Load Gold aggregated project data into ClickHouse.
 """
 
 import os
+import sys
 import pandas as pd
 from clickhouse_driver import Client
 
 if 'data_exporter' not in dir():
     from mage_ai.data_preparation.decorators import data_exporter
+
+# Import RustFS layer reader
+project_root = os.getenv('MAGE_PROJECT_PATH', os.getcwd())
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+from utils.rustfs_layer_reader import read_all_excel_gold
 
 def _ch_client() -> Client:
     return Client(
@@ -61,9 +68,14 @@ def export_gold_to_clickhouse(data, *args, **kwargs):
     db = os.getenv('CLICKHOUSE_DB', 'analytics')
     _ensure_tables(client, db)
 
+    # PROPER LAKEHOUSE: Read from RustFS Gold layer
+    gold_data = read_all_excel_gold()
+    df_p = gold_data.get('gold_projects', pd.DataFrame())
+    df_w = gold_data.get('gold_workload', pd.DataFrame())
+
     # Load Project Summary
-    df_p = data['gold_projects'].copy()
     if not df_p.empty:
+        client.execute(f'TRUNCATE TABLE {db}.gold_projects_summary')
         df_p['_gold_processed_at'] = pd.to_datetime(df_p['_gold_processed_at'])
         records_p = df_p.to_dict('records')
         cols_p = ", ".join([f'`{c}`' for c in df_p.columns])
@@ -71,13 +83,13 @@ def export_gold_to_clickhouse(data, *args, **kwargs):
         client.execute(f'OPTIMIZE TABLE {db}.gold_projects_summary FINAL')
 
     # Load Workload
-    df_w = data['gold_workload'].copy()
     if not df_w.empty:
+        client.execute(f'TRUNCATE TABLE {db}.gold_workload_report')
         df_w['_gold_processed_at'] = pd.to_datetime(df_w['_gold_processed_at'])
         records_w = df_w.to_dict('records')
         cols_w = ", ".join([f'`{c}`' for c in df_w.columns])
         client.execute(f'INSERT INTO {db}.gold_workload_report ({cols_w}) VALUES', records_w)
         client.execute(f'OPTIMIZE TABLE {db}.gold_workload_report FINAL')
 
-    print(f"[load_gold_to_clickhouse] Loaded Gold data to {db}")
+    print(f"[load_gold_to_clickhouse] Loaded Gold data from RustFS to {db}")
     return data
