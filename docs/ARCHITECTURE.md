@@ -1,49 +1,15 @@
-# DataLakehouse – Architecture Reference
+# Architecture
 
-This document is the single source of truth for the system architecture, data flow,
-component roles, schema design, and operational boundaries of the DataLakehouse stack.
-
----
-
-## Table of Contents
-
-1. [Overview](#1-overview)
-2. [System Layers](#2-system-layers)
-3. [Component Catalog](#3-component-catalog)
-4. [Data Flow](#4-data-flow)
-5. [ETL Pipelines](#5-etl-pipelines)
-6. [ClickHouse Schema](#6-clickhouse-schema)
-7. [Control Plane](#7-control-plane)
-8. [Deployment Topology](#8-deployment-topology)
-9. [Security Boundaries](#9-security-boundaries)
-10. [Visual Diagram](#10-visual-diagram)
+This page describes the system layers, component roles, data flow, and deployment topology of the DataLakehouse stack.
 
 ---
 
-## 1. Overview
-
-DataLakehouse is a **local-first, Docker Compose–based analytics platform** that implements the
-[Medallion Architecture](https://databricks.com/glossary/medallion-architecture) (Bronze → Silver → Gold)
-using commodity open-source components.
-
-Core design principles:
-
-| Principle | Implementation |
-|-----------|----------------|
-| **Immutability** | Data written to RustFS (object storage) is never overwritten; new partitions are added per run. |
-| **RustFS is the Source of Truth** | ClickHouse is the *serving* layer only — it can be fully rebuilt from RustFS at any time. |
-| **Traceability** | Every pipeline run generates a unique UUID (`_pipeline_run_id`) stamped on every row. |
-| **Idempotency** | ClickHouse tables use `ReplacingMergeTree`; re-running a pipeline never produces duplicate rows. |
-| **Separation of Concerns** | Storage, processing, serving, and reporting are independent layers with explicit handoffs. |
-
----
-
-## 2. System Layers
+## System Layers
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │  LAYER 1 – INGEST                                                   │
-│  PostgreSQL  •  Excel/CSV upload                                   │
+│  PostgreSQL  •  Excel/CSV upload                                    │
 └──────────────────────┬──────────────────────────────────────────────┘
                        │ raw records
 ┌──────────────────────▼──────────────────────────────────────────────┐
@@ -57,7 +23,7 @@ Core design principles:
 │  LAYER 3 – PROCESS (ETL)                                            │
 │  Mage.ai orchestration engine                                       │
 │    Pipelines: etl_postgres_to_lakehouse, etl_excel_to_lakehouse,   │
-│               etl_csv_upload_to_reporting                          │
+│               etl_csv_upload_to_reporting                           │
 └──────────────────────┬──────────────────────────────────────────────┘
                        │ INSERT from RustFS gold
 ┌──────────────────────▼──────────────────────────────────────────────┐
@@ -74,15 +40,14 @@ Core design principles:
 ```
 
 Supporting infrastructure (cuts across all layers):
-
-- **Redis** – shared cache and queue backend (Superset results, Authentik sessions).
+- **Redis** – shared cache and queue (Superset results, Authentik sessions).
 - **Authentik** – centralised identity provider (SSO, RBAC).
-- **CloudBeaver** – web-based SQL IDE connected to PostgreSQL and ClickHouse.
+- **CloudBeaver** – web SQL IDE for PostgreSQL and ClickHouse.
 - **Nginx Proxy Manager** – optional reverse proxy with automatic TLS.
 
 ---
 
-## 3. Component Catalog
+## Component Catalog
 
 | Container | Image | Role | Default Port |
 |-----------|-------|------|--------------|
@@ -90,26 +55,24 @@ Supporting infrastructure (cuts across all layers):
 | `dlh-postgres-bootstrap` | `postgres:17-alpine` | One-shot init: creates per-service DB roles and schemas | — |
 | `dlh-rustfs` | `rustfs/rustfs` | S3-compatible object storage (Bronze / Silver / Gold lake buckets) | API `29100`, Console `29101` |
 | `dlh-rustfs-init` | `minio/mc` | One-shot init: creates `bronze`, `silver`, `gold` buckets | — |
-| `dlh-clickhouse` | `clickhouse/clickhouse-server:25.4-alpine` | Columnar OLAP engine — analytics serving layer | HTTP `28123`, TCP `29000` |
-| `dlh-redis` | `redis/redis-stack:7.4.2-v3` | Shared cache/queue (Superset cache+results, Authentik queue) + Redis Insight GUI (built-in) | `26379` (Redis), `25540` (Redis Insight GUI) |
+| `dlh-clickhouse` | `clickhouse/clickhouse-server:25.4-alpine` | Columnar OLAP engine | HTTP `28123`, TCP `29000` |
+| `dlh-redis` | `redis/redis-stack:7.4.2-v3` | Shared cache/queue + Redis Insight GUI | Redis `26379`, GUI `25540` |
 | `dlh-mage` | `mageai/mageai:0.9.76` | ETL orchestration — runs and schedules pipelines | `26789` |
-| `dlh-superset` | `apache/superset:4.1.2` | Business intelligence / dashboard UI connected to ClickHouse | `28088` |
-| `dlh-grafana` | `grafana/grafana:12.0.0` | Operational monitoring; ingests `analytics.pipeline_runs` | `23001` |
+| `dlh-superset` | `apache/superset:4.1.2` | Business intelligence dashboard UI | `28088` |
+| `dlh-grafana` | `grafana/grafana:12.0.0` | Operational monitoring | `23001` |
 | `dlh-authentik-server` | `goauthentik/server:2026.2.1` | Identity provider — web + API server | `29090` |
 | `dlh-authentik-worker` | `goauthentik/server:2026.2.1` | Background worker for Authentik tasks | — |
-| `dlh-cloudbeaver` | `dbeaver/cloudbeaver` | Web SQL IDE for exploring PostgreSQL and ClickHouse | `28978` |
-| `dlh-dockhand` | `fnsys/dockhand:latest` | Lightweight web-based Docker management UI | `23000` |
-| `dlh-guacamole` | `guacamole/guacamole:latest` | Clientless remote desktop gateway (RDP/VNC/SSH via browser) | `28090` |
-| `dlh-guacd` | `guacamole/guacd:latest` | Guacamole proxy daemon handling remote protocol translation | — |
-| `dlh-nginx-proxy-manager` | `jc21/nginx-proxy-manager` | Optional reverse proxy + TLS termination | `80`, `443`, admin `28081` |
+| `dlh-cloudbeaver` | `dbeaver/cloudbeaver` | Web SQL IDE | `28978` |
+| `dlh-dockhand` | `fnsys/dockhand:latest` | Docker management UI | `23000` |
+| `dlh-nginx-proxy-manager` | `jc21/nginx-proxy-manager` | Reverse proxy + TLS termination | `80`, `443`, admin `28081` |
 
 All containers share the external Docker network `web_network`.
 
 ---
 
-## 4. Data Flow
+## Data Flow
 
-### 4a. PostgreSQL → Lakehouse (primary pipeline)
+### Primary pipeline: PostgreSQL → Lakehouse
 
 ```
 PostgreSQL source table
@@ -133,32 +96,19 @@ PostgreSQL source table
     Reads Parquet from RustFS Silver + Gold  →  INSERT INTO ClickHouse analytics.*
 ```
 
-### 4b. Excel upload → Lakehouse
+### Excel upload → Lakehouse
 
 ```
-Excel file uploaded to RustFS bronze/excel_upload/ (via RustFS Console or watcher)
+Excel file uploaded to RustFS bronze/excel_upload/
     │
     ▼  [extract_excel_from_rustfs.py]
-    DataFrame + metadata
-    │
     ▼  [clean_excel_data.py]
-    Cleaned DataFrame (Silver)
-    │
-    ├──▶ [excel_silver_to_rustfs.py] → s3://silver/excel_projects/dt=YYYY-MM-DD/
-    │
-    ▼  [transform_gold.py]
-    Aggregated DataFrames (Projects, Workload)
-    │
-    ├──▶ [excel_gold_to_rustfs.py]   → s3://gold/projects/dt=YYYY-MM-DD/
-    │                                 s3://gold/workload/dt=YYYY-MM-DD/
-    │
-    ▼  [load_gold_to_clickhouse.py]  → ClickHouse analytics.gold_projects_summary
-    │                                            analytics.gold_workload_report
-    │
-    ▼  [load_excel_to_clickhouse.py] → ClickHouse analytics.project_reports
+    ▼  [load_excel_to_clickhouse.py]  →  ClickHouse analytics.project_reports
+                                          analytics.gold_projects_summary
+                                          analytics.gold_workload_report
 ```
 
-### 4c. CSV upload → Reporting
+### CSV upload → Reporting
 
 ```
 CSV file uploaded to RustFS bronze/csv_upload/
@@ -169,78 +119,23 @@ CSV file uploaded to RustFS bronze/csv_upload/
     ▼  [load_csv_reporting_clickhouse.py]  →  ClickHouse analytics.csv_clean_rows
 ```
 
-### 4d. Control / cache path
+---
 
-```
-Redis  →  Superset  (cache DB=2, results DB=3)
-       →  Authentik (queue/cache DB=1)
-```
+## Medallion Architecture — Lake Layers
 
-### 4e. Metadata databases (PostgreSQL)
+| Layer | Bucket | Contents | Format |
+|-------|--------|----------|--------|
+| **Bronze** | `s3://bronze/` | Raw records as extracted from source; no changes | Parquet, partitioned by `dt=YYYY-MM-DD` |
+| **Silver** | `s3://silver/` | Cleaned data: dedup, type-cast, validated | Parquet, partitioned by `dt=YYYY-MM-DD` |
+| **Gold** | `s3://gold/` | Aggregated metrics: daily, weekly, monthly, yearly, by region, by category | Parquet, partitioned by `dt=YYYY-MM-DD` |
 
-Each service uses its own isolated PostgreSQL database. The `postgres-bootstrap` init
-container creates all roles and schemas on every `docker compose up`:
-
-| Database | Owner Role | Used by |
-|----------|-----------|---------|
-| `datalakehouse` | `dlh_admin` | Admin / source data |
-| `dlh_mage` | `dlh_mage_user` | Mage pipeline metadata |
-| `dlh_superset` | `dlh_superset_user` | Superset dashboard metadata |
-| `dlh_grafana` | `dlh_grafana_user` | Grafana settings |
-| `dlh_authentik` | `dlh_authentik_user` | Authentik identity data |
-| `dlh_custom` | `dlh_custom_user` | Optional business workspace DB |
+> RustFS is the **source of truth**. ClickHouse can be fully rebuilt from RustFS at any time.
 
 ---
 
-## 5. ETL Pipelines
+## ClickHouse Schema
 
-### Pipeline 1: `etl_postgres_to_lakehouse`
-
-**Schedule:** Every 6 hours (`0 */6 * * *`)
-**Source:** PostgreSQL (auto-detects table from `SOURCE_TABLE` or `SOURCE_TABLE_CANDIDATES`)
-
-| Block | Type | File |
-|-------|------|------|
-| `extract_postgres` | data_loader | `mage/data_loaders/extract_postgres.py` |
-| `bronze_to_rustfs` | data_exporter | `mage/data_exporters/bronze_to_rustfs.py` |
-| `transform_silver` | transformer | `mage/transformers/transform_silver.py` |
-| `silver_to_rustfs` | data_exporter | `mage/data_exporters/silver_to_rustfs.py` |
-| `transform_gold` | transformer | `mage/transformers/transform_gold.py` |
-| `gold_to_rustfs` | data_exporter | `mage/data_exporters/gold_to_rustfs.py` |
-| `load_to_clickhouse` | data_exporter | `mage/data_exporters/load_to_clickhouse.py` |
-
-### Pipeline 2: `etl_excel_to_lakehouse`
-
-**Trigger:** Manual or file-upload watcher (`scripts/realtime_watcher.sh`)
-**Source:** Excel files in RustFS `bronze/excel_upload/`
-
-| Block | Type | File |
-|-------|------|------|
-| `extract_excel_from_rustfs` | data_loader | `mage/data_loaders/extract_excel_from_rustfs.py` |
-| `clean_excel_data` | transformer | `mage/transformers/clean_excel_data.py` |
-| `excel_silver_to_rustfs` | data_exporter | `mage/data_exporters/excel_silver_to_rustfs.py` |
-| `transform_gold` | transformer | `mage/transformers/transform_gold.py` |
-| `excel_gold_to_rustfs` | data_exporter | `mage/data_exporters/excel_gold_to_rustfs.py` |
-| `load_gold_to_clickhouse` | data_exporter | `mage/data_exporters/load_gold_to_clickhouse.py` |
-| `load_excel_to_clickhouse` | data_exporter | `mage/data_exporters/load_excel_to_clickhouse.py` |
-
-### Pipeline 3: `etl_csv_upload_to_reporting`
-
-**Schedule:** Every 5 minutes (polls RustFS for new CSV files)
-**Source:** CSV files in RustFS `bronze/csv_upload/`
-
-| Block | Type | File |
-|-------|------|------|
-| `extract_csv_from_rustfs` | data_loader | `mage/data_loaders/extract_csv_from_rustfs.py` |
-| `clean_csv_for_reporting` | transformer | `mage/transformers/clean_csv_for_reporting.py` |
-| `csv_to_rustfs_silver` | data_exporter | `mage/data_exporters/csv_to_rustfs_silver.py` |
-| `load_csv_reporting_clickhouse` | data_exporter | `mage/data_exporters/load_csv_reporting_clickhouse.py` |
-
----
-
-## 6. ClickHouse Schema
-
-**Database:** `analytics`
+**Database:** `analytics`  
 **Engine:** All tables use `ReplacingMergeTree` (deduplication on re-ingestion).
 
 ### Primary pipeline tables
@@ -254,15 +149,15 @@ container creates all roles and schemas on every `docker compose up`:
 | `gold_demo_yearly` | Gold | Yearly aggregated metrics |
 | `gold_demo_by_region` | Gold | Metrics grouped by geographic region |
 | `gold_demo_by_category` | Gold | Metrics grouped by product category |
-| `pipeline_runs` | Monitoring | Run ID, status, row counts, error messages per pipeline execution |
+| `pipeline_runs` | Monitoring | Run ID, status, row counts, error messages per execution |
 
-### Excel pipeline tables (12-project dashboard)
+### Excel pipeline tables
 
 | Table | Description |
 |-------|-------------|
 | `project_reports` | Detailed task rows from each uploaded Excel report |
 | `gold_projects_summary` | Per-project KPI summary (completion rate, overdue count) |
-| `gold_workload_report` | Per-person workload metrics (task count, urgent task count) |
+| `gold_workload_report` | Per-person workload metrics |
 
 ### CSV pipeline tables
 
@@ -270,66 +165,41 @@ container creates all roles and schemas on every `docker compose up`:
 |-------|-------------|
 | `csv_clean_rows` | Cleaned and normalised rows from CSV uploads |
 
-Schema DDL is in `clickhouse/init/001_analytics_schema.sql`.
+Schema DDL: `clickhouse/init/001_analytics_schema.sql`
 
 ---
 
-## 7. Control Plane
+## PostgreSQL Metadata Databases
 
-### Bootstrap
+Each service has its own isolated PostgreSQL database. The `postgres-bootstrap` init container creates all roles on every `docker compose up`:
 
-```
-scripts/setup.sh
-  │
-  ├─ Prompts for all config values
-  ├─ Writes .env
-  ├─ Creates docker network  web_network
-  ├─ docker compose up -d
-  └─ Optionally runs ETL + Superset provisioning
-```
-
-### Day-2 lifecycle (`stackctl.sh`)
-
-| Command | Effect |
-|---------|--------|
-| `up` | Start all services |
-| `down` | Stop all services |
-| `redeploy` | Pull images, recreate containers |
-| `redeploy --with-etl` | Redeploy + run ETL pipeline |
-| `status` | Show container status |
-| `health` | Run health checks on all services |
-| `logs <service\|all>` | Stream logs |
-| `inspect <service>` | Show container config/state |
-| `check-env` | Print current .env values |
-| `validate-env` | Validate port uniqueness and required fields |
-| `sync-env` | Write updated values back to .env |
-| `reset` | Remove containers (keep volumes) |
-| `reset --hard` | Remove containers AND volumes |
-| `check-system` | Run architecture validation script |
-
-### Automation scripts
-
-| Script | Purpose |
-|--------|---------|
-| `scripts/run_etl_and_dashboard.py` | End-to-end ETL + Superset provisioning (supports `--auto` for CI) |
-| `scripts/create_superset_demo_dashboard.py` | Programmatic Superset dashboard creation via API |
-| `scripts/verify_lakehouse_architecture.py` | End-to-end architecture health checks (connectivity, data presence) |
-| `scripts/realtime_watcher.sh` | Watches RustFS volumes, triggers ETL within seconds of file upload |
-| `scripts/setup_ufw_docker.sh` | Docker-aware UFW firewall rule management |
-| `scripts/maintenance_tasks.py` | ClickHouse backup to RustFS + cleanup of old Parquet files |
+| Database | Owner Role | Used by |
+|----------|-----------|---------|
+| `datalakehouse` | `dlh_admin` | Admin / source data |
+| `dlh_mage` | `dlh_mage_user` | Mage pipeline metadata |
+| `dlh_superset` | `dlh_superset_user` | Superset dashboard metadata |
+| `dlh_grafana` | `dlh_grafana_user` | Grafana settings |
+| `dlh_authentik` | `dlh_authentik_user` | Authentik identity data |
+| `dlh_custom` | `dlh_custom_user` | Optional business workspace DB |
 
 ---
 
-## 8. Deployment Topology
+## Redis Database Allocation
 
-All services are deployed via `docker-compose.yaml` on a shared Docker bridge network
-(`web_network`, created externally before first `compose up`).
+| DB Index | Used by |
+|----------|---------|
+| 0 | Default (unused) |
+| 1 | Authentik queue + cache |
+| 2 | Superset dashboard/query cache |
+| 3 | Superset SQL Lab results backend |
 
-**Port allocation strategy:**
+---
 
-- All host ports are in the `2xxxx` range to avoid collision with common system services.
-- App/UI ports are bound to `DLH_APP_BIND_IP` (default `127.0.0.1`).
-- Data/DB ports are bound to `DLH_DATA_BIND_IP` (default `127.0.0.1`; set to `0.0.0.0` for LAN access).
+## Deployment Topology
+
+All services are deployed via `docker-compose.yaml` on a shared Docker bridge network (`web_network`).
+
+**Port allocation strategy:** all host ports are in the `2xxxx` range to avoid conflicts with common system services.
 
 **Recommended production topology:**
 
@@ -339,44 +209,30 @@ Internet
    ▼
 [Nginx Proxy Manager]  ──  TLS termination
    │
-   ├──▶ dlh-mage:6789     (pipeline UI)
-   ├──▶ dlh-superset:8088 (dashboards)
-   ├──▶ dlh-grafana:3000  (monitoring)
-   ├──▶ dlh-dockhand:3000 (docker mgmt)
-   ├──▶ dlh-rustfs:9001   (object store console)
-   └──▶ dlh-authentik:9000 (identity provider)
+   ├──▶ dlh-mage:6789        (pipeline UI)
+   ├──▶ dlh-superset:8088    (dashboards)
+   ├──▶ dlh-grafana:3000     (monitoring)
+   ├──▶ dlh-rustfs:9001      (object store console)
+   └──▶ dlh-authentik:9000   (identity provider)
 
 LAN clients
    │
-   ├──▶ dlh-postgres:5432    (direct DB access, data bind IP)
-   ├──▶ dlh-clickhouse:8123  (HTTP API, data bind IP)
-   └──▶ dlh-rustfs:9000      (S3 API, data bind IP)
+   ├──▶ dlh-postgres:5432    (direct DB access)
+   ├──▶ dlh-clickhouse:8123  (HTTP API)
+   └──▶ dlh-rustfs:9000      (S3 API)
 ```
 
 ---
 
-## 9. Security Boundaries
+## Security Boundaries
 
-- All container credentials are **externalized in `.env`** — no secrets in `docker-compose.yaml`.
+- All container credentials are externalized in `.env` — no secrets in `docker-compose.yaml`.
 - Host port binding is controlled by `DLH_BIND_IP` / `DLH_APP_BIND_IP` / `DLH_DATA_BIND_IP`.
 - LAN exposure is gated by `DLH_LAN_CIDR` and enforced via `setup_ufw_docker.sh`.
-- Firewall automation uses `ufw-docker` flow — it does **not** modify SSH rules.
-- Redis is protected-mode enabled and requires password authentication.
+- Redis requires password authentication.
 - Authentik provides SSO and RBAC for UI services.
-- Each stack service has an **isolated PostgreSQL database and role** — no service shares the admin account.
+- Each stack service has an isolated PostgreSQL database and role — no service shares the admin account.
 
 ---
 
-## 10. Visual Diagram
-
-The architecture diagram is maintained at `docs/assets/datalakehouse-architecture.svg`
-and embedded in the root `README.md`.
-
----
-
-*For deployment steps see [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md).*
-*For pipeline details see [PIPELINE_GUIDE.md](PIPELINE_GUIDE.md).*
-*For environment variables see [VARIABLES_REFERENCE.md](VARIABLES_REFERENCE.md).*
-*For day-2 operations see [OPERATIONS.md](OPERATIONS.md).*
-CE.md).*
-*For day-2 operations see [OPERATIONS.md](OPERATIONS.md).*
+> See [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) for the full architecture reference.
