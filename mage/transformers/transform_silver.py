@@ -38,6 +38,10 @@ def _valid_email(val):
 
 @transformer
 def transform_silver(df: pd.DataFrame, *args, **kwargs):
+    if df.empty:
+        print("[transform_silver] Skipping transformation – empty DataFrame")
+        return df
+
     run_id = df['_pipeline_run_id'].iloc[0] if '_pipeline_run_id' in df.columns else ''
 
     # 1. Drop exact duplicates (keep first)
@@ -101,7 +105,8 @@ def transform_silver(df: pd.DataFrame, *args, **kwargs):
 @test
 def test_output(output, *args):
     assert output is not None, 'Silver DataFrame is None'
-    assert len(output) > 0, 'Silver DataFrame is empty'
-    assert '_silver_processed_at' in output.columns, '_silver_processed_at missing'
-    if 'value' in output.columns:
-        assert (output['value'].dropna() >= 0).all(), 'Negative values found in silver layer'
+    # Allow empty DataFrame for incremental runs
+    if not output.empty:
+        assert '_silver_processed_at' in output.columns, '_silver_processed_at missing'
+        if 'value' in output.columns:
+            assert (output['value'].dropna() >= 0).all(), 'Negative values found in silver layer'
