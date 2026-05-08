@@ -59,6 +59,17 @@ def export_data(data, *args, **kwargs):
     table_name = 'project_reports'
     client = _ch_client()
 
+    # PROPER LAKEHOUSE: Only load columns that exist in the target table
+    table_info = client.execute(f'DESCRIBE {db}.{table_name}')
+    existing_cols = {row[0] for row in table_info}
+    df_cols = [c for c in df.columns if c in existing_cols]
+    
+    ignored_cols = [c for c in df.columns if c not in existing_cols]
+    if ignored_cols:
+        print(f"[load_excel_to_clickhouse] Ignoring columns not in ClickHouse: {ignored_cols}")
+    
+    df = df[df_cols].copy()
+
     # Truncate for full refresh idempotency
     client.execute(f'TRUNCATE TABLE {db}.{table_name}')
 
