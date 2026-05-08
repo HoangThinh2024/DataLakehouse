@@ -93,6 +93,10 @@ def _existing_hash_for_partition(client, bucket: str, prefix: str, date_str: str
 
 @data_exporter
 def export_bronze(df: pd.DataFrame, *args, **kwargs):
+    if df.empty:
+        print("[bronze_to_rustfs] Skipping upload – empty DataFrame")
+        return df
+
     bucket = os.getenv('RUSTFS_BRONZE_BUCKET', 'bronze')
     prefix = os.getenv('RUSTFS_BRONZE_PREFIX', 'demo')
     run_id = df['_pipeline_run_id'].iloc[0] if '_pipeline_run_id' in df.columns else 'unknown'
