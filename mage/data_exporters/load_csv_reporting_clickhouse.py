@@ -11,8 +11,8 @@ Tables created/used:
 import os
 import json
 import datetime as dt
-from typing import Any
 import sys
+from typing import Any
 
 import pandas as pd
 from clickhouse_driver import Client
