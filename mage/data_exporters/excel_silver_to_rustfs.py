@@ -23,6 +23,15 @@ def _s3_client():
         config=BotoConfig(signature_version='s3v4', s3={'addressing_style': 'path'}),
     )
 
+def _ensure_bucket(client, bucket: str) -> None:
+    try:
+        client.head_bucket(Bucket=bucket)
+    except ClientError as exc:
+        code = str(exc.response.get('Error', {}).get('Code', ''))
+        if code not in {'404', 'NoSuchBucket', 'NotFound'}:
+            raise
+        client.create_bucket(Bucket=bucket)
+
 @data_exporter
 def export_silver(data, *args, **kwargs):
     if data.get('skip'):
@@ -44,6 +53,7 @@ def export_silver(data, *args, **kwargs):
     buffer.seek(0)
 
     client = _s3_client()
+    _ensure_bucket(client, bucket)
     client.put_object(
         Bucket=bucket,
         Key=key,

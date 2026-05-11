@@ -8,6 +8,7 @@ import datetime as dt
 import pandas as pd
 import boto3
 from botocore.client import Config as BotoConfig
+from botocore.exceptions import ClientError
 
 if 'data_exporter' not in dir():
     from mage_ai.data_preparation.decorators import data_exporter
@@ -22,8 +23,18 @@ def _s3_client():
         config=BotoConfig(signature_version='s3v4', s3={'addressing_style': 'path'}),
     )
 
+def _ensure_bucket(client, bucket: str) -> None:
+    try:
+        client.head_bucket(Bucket=bucket)
+    except ClientError as exc:
+        code = str(exc.response.get('Error', {}).get('Code', ''))
+        if code not in {'404', 'NoSuchBucket', 'NotFound'}:
+            raise
+        client.create_bucket(Bucket=bucket)
+
 def _upload_df(client, bucket, key, df):
-    if df is None or len(df) == 0: return
+    if df is None or len(df) == 0:
+        return
     buffer = io.BytesIO()
     df.to_parquet(buffer, index=False, engine='pyarrow')
     buffer.seek(0)
@@ -32,12 +43,14 @@ def _upload_df(client, bucket, key, df):
 
 @data_exporter
 def export_gold_postgres(data, *args, **kwargs):
-    if not isinstance(data, dict) or not data: return data
-    
+    if not isinstance(data, dict) or not data:
+        return data
+
     bucket = os.getenv('RUSTFS_GOLD_BUCKET', 'gold')
     run_id = data.get('pipeline_run_id', 'unknown')
     date_str = dt.date.today().isoformat()
     client = _s3_client()
+    _ensure_bucket(client, bucket)
 
     _upload_df(client, bucket, f'demo_daily/dt={date_str}/{run_id}.parquet', data.get('gold_daily'))
     _upload_df(client, bucket, f'demo_by_region/dt={date_str}/{run_id}.parquet', data.get('gold_region'))

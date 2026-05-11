@@ -19,6 +19,9 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 from utils.rustfs_layer_reader import read_latest_excel_silver
 
+_DATETIME_COLS = {'_extracted_at', '_silver_processed_at', '_db_processed_at'}
+
+
 def _ch_client() -> Client:
     return Client(
         host=os.getenv('CLICKHOUSE_HOST', 'dlh-clickhouse'),
@@ -26,22 +29,44 @@ def _ch_client() -> Client:
         database=os.getenv('CLICKHOUSE_DB', 'analytics'),
         user=os.getenv('CLICKHOUSE_USER', 'default'),
         password=os.getenv('CLICKHOUSE_PASSWORD', '') or '',
+        connect_timeout=15,
+        send_receive_timeout=120,
     )
+
 
 def _to_records(df: pd.DataFrame) -> list[dict]:
     records = []
     for row in df.itertuples(index=False):
         record: dict[str, Any] = {}
         for field, value in zip(df.columns, row):
-            if hasattr(value, 'item'): value = value.item()
-            if pd.isna(value): value = None
+            if hasattr(value, 'item'):
+                value = value.item()
+            if not isinstance(value, (list, dict)) and pd.isna(value):
+                value = None
             record[field] = value
         records.append(record)
     return records
 
+
+def _ensure_table(client: Client, db: str, table_name: str) -> None:
+    """Create project_reports table if it does not yet exist."""
+    client.execute(f'CREATE DATABASE IF NOT EXISTS {db}')
+    client.execute(f'''
+        CREATE TABLE IF NOT EXISTS {db}.{table_name}
+        (
+            _extracted_at Nullable(DateTime64(3)),
+            _silver_processed_at Nullable(DateTime64(3)),
+            _db_processed_at DateTime64(3) DEFAULT now64(3)
+        )
+        ENGINE = ReplacingMergeTree(_db_processed_at)
+        ORDER BY _db_processed_at
+    ''')
+
+
 @data_exporter
 def export_data(data, *args, **kwargs):
-    if data.get('skip'): return {}
+    if data.get('skip'):
+        return {}
 
     # PROPER LAKEHOUSE: Read from RustFS Silver layer
     df = read_latest_excel_silver()
@@ -49,31 +74,30 @@ def export_data(data, *args, **kwargs):
         print("[load_excel_to_clickhouse] No data found in Silver layer to load.")
         return {}
 
-    # Filter junk
+    # Filter rows with missing task ID
     id_col = 'Mã công việc (ID)'
     if id_col in df.columns:
-        df = df[df[id_col].notna()]
-        df = df[df[id_col].astype(str).str.strip() != '']
+        df = df[df[id_col].notna() & (df[id_col].astype(str).str.strip() != '')]
 
     db = os.getenv('CLICKHOUSE_DB', 'analytics')
     table_name = 'project_reports'
     client = _ch_client()
 
-    # PROPER LAKEHOUSE: Automatically evolve schema
+    # Ensure table exists, then discover current columns
+    _ensure_table(client, db, table_name)
     table_info = client.execute(f'DESCRIBE {db}.{table_name}')
     existing_cols = {row[0] for row in table_info}
-    
+
+    # Automatically evolve schema for new columns
     new_cols = [c for c in df.columns if c not in existing_cols]
     if new_cols:
         print(f"[load_excel_to_clickhouse] Found new columns to add: {new_cols}")
         for col in new_cols:
             try:
-                # Add new columns as Nullable(String) by default
                 client.execute(f'ALTER TABLE {db}.{table_name} ADD COLUMN `{col}` Nullable(String)')
                 print(f"  ✓ Added column: {col}")
             except Exception as e:
                 print(f"  ✗ Failed to add column {col}: {e}")
-        
         # Refresh column list after ALTER
         table_info = client.execute(f'DESCRIBE {db}.{table_name}')
         existing_cols = {row[0] for row in table_info}
@@ -84,12 +108,17 @@ def export_data(data, *args, **kwargs):
     # Truncate for full refresh idempotency
     client.execute(f'TRUNCATE TABLE {db}.{table_name}')
 
-    # Stringify for CH
+    # Convert datetime columns; vectorized stringify for all others
     for col in df.columns:
-        if col not in ['_extracted_at', '_silver_processed_at', '_db_processed_at']:
-            df[col] = df[col].apply(lambda x: str(x) if pd.notna(x) else None)
-        else:
+        if col in _DATETIME_COLS:
             df[col] = pd.to_datetime(df[col], errors='coerce')
+        else:
+            # Step 1: cast to string (NaN → 'nan', None → 'None', NaT → 'NaT').
+            # Step 2: replace those sentinel strings back to None so ClickHouse
+            # receives a proper NULL rather than a literal 'nan' / 'None' string.
+            str_col = df[col].astype(str)
+            df[col] = str_col.where(df[col].notna(), other=None)
+            df.loc[str_col.isin({'nan', 'None', 'NaT'}), col] = None
 
     records = _to_records(df)
     if records:
@@ -98,6 +127,7 @@ def export_data(data, *args, **kwargs):
         client.execute(f'OPTIMIZE TABLE {db}.{table_name} FINAL')
 
     # Log event
+    now_utc = dt.datetime.now(dt.timezone.utc)
     processed_files = data.get('processed_files', [])
     events = []
     for f in processed_files:
@@ -109,11 +139,15 @@ def export_data(data, *args, **kwargs):
             'status': 'success',
             'row_count': len(df),
             'pipeline_run_id': f['pipeline_run_id'],
-            'processed_at': dt.datetime.utcnow(),
+            'processed_at': now_utc,
         })
-    
+
     if events:
-        client.execute(f'INSERT INTO {db}.excel_upload_events (source_key, etag, source_size, source_last_modified, status, row_count, pipeline_run_id, processed_at) VALUES', events)
+        client.execute(
+            f'INSERT INTO {db}.excel_upload_events '
+            '(source_key, etag, source_size, source_last_modified, status, row_count, pipeline_run_id, processed_at) VALUES',
+            events,
+        )
 
     print(f"[load_excel_to_clickhouse] Loaded {len(df)} rows to {db}.{table_name}")
     return {}
