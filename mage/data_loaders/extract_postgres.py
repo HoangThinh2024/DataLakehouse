@@ -217,7 +217,7 @@ def load_data(*args, **kwargs):
 
     try:
         conn.close()
-    except Exception as exc:
+    except psycopg2.Error as exc:
         print(f'[extract_postgres] Warning: error closing connection: {exc}')
 
     # Attach pipeline run metadata columns
