@@ -42,8 +42,11 @@ def export_silver(data, *args, **kwargs):
         return data
 
     df = data.get('dataframe')
-    if not isinstance(df, pd.DataFrame) or df.empty:
-        print("[excel_silver_to_rustfs] Skip upload - missing or empty dataframe.")
+    if not isinstance(df, pd.DataFrame):
+        print("[excel_silver_to_rustfs] Skip upload - missing or invalid dataframe payload.")
+        return data
+    if df.empty:
+        print("[excel_silver_to_rustfs] Skip upload - dataframe is empty.")
         return data
 
     df = df.copy()
