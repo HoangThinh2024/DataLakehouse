@@ -52,7 +52,9 @@ def export_gold(data, *args, **kwargs):
     client = _s3_client()
     _ensure_bucket(client, bucket)
 
-    _upload_df(client, bucket, f'projects/dt={date_str}/{run_id}.parquet', data.get('gold_projects'))
-    _upload_df(client, bucket, f'workload/dt={date_str}/{run_id}.parquet', data.get('gold_workload'))
+    if 'gold_projects' in data:
+        _upload_df(client, bucket, f'projects/dt={date_str}/{run_id}.parquet', data.get('gold_projects'))
+    if 'gold_workload' in data:
+        _upload_df(client, bucket, f'workload/dt={date_str}/{run_id}.parquet', data.get('gold_workload'))
 
     return data

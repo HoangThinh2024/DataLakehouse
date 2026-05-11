@@ -118,10 +118,9 @@ def export_data(data, *args, **kwargs):
         if col in _DATETIME_COLS:
             df[col] = pd.to_datetime(df[col], errors='coerce')
         else:
-            # 3-step normalization:
-            # 1) Cast to string (NaN/None/NaT become 'nan'/'None'/'NaT').
-            # 2) Preserve genuine null positions from the original series.
-            # 3) Convert sentinel string literals back to NULL for ClickHouse.
+            # 2-step normalization:
+            # 1) Keep original null positions while stringifying non-null values.
+            # 2) Convert sentinel strings ('nan'/'None'/'NaT') back to NULL.
             str_col = df[col].astype(str)
             df[col] = str_col.where(df[col].notna(), other=None)
             df.loc[str_col.isin({'nan', 'None', 'NaT'}), col] = None
