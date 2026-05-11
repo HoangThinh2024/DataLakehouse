@@ -42,7 +42,9 @@ def get_missing_files():
                          aws_secret_access_key=SECRET_KEY, config=BotoConfig(signature_version='s3v4', s3={'addressing_style': 'path'}))
         s3_files = {}
         paginator = s3.get_paginator('list_objects_v2')
-        for page in paginator.paginate(Bucket=BRONZE_BUCKET):
+        # Monitor the new aligned path
+        prefix = 'Data Mẫu 12 dự án/'
+        for page in paginator.paginate(Bucket=BRONZE_BUCKET, Prefix=prefix):
             for obj in page.get('Contents', []):
                 if obj['Key'].lower().endswith('.xlsx'):
                     s3_files[obj['Key']] = obj['ETag'].strip('"')
@@ -51,17 +53,29 @@ def get_missing_files():
         rows = ch.execute("SELECT source_key, etag FROM excel_upload_events WHERE status = 'success'")
         processed = {row[0]: row[1] for row in rows}
         
-        return [k for k, v in s3_files.items() if k not in processed or processed.get(k) != v]
+        missing = [k for k, v in s3_files.items() if k not in processed or processed.get(k) != v]
+        if missing:
+            logger.info(f"Detected {len(missing)} missing or updated files in {prefix}")
+        return missing
     except Exception as e:
         logger.error(f"Error checking missing files: {e}")
         return []
 
 def check_sync_status():
-    """Check if ClickHouse reports table is in sync with Silver/Gold layer."""
+    """Check if ClickHouse reports table is in sync with Silver/Gold layer.
+    Uses 'argMax' to only consider the latest status for each file.
+    """
     try:
         ch = get_ch_client()
-        # Get total expected rows from successful events
-        expected = ch.execute("SELECT sum(row_count) FROM (SELECT source_key, argMax(row_count, processed_at) as row_count FROM excel_upload_events WHERE status = 'success' GROUP BY source_key)")[0][0] or 0
+        # Get total expected rows from successful events, only considering the latest event per file
+        query = """
+            SELECT sum(row_count) FROM (
+                SELECT source_key, argMax(row_count, processed_at) as row_count, argMax(status, processed_at) as latest_status
+                FROM excel_upload_events 
+                GROUP BY source_key
+            ) WHERE latest_status = 'success'
+        """
+        expected = ch.execute(query)[0][0] or 0
         # Get actual rows in project_reports
         actual = ch.execute("SELECT count() FROM project_reports")[0][0]
         
