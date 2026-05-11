@@ -11,11 +11,11 @@ Tables created/used:
 import os
 import json
 import datetime as dt
+import sys
 from typing import Any
 
 import pandas as pd
 from clickhouse_driver import Client
-import sys
 
 project_root = os.getenv('MAGE_PROJECT_PATH', os.getcwd())
 if project_root not in sys.path:
@@ -159,15 +159,19 @@ def export_data(data, *args, **kwargs):
         if '_row_number' not in payload_df.columns:
             payload_df['_row_number'] = range(1, len(payload_df) + 1)
 
-        for _, row in payload_df.iterrows():
-            row_number = int(row.get('_row_number', 0))
+        columns = list(payload_df.columns)
+        if '_row_number' not in columns:
+            raise RuntimeError('Internal error: _row_number column is missing before payload build.')
+        row_idx = columns.index('_row_number')
+        value_cols = [c for c in columns if c != '_row_number']
+        for row in payload_df.itertuples(index=False, name=None):
+            row_number = int(row[row_idx] or 0)
+            row_map = dict(zip(columns, row))
             row_dict = {
-                k: v for k, v in row.to_dict().items()
-                if k != '_row_number'
+                k: (None if (not isinstance(v, (list, dict)) and pd.isna(v)) else v)
+                for k, v in row_map.items()
+                if k in value_cols
             }
-            for key, val in row_dict.items():
-                if not isinstance(val, (list, dict)) and pd.isna(val):
-                    row_dict[key] = None
             rows_payload.append({
                 'pipeline_run_id': run_id,
                 'source_key': source_key,

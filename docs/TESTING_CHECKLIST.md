@@ -5,6 +5,26 @@ Run after initial setup or after any major change.
 
 ---
 
+## Quick Offline Validation (No Docker Services Required)
+
+Run these checks first in CI/sandbox environments where the full stack may be unavailable:
+
+```bash
+# Syntax safety for all Python blocks/scripts
+python -m compileall mage scripts
+
+# Architecture script (use uv when available)
+uv run python scripts/verify_lakehouse_architecture.py
+# Fallback if uv is not installed:
+python scripts/verify_lakehouse_architecture.py
+```
+
+Expected:
+- `compileall` succeeds with exit code `0`
+- architecture script reports service connectivity status clearly (`PASS`/`FAIL`)
+
+---
+
 ## Pre-flight Checks
 
 ```bash
@@ -192,6 +212,20 @@ After a successful first run:
 - [ ] ClickHouse query on `silver_demo`: response in < 1 second
 - [ ] Superset dashboard initial load: < 5 seconds
 - [ ] RustFS storage used: ~ 50 MB – 500 MB (depending on data size)
+
+---
+
+## Resilience / Edge-Case Matrix
+
+Use this matrix after code changes to verify robustness across common failure modes:
+
+- [ ] Upstream block returns `skip=true` → downstream blocks no-op safely
+- [ ] Upstream block returns malformed payload (`None` / non-dict) → block logs and exits gracefully
+- [ ] Missing `dataframe` key in payload → block logs and exits gracefully
+- [ ] Empty DataFrame input → exporter/transformer no-op without crash
+- [ ] Missing optional columns in source files → pipeline continues with safe defaults
+- [ ] Bucket/table missing on first run → auto-create path/table works
+- [ ] Re-run same data twice → idempotency behaviour is preserved (no duplicate explosion)
 
 ---
 

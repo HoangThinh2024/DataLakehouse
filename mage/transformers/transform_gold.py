@@ -40,7 +40,9 @@ def transform_gold(data, *args, **kwargs):
             df.loc[df[assignee_col].isin(['', 'nan', 'None']), assignee_col] = df.loc[df[assignee_col].isin(['', 'nan', 'None']), fallback_col]
         
         # Final cleanup for remaining blanks
-        df[assignee_col] = df[assignee_col].fillna('Chưa phân công').replace('', 'Chưa phân công').replace('nan', 'Chưa phân công').replace('None', 'Chưa phân công')
+        df[assignee_col] = df[assignee_col].fillna('Chưa phân công').replace(
+            {'': 'Chưa phân công', 'nan': 'Chưa phân công', 'None': 'Chưa phân công'}
+        )
     else:
         # If neither exists, fall back to global default
         df[assignee_col] = df[fallback_col] if fallback_col in df.columns else 'Chưa phân công'

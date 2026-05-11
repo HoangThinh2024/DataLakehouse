@@ -134,7 +134,7 @@ def load_data(*args, **kwargs):
             
         df = pd.read_excel(io.BytesIO(body), engine='openpyxl')
 
-        now_utc = dt.datetime.utcnow().isoformat() + 'Z'
+        now_utc = dt.datetime.now(dt.timezone.utc).isoformat().replace('+00:00', 'Z')
         df['_pipeline_run_id'] = run_id
         df['_source_table'] = 'excel_upload'
         df['_source_file_key'] = source_key
