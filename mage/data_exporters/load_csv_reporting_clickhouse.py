@@ -160,6 +160,8 @@ def export_data(data, *args, **kwargs):
             payload_df['_row_number'] = range(1, len(payload_df) + 1)
 
         columns = list(payload_df.columns)
+        if '_row_number' not in columns:
+            raise RuntimeError('Internal error: _row_number column is missing before payload build.')
         row_idx = columns.index('_row_number')
         value_cols = [c for c in columns if c != '_row_number']
         for row in payload_df.itertuples(index=False, name=None):
