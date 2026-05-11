@@ -147,7 +147,7 @@ def load_data(*args, **kwargs):
     body = obj['Body'].read()
     df = pd.read_csv(io.BytesIO(body), sep=sep, encoding=encoding)
 
-    now_utc = dt.datetime.utcnow().isoformat() + 'Z'
+    now_utc = dt.datetime.now(dt.timezone.utc).isoformat().replace('+00:00', 'Z')
     df['_pipeline_run_id'] = run_id
     df['_source_table'] = 'csv_upload'
     df['_source_file_key'] = source_key

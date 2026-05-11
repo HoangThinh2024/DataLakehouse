@@ -215,7 +215,10 @@ def load_data(*args, **kwargs):
         )
         df = pd.read_sql(full_query.as_string(conn), conn)
 
-    conn.close()
+    try:
+        conn.close()
+    except Exception as exc:
+        print(f'[extract_postgres] Warning: error closing connection: {exc}')
 
     # Attach pipeline run metadata columns
     now_utc = dt.datetime.now(dt.timezone.utc).isoformat().replace('+00:00', 'Z')
