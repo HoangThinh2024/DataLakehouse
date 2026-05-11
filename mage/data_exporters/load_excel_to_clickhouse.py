@@ -65,6 +65,11 @@ def _ensure_table(client: Client, db: str, table_name: str) -> None:
 
 @data_exporter
 def export_data(data, *args, **kwargs):
+    # Guardrail: exporter should never crash when upstream returns unexpected payload.
+    # Keep this check first so future refactors preserve safe no-op behaviour.
+    if not isinstance(data, dict):
+        print(f"[load_excel_to_clickhouse] Skip run - invalid payload type: {type(data)}")
+        return {}
     if data.get('skip'):
         return {}
 
