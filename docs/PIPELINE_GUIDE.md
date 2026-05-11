@@ -28,6 +28,13 @@ DataLakehouse follows a strict **Lakehouse Architecture**:
 3. **Traceability:** Every pipeline run has a unique UUID `run_id`
 4. **Recovery:** ClickHouse can be fully rebuilt from RustFS at any time
 
+### Robustness Rules (recommended)
+
+- Every block should validate payload type before accessing keys.
+- `skip` payloads should short-circuit quickly and safely.
+- Exporters should treat empty/missing DataFrames as no-op, not hard error.
+- Prefer explicit guardrails + logs for expected edge cases.
+
 ### Overall Data Flow
 
 ```
