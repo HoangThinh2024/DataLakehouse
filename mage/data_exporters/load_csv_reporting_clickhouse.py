@@ -159,12 +159,16 @@ def export_data(data, *args, **kwargs):
         if '_row_number' not in payload_df.columns:
             payload_df['_row_number'] = range(1, len(payload_df) + 1)
 
-        for record in payload_df.to_dict('records'):
-            row_number = int(record.get('_row_number', 0))
+        columns = list(payload_df.columns)
+        row_idx = columns.index('_row_number')
+        value_cols = [c for c in columns if c != '_row_number']
+        for row in payload_df.itertuples(index=False, name=None):
+            row_number = int(row[row_idx] or 0)
+            row_map = dict(zip(columns, row))
             row_dict = {
                 k: (None if (not isinstance(v, (list, dict)) and pd.isna(v)) else v)
-                for k, v in record.items()
-                if k != '_row_number'
+                for k, v in row_map.items()
+                if k in value_cols
             }
             rows_payload.append({
                 'pipeline_run_id': run_id,
