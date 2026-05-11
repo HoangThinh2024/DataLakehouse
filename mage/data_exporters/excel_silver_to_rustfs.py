@@ -34,10 +34,19 @@ def _ensure_bucket(client, bucket: str) -> None:
 
 @data_exporter
 def export_silver(data, *args, **kwargs):
+    # Guard malformed payloads to keep pipeline resilient across integration changes.
+    if not isinstance(data, dict):
+        print(f"[excel_silver_to_rustfs] Skip run - invalid payload type: {type(data)}")
+        return data
     if data.get('skip'):
         return data
 
-    df = data['dataframe'].copy()
+    df = data.get('dataframe')
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        print("[excel_silver_to_rustfs] Skip upload - missing or empty dataframe.")
+        return data
+
+    df = df.copy()
     bucket = os.getenv('RUSTFS_SILVER_BUCKET', 'silver')
     prefix = 'excel_projects'
     run_id = data.get('pipeline_run_id', 'unknown')

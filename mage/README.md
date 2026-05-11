@@ -142,3 +142,17 @@ def load_data(*args, **kwargs):
 - All environment variables from `.env` / `docker-compose.yaml` are available via `os.environ`.
 - `io_config.yaml` profiles are accessible via Mage's built-in connector classes.
 - Install extra Python packages in `requirements.txt` (applied on next container start).
+
+---
+
+## Block Resilience Contract (for Devs and AI assistants)
+
+When creating or modifying blocks, keep these guardrails:
+
+1. Validate input payload type at the function boundary (`dict` vs non-dict).
+2. Handle `skip` payloads as first-class no-op paths.
+3. Validate `dataframe` existence/type before processing.
+4. Prefer graceful returns with clear log messages over hard crashes for expected edge cases.
+5. Keep idempotency behaviour explicit for exporters (safe re-run without duplicate explosions).
+
+These rules reduce failure blast radius when blocks are reused or reordered across pipelines.
