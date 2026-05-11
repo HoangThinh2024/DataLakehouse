@@ -15,7 +15,6 @@ from typing import Any
 
 import pandas as pd
 from clickhouse_driver import Client
-import sys
 
 project_root = os.getenv('MAGE_PROJECT_PATH', os.getcwd())
 if project_root not in sys.path:
@@ -159,15 +158,13 @@ def export_data(data, *args, **kwargs):
         if '_row_number' not in payload_df.columns:
             payload_df['_row_number'] = range(1, len(payload_df) + 1)
 
-        for _, row in payload_df.iterrows():
-            row_number = int(row.get('_row_number', 0))
+        for record in payload_df.to_dict('records'):
+            row_number = int(record.get('_row_number', 0))
             row_dict = {
-                k: v for k, v in row.to_dict().items()
+                k: (None if (not isinstance(v, (list, dict)) and pd.isna(v)) else v)
+                for k, v in record.items()
                 if k != '_row_number'
             }
-            for key, val in row_dict.items():
-                if not isinstance(val, (list, dict)) and pd.isna(val):
-                    row_dict[key] = None
             rows_payload.append({
                 'pipeline_run_id': run_id,
                 'source_key': source_key,

@@ -33,7 +33,7 @@ def transform_excel(data, *args, **kwargs):
         df[col] = _clean_string(df[col])
 
     # 2. Add silver metadata
-    df['_silver_processed_at'] = dt.datetime.utcnow().isoformat() + 'Z'
+    df['_silver_processed_at'] = dt.datetime.now(dt.timezone.utc).isoformat().replace('+00:00', 'Z')
 
     print(f"[clean_excel_data] Silver rows ready: {len(df)}")
     

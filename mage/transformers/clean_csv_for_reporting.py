@@ -64,7 +64,7 @@ def transform_data(data, *args, **kwargs):
 
     null_cells = int(df.isna().sum().sum())
 
-    processed_at = dt.datetime.utcnow().isoformat() + 'Z'
+    processed_at = dt.datetime.now(dt.timezone.utc).isoformat().replace('+00:00', 'Z')
     df['_silver_processed_at'] = processed_at
     df['_row_number'] = range(1, len(df) + 1)
 
