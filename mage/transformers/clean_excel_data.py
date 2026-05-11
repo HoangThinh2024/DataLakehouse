@@ -17,10 +17,21 @@ def _clean_string(series: pd.Series) -> pd.Series:
 
 @transformer
 def transform_excel(data, *args, **kwargs):
+    # Defensive input handling: transformers may be reused by other pipelines.
+    # Return a skip payload instead of raising when contract is violated.
+    if not isinstance(data, dict):
+        print(f"[clean_excel_data] Skip run - invalid payload type: {type(data)}")
+        return {'skip': True, 'message': 'invalid payload type'}
     if data.get('skip'):
         return data
 
-    df = data['dataframe']
+    df = data.get('dataframe')
+    if not isinstance(df, pd.DataFrame):
+        print("[clean_excel_data] Skip run - missing or invalid dataframe.")
+        out = data.copy()
+        out['skip'] = True
+        out['message'] = 'missing or invalid dataframe'
+        return out
     
     # 0. Drop unnamed columns (usually from Excel index or empty columns)
     unnamed_cols = [col for col in df.columns if 'Unnamed' in str(col)]
@@ -33,7 +44,7 @@ def transform_excel(data, *args, **kwargs):
         df[col] = _clean_string(df[col])
 
     # 2. Add silver metadata
-    df['_silver_processed_at'] = dt.datetime.utcnow().isoformat() + 'Z'
+    df['_silver_processed_at'] = dt.datetime.now(dt.timezone.utc).isoformat().replace('+00:00', 'Z')
 
     print(f"[clean_excel_data] Silver rows ready: {len(df)}")
     
@@ -44,6 +55,7 @@ def transform_excel(data, *args, **kwargs):
 @test
 def test_output(output, *args):
     assert output is not None, 'Output is None'
+    assert isinstance(output, dict), 'Output must be a dictionary'
     if not output.get('skip'):
         assert 'dataframe' in output, 'Missing dataframe in output'
         assert '_silver_processed_at' in output['dataframe'].columns
