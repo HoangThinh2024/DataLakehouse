@@ -85,7 +85,7 @@ def _already_processed(client: Client, db: str, source_key: str, etag: str) -> b
 def load_data(*args, **kwargs):
     bucket = os.getenv('CSV_UPLOAD_BUCKET', os.getenv('RUSTFS_BRONZE_BUCKET', 'bronze'))
     prefix = os.getenv('CSV_UPLOAD_PREFIX', 'csv_upload/')
-    allow_anywhere = os.getenv('CSV_UPLOAD_ALLOW_ANYWHERE', 'true').lower() in {'1', 'true', 'yes', 'y'}
+    allow_anywhere = os.getenv('CSV_UPLOAD_ALLOW_ANYWHERE', 'false').lower() in {'1', 'true', 'yes', 'y'}
     sep = os.getenv('CSV_UPLOAD_SEPARATOR', ',')
     encoding = os.getenv('CSV_UPLOAD_ENCODING', 'utf-8')
     max_scan = int(os.getenv('CSV_UPLOAD_SCAN_LIMIT', '200'))

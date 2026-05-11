@@ -52,7 +52,7 @@ def ingest_files():
         
         # Upload to S3
         # Prefix by file type to match existing pipeline expectations
-        prefix = "excel_upload" if file_name.endswith(".xlsx") else "csv_upload"
+        prefix = "Data Mẫu 12 dự án" if file_name.endswith(".xlsx") else "csv_upload"
         object_key = f"{prefix}/{file_name}"
         
         try:
