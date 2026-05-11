@@ -109,7 +109,11 @@ def export_bronze(df: pd.DataFrame, *args, **kwargs):
     content = buffer.getvalue()
 
     client = _s3_client()
-    _ensure_bucket(client, bucket)
+    try:
+        _ensure_bucket(client, bucket)
+    except Exception as e:
+        print(f"[bronze_to_rustfs] CRITICAL: Connection to RustFS failed: {e}")
+        raise
 
     # Skip upload when business data is identical to the latest file already
     # stored for today's partition (avoids accumulating redundant copies).
@@ -122,15 +126,19 @@ def export_bronze(df: pd.DataFrame, *args, **kwargs):
         )
         return df
 
-    client.put_object(
-        Bucket=bucket,
-        Key=key,
-        Body=content,
-        ContentType='application/octet-stream',
-        Metadata={'content-sha256': content_hash},
-    )
+    try:
+        client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=content,
+            ContentType='application/octet-stream',
+            Metadata={'content-sha256': content_hash},
+        )
+        print(f"[bronze_to_rustfs] Uploaded {len(df)} rows → s3://{bucket}/{key}")
+    except Exception as e:
+        print(f"[bronze_to_rustfs] CRITICAL: Failed to upload to RustFS: {e}")
+        raise
 
-    print(f"[bronze_to_rustfs] Uploaded {len(df)} rows → s3://{bucket}/{key}")
     return df
 
 

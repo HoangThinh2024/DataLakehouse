@@ -61,7 +61,7 @@ while true; do
   fi
 
   # Detect changes in S3 Bronze (Excel)
-  current_excel_state=$(docker exec dlh-rustfs ls -lR /data/bronze/excel_upload 2>/dev/null | grep ".xlsx" || echo "")
+  current_excel_state=$(docker exec dlh-rustfs ls -lR "/data/bronze/Data Mẫu 12 dự án" 2>/dev/null | grep ".xlsx" || echo "")
   # Detect changes in S3 Bronze (CSV)
   current_csv_state=$(docker exec dlh-rustfs ls -lR /data/bronze/csv_upload 2>/dev/null | grep ".csv" || echo "")
   

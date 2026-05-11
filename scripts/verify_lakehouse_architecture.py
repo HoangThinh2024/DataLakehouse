@@ -171,11 +171,16 @@ def check_rusfs_layers(results: dict) -> bool:
         try:
             client.head_bucket(Bucket=bucket)
             layer_res['exists'] = True
-            objs = client.list_objects_v2(Bucket=bucket, MaxKeys=10)
-            count = objs.get('KeyCount', 0)
+            
+            # New code with pagination for accurate counting:
+            count = 0
+            paginator = client.get_paginator('list_objects_v2')
+            for page in paginator.paginate(Bucket=bucket):
+                count += page.get('KeyCount', 0)
+                if 'Contents' in page and not layer_res.get('samples'):
+                    layer_res['samples'] = [obj['Key'] for obj in page['Contents'][:3]]
+            
             layer_res['object_count'] = count
-            if 'Contents' in objs:
-                layer_res['samples'] = [obj['Key'] for obj in objs['Contents'][:3]]
             if not results.get('json_mode'):
                 print(f"✓ {layer_name.upper()} bucket exists: {bucket} ({count} objects)")
         except ClientError as exc:
