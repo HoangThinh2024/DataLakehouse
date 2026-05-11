@@ -49,7 +49,12 @@ def _to_records(df: pd.DataFrame) -> list[dict]:
 
 
 def _ensure_table(client: Client, db: str, table_name: str) -> None:
-    """Create project_reports table if it does not yet exist."""
+    """Create project_reports table if it does not yet exist.
+
+    This table uses 2-phase initialization:
+    1) Bootstrap with metadata columns only.
+    2) Add business columns dynamically from incoming DataFrame schema.
+    """
     client.execute(f'CREATE DATABASE IF NOT EXISTS {db}')
     client.execute(f'''
         CREATE TABLE IF NOT EXISTS {db}.{table_name}
