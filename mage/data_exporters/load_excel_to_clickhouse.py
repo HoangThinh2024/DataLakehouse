@@ -59,15 +59,26 @@ def export_data(data, *args, **kwargs):
     table_name = 'project_reports'
     client = _ch_client()
 
-    # PROPER LAKEHOUSE: Only load columns that exist in the target table
+    # PROPER LAKEHOUSE: Automatically evolve schema
     table_info = client.execute(f'DESCRIBE {db}.{table_name}')
     existing_cols = {row[0] for row in table_info}
+    
+    new_cols = [c for c in df.columns if c not in existing_cols]
+    if new_cols:
+        print(f"[load_excel_to_clickhouse] Found new columns to add: {new_cols}")
+        for col in new_cols:
+            try:
+                # Add new columns as Nullable(String) by default
+                client.execute(f'ALTER TABLE {db}.{table_name} ADD COLUMN `{col}` Nullable(String)')
+                print(f"  ✓ Added column: {col}")
+            except Exception as e:
+                print(f"  ✗ Failed to add column {col}: {e}")
+        
+        # Refresh column list after ALTER
+        table_info = client.execute(f'DESCRIBE {db}.{table_name}')
+        existing_cols = {row[0] for row in table_info}
+
     df_cols = [c for c in df.columns if c in existing_cols]
-    
-    ignored_cols = [c for c in df.columns if c not in existing_cols]
-    if ignored_cols:
-        print(f"[load_excel_to_clickhouse] Ignoring columns not in ClickHouse: {ignored_cols}")
-    
     df = df[df_cols].copy()
 
     # Truncate for full refresh idempotency

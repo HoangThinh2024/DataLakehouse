@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Real-time Data Watcher for DataLakehouse (Docker Volume Edition)
-# Monitors bronze folder inside the container and triggers Mage AI.
+# Real-time Data Watcher & Ingester for DataLakehouse
+# 1. Monitors mage/bronze_local for new files and ingests them to S3.
+# 2. Monitors S3 bronze bucket and triggers Mage AI pipelines.
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCK_FILE="/tmp/dlh_watcher.lock"
-PIPELINE_UUID="etl_excel_to_lakehouse"
+PIPELINE_EXCEL="etl_excel_to_lakehouse"
+PIPELINE_CSV="etl_csv_upload_to_reporting"
 
 # Source environment library for logging and .env loading
 if [[ -f "$REPO_ROOT/scripts/lib_env.sh" ]]; then
@@ -24,12 +26,12 @@ if ! flock -n 200; then
   exit 1
 fi
 
-header "DataLakehouse Real-time Watcher"
-info "Starting Docker-aware monitor on rustfs/bronze..."
-info "Pipeline: $PIPELINE_UUID"
+header "DataLakehouse Real-time Watcher & Ingester"
+info "Monitoring local: mage/bronze_local/"
+info "Monitoring S3:    dlh-rustfs (bronze bucket)"
 info "Polling interval: 10s"
 
-last_state=""
+last_s3_state=""
 
 # Cleanup on exit
 cleanup() {
@@ -40,32 +42,50 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 while true; do
-  # Check if container is running first
+  # --- PHASE 1: LOCAL INGESTION ---
+  # Check if there are any .xlsx or .csv files in mage/bronze_local
+  if ls "$REPO_ROOT/mage/bronze_local/"*.xlsx "$REPO_ROOT/mage/bronze_local/"*.csv 1>/dev/null 2>&1; then
+    info "New local files detected. Starting ingestion to S3 Bronze..."
+    if uv run --with boto3 --with python-dotenv python "$REPO_ROOT/scripts/ingest_to_bronze.py"; then
+      info "✓ Local ingestion complete."
+    else
+      err "✗ Local ingestion failed!"
+    fi
+  fi
+
+  # --- PHASE 2: S3 MONITORING & PIPELINE TRIGGER ---
   if ! docker ps -q --filter "name=dlh-rustfs" | grep -q . ; then
-    warn "Container dlh-rustfs is not running. Waiting..."
+    warn "Container dlh-rustfs is not running. Skipping S3 check..."
     sleep 10
     continue
   fi
 
-  # Check files inside the docker container
-  # We use md5sum of the file list and sizes to detect changes quickly
-  current_state=$(docker exec dlh-rustfs ls -lR /data/bronze 2>/dev/null | grep ".xlsx" || echo "")
+  # Detect changes in S3 Bronze (Excel)
+  current_excel_state=$(docker exec dlh-rustfs ls -lR /data/bronze/excel_upload 2>/dev/null | grep ".xlsx" || echo "")
+  # Detect changes in S3 Bronze (CSV)
+  current_csv_state=$(docker exec dlh-rustfs ls -lR /data/bronze/csv_upload 2>/dev/null | grep ".csv" || echo "")
   
-  if [[ -n "$current_state" && "$current_state" != "$last_state" ]]; then
-    if [[ -z "$last_state" ]]; then
-      info "Initial state captured. Monitoring for changes..."
+  current_s3_state="${current_excel_state}${current_csv_state}"
+
+  if [[ -n "$current_s3_state" && "$current_s3_state" != "$last_s3_state" ]]; then
+    if [[ -z "$last_s3_state" ]]; then
+      info "Initial S3 state captured. Monitoring for changes..."
     else
       header "Change Detected in RustFS Bronze"
-      info "Triggering Mage Pipeline: $PIPELINE_UUID ..."
       
-      if docker exec dlh-mage mage run /home/src "$PIPELINE_UUID" ; then
-        info "✓ Pipeline run successful."
-      else
-        err "✗ Pipeline run failed!"
+      # Trigger Excel pipeline if Excel files changed
+      if [[ "$current_excel_state" != *"${last_s3_state}"* ]]; then
+        info "Triggering Mage Pipeline: $PIPELINE_EXCEL ..."
+        docker exec dlh-mage mage run /home/src "$PIPELINE_EXCEL" || err "✗ $PIPELINE_EXCEL failed!"
       fi
-      info "Waiting for next change..."
+
+      # Trigger CSV pipeline if CSV files changed
+      if [[ "$current_csv_state" != *"${last_s3_state}"* ]]; then
+        info "Triggering Mage Pipeline: $PIPELINE_CSV ..."
+        docker exec dlh-mage mage run /home/src "$PIPELINE_CSV" || err "✗ $PIPELINE_CSV failed!"
+      fi
     fi
-    last_state="$current_state"
+    last_s3_state="$current_s3_state"
   fi
   
   sleep 10
