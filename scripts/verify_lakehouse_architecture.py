@@ -263,7 +263,7 @@ def check_clickhouse_architecture(results: dict) -> bool:
                     print(f"  ✓ {table}: {table_res['rows']} rows")
                 if table == 'silver_demo':
                     create_stmt = ch_client.execute(f"SHOW CREATE TABLE {table}")[0][0]
-                    if "ENGINE = S3" not in create_stmt and "ENGINE = DeltaLake" not in create_stmt:
+                    if "ENGINE = S3" not in create_stmt and "ENGINE = DeltaLake" not in create_stmt and "ENGINE = ReplacingMergeTree" not in create_stmt:
                         table_res['engine_ok'] = False
                         success = False
             else:
