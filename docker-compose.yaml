@@ -107,7 +107,7 @@ services:
       rustfs:
         condition: service_healthy
     ports:
-      - "8083:8083"
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_KAFKA_CONNECT_PORT:-28083}:8083"
     networks:
       - web_network
     environment:
