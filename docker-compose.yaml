@@ -50,16 +50,16 @@ services:
       - --overprovisioned
       - --node-id 0
       - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
-      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:${DLH_REDPANDA_KAFKA_PORT:-29092}
       - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
-      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:${DLH_REDPANDA_PROXY_PORT:-29082}
       - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
       - --rpc-addr redpanda:33145
       - --advertise-rpc-addr redpanda:33145
     ports:
-      - "19092:19092"
-      - "18081:18081"
-      - "18082:18082"
+      - "${DLH_DATA_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_REDPANDA_KAFKA_PORT:-29092}:19092"
+      - "${DLH_DATA_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_REDPANDA_REGISTRY_PORT:-29081}:18081"
+      - "${DLH_DATA_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_REDPANDA_PROXY_PORT:-29082}:18082"
     volumes:
       - ./data/redpanda:/var/lib/redpanda/data
     networks:
