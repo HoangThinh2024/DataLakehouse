@@ -89,7 +89,7 @@ services:
             enabled: true
             urls: ["http://redpanda:9644"]
     ports:
-      - "8080:8080"
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_REDPANDA_CONSOLE_PORT:-29080}:8080"
     networks:
       - web_network
     depends_on:
