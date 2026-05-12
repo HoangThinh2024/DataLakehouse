@@ -1,0 +1,13 @@
+dbt_lakehouse:
+  target: dev
+  outputs:
+    dev:
+      type: clickhouse
+      host: dlh-clickhouse
+      port: 8123
+      user: doe
+      password: "Do12345678910.."
+      schema: analytics
+      secure: False
+      verify: False
+      connect_timeout: 10

@@ -76,10 +76,13 @@ if __name__ == "__main__":
     # Load .env if running locally
     env_path = REPO_ROOT / ".env"
     if env_path.exists():
-        from dotenv import load_dotenv
-        load_dotenv(env_path)
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(env_path)
+        except ImportError:
+            pass
         # Refresh config from env
-        RUSTFS_ENDPOINT = os.getenv('RUSTFS_ENDPOINT_URL', RUSTFS_ENDPOINT)
+        RUSTFS_ENDPOINT = os.getenv('RUSTFS_EXTERNAL_ENDPOINT', os.getenv('RUSTFS_ENDPOINT_URL', RUSTFS_ENDPOINT))
         RUSTFS_ACCESS_KEY = os.getenv('RUSTFS_ACCESS_KEY', RUSTFS_ACCESS_KEY)
         RUSTFS_SECRET_KEY = os.getenv('RUSTFS_SECRET_KEY', RUSTFS_SECRET_KEY)
         RUSTFS_BUCKET = os.getenv('RUSTFS_BRONZE_BUCKET', RUSTFS_BUCKET)
