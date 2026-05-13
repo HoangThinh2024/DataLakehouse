@@ -80,12 +80,22 @@ def _compute_content_hash(df: pd.DataFrame) -> str:
 def _existing_hash_for_partition(client, bucket: str, prefix: str, date_str: str) -> Optional[str]:
     """Return the content-sha256 stored on the latest object in today's partition, or None."""
     try:
-        resp = client.list_objects_v2(Bucket=bucket, Prefix=f'{prefix}/dt={date_str}/')
-        objects = [o for o in resp.get('Contents', []) if o.get('Key', '').endswith('.parquet')]
-        if not objects:
+        latest_obj = None
+        paginator = client.get_paginator('list_objects_v2')
+        for page in paginator.paginate(Bucket=bucket, Prefix=f'{prefix}/dt={date_str}/'):
+            for obj in page.get('Contents', []):
+                key = obj.get('Key', '')
+                if not key.endswith('.parquet'):
+                    continue
+                if latest_obj is None or (obj.get('LastModified'), key) > (
+                    latest_obj.get('LastModified'),
+                    latest_obj.get('Key', ''),
+                ):
+                    latest_obj = obj
+
+        if not latest_obj:
             return None
-        latest = max(objects, key=lambda o: (o.get('LastModified'), o.get('Key', '')))
-        head = client.head_object(Bucket=bucket, Key=latest['Key'])
+        head = client.head_object(Bucket=bucket, Key=latest_obj['Key'])
         return head.get('Metadata', {}).get('content-sha256')
     except Exception:
         return None

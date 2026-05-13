@@ -82,25 +82,23 @@ def read_latest_layer(bucket: str, prefix: str, date_str: Optional[str] = None) 
     dfs = []
     
     try:
-        response = client.list_objects_v2(Bucket=bucket, Prefix=layer_path)
-        if 'Contents' not in response:
+        paginator = client.get_paginator('list_objects_v2')
+        parquet_count = 0
+
+        for page in paginator.paginate(Bucket=bucket, Prefix=layer_path):
+            for obj in page.get('Contents', []):
+                key = obj.get('Key', '')
+                if not key.endswith('.parquet'):
+                    continue
+                parquet_count += 1
+                obj_response = client.get_object(Bucket=bucket, Key=key)
+                buffer = io.BytesIO(obj_response['Body'].read())
+                df = pd.read_parquet(buffer, engine='pyarrow')
+                dfs.append(df)
+                print(f"[read_latest_layer] Read {len(df)} rows from s3://{bucket}/{key}")
+
+        if parquet_count == 0:
             return pd.DataFrame()
-
-        parquet_objects = [
-            obj for obj in response['Contents']
-            if obj.get('Key', '').endswith('.parquet')
-        ]
-
-        if not parquet_objects:
-            return pd.DataFrame()
-
-        for obj in parquet_objects:
-            key = obj['Key']
-            obj_response = client.get_object(Bucket=bucket, Key=key)
-            buffer = io.BytesIO(obj_response['Body'].read())
-            df = pd.read_parquet(buffer, engine='pyarrow')
-            dfs.append(df)
-            print(f"[read_latest_layer] Read {len(df)} rows from s3://{bucket}/{key}")
     
     except ClientError as exc:
         print(f"[read_latest_layer] Error reading s3://{bucket}/{layer_path}: {exc}")
