@@ -219,3 +219,22 @@ __marimo__/
 mage/metadata.yaml
 mage/mage_data/
 mage/.ssh_tunnel/
+
+# Editor, OS and common temp files (reduce noisy changes)
+.DS_Store
+Thumbs.db
+desktop.ini
+.Trash-*
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+.cache/
+
+# Terraform local state
+.terraform/
+terraform.tfstate*
+
+# Local user runtime files
+.local/

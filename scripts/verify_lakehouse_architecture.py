@@ -252,7 +252,15 @@ def check_clickhouse_architecture(results: dict) -> bool:
                              user=os.getenv('CLICKHOUSE_USER', 'default'), password=os.getenv('CLICKHOUSE_PASSWORD', '') or '')
         
         table_names = [row[0] for row in ch_client.execute("SHOW TABLES IN analytics")]
-        expected = ['silver_demo', 'gold_demo_daily', 'gold_demo_by_region', 'gold_demo_by_category', 'pipeline_runs']
+        expected = [
+            'silver_demo', 
+            'gold_demo_daily', 
+            'gold_demo_by_region', 
+            'gold_demo_by_category', 
+            'pipeline_runs',
+            'project_reports',
+            'fct_projects_summary'
+        ]
         success = True
         for table in expected:
             table_res = {'name': table, 'exists': False, 'rows': 0, 'engine_ok': True}
@@ -260,7 +268,8 @@ def check_clickhouse_architecture(results: dict) -> bool:
                 table_res['exists'] = True
                 table_res['rows'] = ch_client.execute(f"SELECT count() FROM {table}")[0][0]
                 if not results.get('json_mode'):
-                    print(f"  ✓ {table}: {table_res['rows']} rows")
+                    status = "✓" if table_res['rows'] > 0 else "⚠"
+                    print(f"  {status} {table}: {table_res['rows']} rows")
                 if table == 'silver_demo':
                     create_stmt = ch_client.execute(f"SHOW CREATE TABLE {table}")[0][0]
                     if "ENGINE = S3" not in create_stmt and "ENGINE = DeltaLake" not in create_stmt and "ENGINE = ReplacingMergeTree" not in create_stmt:

@@ -1,0 +1,125 @@
+version: 1
+metadata:
+  name: DataLakehouse SSO
+  labels:
+    io.authentik.blueprint/name: DataLakehouse SSO
+entries:
+  # --------------------------------------------------------------------------
+  # 1. Groups & Permissions
+  # --------------------------------------------------------------------------
+  - model: authentik_core.group
+    identifiers:
+      name: DataLakehouse Admins
+    attrs:
+      is_superuser: true
+  - model: authentik_core.group
+    identifiers:
+      name: DataLakehouse Viewers
+
+  # --------------------------------------------------------------------------
+  # 2. OIDC Providers
+  # --------------------------------------------------------------------------
+  
+  # Grafana Provider
+  - model: authentik_providers_oauth2.oauth2provider
+    identifiers:
+      name: Grafana
+    attrs:
+      client_id: dlh-grafana
+      client_secret: change-this-grafana-secret
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      property_mappings:
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-openid]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-email]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-profile]]
+      redirect_uris:
+        - matching_mode: strict
+          url: https://grafana.datahcg.duckdns.org/login/generic_oauth
+        - matching_mode: strict
+          url: http://localhost:23001/login/generic_oauth
+
+  # Superset Provider
+  - model: authentik_providers_oauth2.oauth2provider
+    identifiers:
+      name: Superset
+    attrs:
+      client_id: dlh-superset
+      client_secret: change-this-superset-secret
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      property_mappings:
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-openid]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-email]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-profile]]
+      redirect_uris:
+        - matching_mode: strict
+          url: https://superset.datahcg.duckdns.org/oauth-authorized/authentik
+        - matching_mode: strict
+          url: http://localhost:28088/oauth-authorized/authentik
+
+  # Mage Provider
+  - model: authentik_providers_oauth2.oauth2provider
+    identifiers:
+      name: Mage
+    attrs:
+      client_id: dlh-mage
+      client_secret: change-this-mage-secret
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      property_mappings:
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-openid]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-email]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-profile]]
+      redirect_uris:
+        - matching_mode: strict
+          url: https://mage.datahcg.duckdns.org/oauth/callback
+        - matching_mode: strict
+          url: http://localhost:26789/oauth/callback
+
+  # Redpanda Console Provider
+  - model: authentik_providers_oauth2.oauth2provider
+    identifiers:
+      name: Redpanda Console
+    attrs:
+      client_id: dlh-redpanda-console
+      client_secret: change-this-redpanda-secret
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      property_mappings:
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-openid]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-email]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-profile]]
+      redirect_uris:
+        - matching_mode: strict
+          url: https://redpanda.datahcg.duckdns.org/login/callbacks/authentik
+        - matching_mode: strict
+          url: http://localhost:29080/login/callbacks/authentik
+
+  # --------------------------------------------------------------------------
+  # 3. Applications
+  # --------------------------------------------------------------------------
+  - model: authentik_core.application
+    identifiers:
+      slug: grafana
+    attrs:
+      name: Grafana
+      provider: !Find [authentik_providers_oauth2.oauth2provider, [name, Grafana]]
+      group: DataLakehouse
+  - model: authentik_core.application
+    identifiers:
+      slug: superset
+    attrs:
+      name: Superset
+      provider: !Find [authentik_providers_oauth2.oauth2provider, [name, Superset]]
+      group: DataLakehouse
+  - model: authentik_core.application
+    identifiers:
+      slug: mage
+    attrs:
+      name: Mage
+      provider: !Find [authentik_providers_oauth2.oauth2provider, [name, Mage]]
+      group: DataLakehouse
+  - model: authentik_core.application
+    identifiers:
+      slug: redpanda-console
+    attrs:
+      name: Redpanda Console
+      provider: !Find [authentik_providers_oauth2.oauth2provider, [name, Redpanda Console]]
+      group: DataLakehouse

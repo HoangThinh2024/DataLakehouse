@@ -1,15 +1,23 @@
 input:
-  sql_select:
-    driver: "postgres"
-    dsn: "postgres://doe:Do12345678910..@dlh-postgres:5432/datalakehouse?sslmode=disable"
-    table: "public.demo"
-    columns: ["*"]
+  generate:
+    interval: 30s
+    mapping: root = {}
+  processors:
+    - sql_select:
+        driver: "postgres"
+        dsn: "postgres://doe:Do12345678910..@dlh-postgres:5432/datalakehouse?sslmode=disable"
+        table: "public.demo"
+        columns: ["*"]
+    - mapping: |
+        root = if this.type() == "array" { this } else if this.id != null { [this] } else { deleted() }
+    - unarchive:
+        format: json_array
 
 pipeline:
   processors:
     - mapping: |
         root = this
-        root._pipeline_run_id = "realtime-rpc-optimized"
+        root._pipeline_run_id = "realtime-rpc-stable"
         root._source_table = "PostgreSQL.public.demo"
 
 output:

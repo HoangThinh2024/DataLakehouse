@@ -152,6 +152,14 @@ SUGGESTED_PG_PORT=$(suggest_port "${DLH_POSTGRES_PORT:-25432}")
 DLH_POSTGRES_PORT=$(ask_input "Host port for PostgreSQL" "$SUGGESTED_PG_PORT")
 
 # =============================================================
+header "Redpanda (Event Broker)"
+
+SUGGESTED_RP_KAFKA_PORT=$(suggest_port "${DLH_REDPANDA_KAFKA_PORT:-29092}")
+DLH_REDPANDA_KAFKA_PORT=$(ask_input "Host port for Redpanda (Kafka)" "$SUGGESTED_RP_KAFKA_PORT")
+SUGGESTED_RP_CONSOLE_PORT=$(suggest_port "${DLH_REDPANDA_CONSOLE_PORT:-29080}")
+DLH_REDPANDA_CONSOLE_PORT=$(ask_input "Host port for Redpanda Console" "$SUGGESTED_RP_CONSOLE_PORT")
+
+# =============================================================
 header "4 / 8 – Custom Workspace (optional)"
 echo "  Create an isolated PostgreSQL database / schema / user for your"
 echo "  own ETL and reporting. Leave CUSTOM_DB_NAME empty to skip."
@@ -273,6 +281,12 @@ POSTGRES_USER=${POSTGRES_USER}
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 DLH_POSTGRES_PORT=${DLH_POSTGRES_PORT}
 POSTGRES_HOST=dlh-postgres
+
+# ─ Redpanda (Event Broker / Kafka) ────────────────────────
+DLH_REDPANDA_KAFKA_PORT=${DLH_REDPANDA_KAFKA_PORT}
+DLH_REDPANDA_CONSOLE_PORT=${DLH_REDPANDA_CONSOLE_PORT}
+DLH_REDPANDA_REGISTRY_PORT=29081
+DLH_REDPANDA_PROXY_PORT=29082
 
 # ─ Custom Workspace (for isolated ETL/reporting) ───────────
 CUSTOM_DB_NAME=${CUSTOM_DB_NAME}
@@ -401,6 +415,7 @@ info "Stack is starting. Use 'docker compose logs -f <service>' to follow logs."
 echo
 echo "  Service URLs:"
 echo "    PostgreSQL : postgresql://localhost:${DLH_POSTGRES_PORT}"
+echo "    Redpanda   : http://localhost:${DLH_REDPANDA_CONSOLE_PORT} (Console)"
 echo "    RustFS     : http://localhost:${DLH_RUSTFS_CONSOLE_PORT}"
 echo "    ClickHouse : http://localhost:${DLH_CLICKHOUSE_HTTP_PORT}"
 echo "    Mage       : http://localhost:${DLH_MAGE_PORT}"
