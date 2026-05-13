@@ -103,7 +103,7 @@ def _existing_hash_for_partition(client, bucket: str, prefix: str, date_str: str
             return None
         head = client.head_object(Bucket=bucket, Key=latest_obj['Key'])
         return head.get('Metadata', {}).get('content-sha256')
-    except Exception:
+    except ClientError:
         return None
 
 
