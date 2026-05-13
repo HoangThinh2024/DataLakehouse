@@ -1,0 +1,45 @@
+input:
+  sql_select:
+    driver: "postgres"
+    dsn: "postgres://doe:Do12345678910..@dlh-postgres:5432/datalakehouse?sslmode=disable"
+    table: "public.demo"
+    columns: ["*"]
+
+pipeline:
+  processors:
+    - mapping: |
+        root = this
+        root._pipeline_run_id = "realtime-rpc-optimized"
+        root._source_table = "PostgreSQL.public.demo"
+
+output:
+  broker:
+    pattern: fan_out
+    outputs:
+      - kafka:
+          addresses: [ "redpanda:9092" ]
+          topic: "dbserver1.public.demo"
+      - retry:
+          max_retries: 3
+          output:
+            sql_insert:
+              driver: "clickhouse"
+              dsn: "clickhouse://doe:Do12345678910..@dlh-clickhouse:9000/analytics"
+              table: "analytics.silver_demo"
+              columns: [id, name, category, value, quantity, order_date, region, status, customer_email, notes, created_at, _pipeline_run_id, _source_table]
+              args_mapping: |
+                root = [
+                  this.id.number(), 
+                  this.name, 
+                  this.category, 
+                  this.value.number(), 
+                  this.quantity.number(), 
+                  this.order_date, 
+                  this.region, 
+                  this.status, 
+                  this.customer_email, 
+                  this.notes, 
+                  this.created_at, 
+                  this._pipeline_run_id, 
+                  this._source_table
+                ]

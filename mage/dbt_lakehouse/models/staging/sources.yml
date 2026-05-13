@@ -5,3 +5,4 @@ sources:
     schema: analytics
     tables:
       - name: project_reports
+      - name: silver_demo

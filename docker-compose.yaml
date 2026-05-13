@@ -14,6 +14,11 @@ x-dlh-runtime: &dlh-runtime
   networks:
     - web_network
   restart: always
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
 
 x-dlh-timezone: &dlh-timezone
   TZ: ${TZ:-Asia/Ho_Chi_Minh}
@@ -35,7 +40,7 @@ x-authentik-env: &authentik-env
 
 services:
   # ==========================================================
-  # LAYER 1: INGESTION (Real-time CDC)
+  # LAYER 1: INGESTION (Real-time CDC - Resource Optimized)
   # ==========================================================
 
   redpanda:
@@ -45,7 +50,7 @@ services:
       - redpanda
       - start
       - --smp 1
-      - --memory 1G
+      - --memory 512M
       - --reserve-memory 0M
       - --overprovisioned
       - --node-id 0
@@ -56,6 +61,15 @@ services:
       - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
       - --rpc-addr redpanda:33145
       - --advertise-rpc-addr redpanda:33145
+      # Tiered Storage Configuration (Archival to RustFS)
+      - --set cloud_storage_enabled=true
+      - --set cloud_storage_access_key=${RUSTFS_ACCESS_KEY}
+      - --set cloud_storage_secret_key=${RUSTFS_SECRET_KEY}
+      - --set cloud_storage_region=us-east-1
+      - --set cloud_storage_bucket=bronze
+      - --set cloud_storage_api_endpoint=rustfs
+      - --set cloud_storage_api_endpoint_port=9000
+      - --set cloud_storage_disable_tls=true
     ports:
       - "${DLH_DATA_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_REDPANDA_KAFKA_PORT:-29092}:19092"
       - "${DLH_DATA_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_REDPANDA_REGISTRY_PORT:-29081}:18081"
@@ -64,6 +78,10 @@ services:
       - ./data/redpanda:/var/lib/redpanda/data
     networks:
       - web_network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
     healthcheck:
       test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
       interval: 15s
@@ -92,49 +110,39 @@ services:
       - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_REDPANDA_CONSOLE_PORT:-29080}:8080"
     networks:
       - web_network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     depends_on:
       redpanda:
         condition: service_healthy
 
-  kafka-connect:
-    image: confluentinc/cp-kafka-connect:7.5.0
-    container_name: dlh-kafka-connect
+  # Redpanda Connect: Replacement for heavy Kafka Connect
+  redpanda-connect:
+    image: redpandadata/connect:latest
+    container_name: dlh-ingest-cdc
+    volumes:
+      - ./connect/redpanda-connect.yaml:/connect.yaml
+    command: ["-c", "/connect.yaml"]
     depends_on:
       redpanda:
         condition: service_healthy
       dlh-postgres:
         condition: service_healthy
-      rustfs:
+      clickhouse:
         condition: service_healthy
-    ports:
-      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_KAFKA_CONNECT_PORT:-28083}:8083"
     networks:
       - web_network
-    environment:
-      CONNECT_BOOTSTRAP_SERVERS: 'redpanda:9092'
-      CONNECT_REST_ADVERTISED_HOST_NAME: 'kafka-connect'
-      CONNECT_REST_PORT: '8083'
-      CONNECT_GROUP_ID: 'connect-cluster'
-      CONNECT_CONFIG_STORAGE_TOPIC: 'connect-configs'
-      CONNECT_OFFSET_STORAGE_TOPIC: 'connect-offsets'
-      CONNECT_STATUS_STORAGE_TOPIC: 'connect-status'
-      CONNECT_KEY_CONVERTER: 'io.confluent.connect.avro.AvroConverter'
-      CONNECT_VALUE_CONVERTER: 'io.confluent.connect.avro.AvroConverter'
-      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: 'http://redpanda:8081'
-      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: 'http://redpanda:8081'
-      CONNECT_INTERNAL_KEY_CONVERTER: 'org.apache.kafka.connect.json.JsonConverter'
-      CONNECT_INTERNAL_VALUE_CONVERTER: 'org.apache.kafka.connect.json.JsonConverter'
-      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: '1'
-      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: '1'
-      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: '1'
-      CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
-    command: 
-      - bash 
-      - -c 
-      - |
-        confluent-hub install --no-prompt io.debezium/debezium-connector-postgresql:2.4.0
-        confluent-hub install --no-prompt confluentinc/kafka-connect-s3:10.5.5
-        /etc/confluent/docker/run
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4195/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # ==========================================================
   # LAYER 2: STORAGE
@@ -159,6 +167,10 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 20s
@@ -202,6 +214,10 @@ services:
     <<: *dlh-runtime
     image: rustfs/rustfs:${RUSTFS_IMAGE_VERSION:-latest}
     container_name: dlh-rustfs
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     env_file:
       - .env
     environment:
@@ -234,6 +250,10 @@ services:
   rustfs-init:
     image: minio/mc:${MINIO_MC_IMAGE_VERSION:-latest}
     container_name: dlh-rustfs-init
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     depends_on:
       rustfs:
         condition: service_healthy
@@ -256,6 +276,10 @@ services:
     <<: *dlh-runtime
     image: clickhouse/clickhouse-server:${CLICKHOUSE_IMAGE_VERSION:-latest}
     container_name: dlh-clickhouse
+    deploy:
+      resources:
+        limits:
+          memory: 2G
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
       CLICKHOUSE_DB: ${CLICKHOUSE_DB:-analytics}
@@ -324,6 +348,10 @@ services:
     <<: *dlh-runtime
     image: mageai/mageai:${MAGE_IMAGE_VERSION:-latest}
     container_name: dlh-mage
+    deploy:
+      resources:
+        limits:
+          memory: 2G
     env_file:
       - .env
     environment:

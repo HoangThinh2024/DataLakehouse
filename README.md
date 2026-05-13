@@ -12,17 +12,19 @@ OLAP analytics, and business intelligence dashboards — all on a single host.
 
 | Layer | Component | Role |
 |-------|-----------|------|
-| **Ingest** | PostgreSQL, RustFS Console, CSV/Excel upload | Source data entry points |
-| **Storage (Lake)** | RustFS (S3-compatible) | Parquet files in Bronze / Silver / Gold buckets |
-| **Process (ETL)** | Mage.ai | Orchestrates Extract → Transform → Load pipelines |
-| **Warehouse** | ClickHouse | Columnar OLAP engine — serves analytics queries |
+| **Ingest (Real-time)** | Redpanda Connect (Go) | Ultra-light CDC from PostgreSQL to Redpanda/ClickHouse |
+| **Ingest (Batch)** | RustFS Console, scripts | Source data entry for Excel/CSV |
+| **Broker** | Redpanda (v23.2.19) | Kafka-compatible broker with Tiered Storage (S3) |
+| **Storage (Lake)** | RustFS (S3-compatible) | Medallion Lake (Bronze/Silver/Gold) + CDC Archival |
+| **Process (ETL)** | Mage.ai | Orchestrates batch pipelines and dbt transformations |
+| **Warehouse** | ClickHouse | Columnar OLAP engine for serving and real-time ingestion |
 | **Dashboards** | Apache Superset | Business intelligence dashboards |
 | **Monitoring** | Grafana | Pipeline operational monitoring |
 | **Identity** | Authentik | Centralised SSO and RBAC |
-| **Cache / GUI** | Redis Stack | Shared cache/queue for Superset and Authentik + built-in Redis Insight UI |
-| **SQL IDE** | CloudBeaver | Web-based SQL client for PostgreSQL and ClickHouse |
-| **Remote Desktop** | Apache Guacamole | Browser-based VNC / RDP / SSH remote desktop gateway |
-| **Docker Mgmt** | Dockhand | Lightweight web-based Docker management UI |
+| **Cache / GUI** | Redis Stack | Shared cache/queue + built-in Redis Insight UI |
+| **SQL IDE** | CloudBeaver | Web-based SQL client |
+| **Remote Desktop** | Apache Guacamole | Browser-based VNC / RDP / SSH gateway |
+| **Docker Mgmt** | Dockhand | Web-based Docker management UI |
 | **Proxy** | Nginx Proxy Manager | Optional TLS reverse proxy |
 
 ---
@@ -31,19 +33,18 @@ OLAP analytics, and business intelligence dashboards — all on a single host.
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
+| Redpanda Console | http://localhost:29080 | (No auth by default) |
 | RustFS Console | http://localhost:29101 | `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY` |
 | Mage | http://localhost:26789 | `MAGE_DEFAULT_OWNER_USERNAME` / `MAGE_DEFAULT_OWNER_PASSWORD` |
 | Superset | http://localhost:28088 | `SUPERSET_ADMIN_USER` / `SUPERSET_ADMIN_PASSWORD` |
 | Grafana | http://localhost:23001 | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` |
 | Authentik | http://localhost:29090 | `AUTHENTIK_BOOTSTRAP_EMAIL` / `AUTHENTIK_BOOTSTRAP_PASSWORD` |
 | CloudBeaver | http://localhost:28978 | (configured on first login) |
-| Guacamole | http://localhost:28090/guacamole/ | `guacadmin` / `guacadmin` (change on first login) |
+| Guacamole | http://localhost:28090/guacamole/ | `guacadmin` / `guacadmin` |
 | Dockhand | http://localhost:23000 | (no auth by default) |
-| Nginx Proxy Manager | http://localhost:28081 | (configured on first login) |
 | PostgreSQL | localhost:25432 | `POSTGRES_USER` / `POSTGRES_PASSWORD` |
 | ClickHouse HTTP | http://localhost:28123 | `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` |
-| Redis | localhost:26379 | `REDIS_PASSWORD` |
-| Redis Insight | http://localhost:25540 | (add connection manually; use `REDIS_HOST` / `REDIS_PASSWORD`) |
+| Redpanda Kafka | localhost:29092 | (No auth by default) |
 
 > **Redis Insight** is built into the `redis/redis-stack` image and served from the same
 > container as Redis (port 8001 inside the container, mapped to `DLH_REDIS_GUI_PORT`).

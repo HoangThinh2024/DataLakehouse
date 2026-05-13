@@ -9,42 +9,39 @@ This page describes the system layers, component roles, data flow, and deploymen
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │  LAYER 1 – INGEST                                                   │
-│  PostgreSQL  •  Excel/CSV upload                                    │
+│  PostgreSQL (CDC)  •  Excel/CSV upload                              │
 └──────────────────────┬──────────────────────────────────────────────┘
-                       │ raw records
+                       │ raw records / events
 ┌──────────────────────▼──────────────────────────────────────────────┐
-│  LAYER 2 – STORAGE (Data Lake)                                      │
+│  LAYER 2 – BROKER & STORAGE (Data Lake)                             │
+│  Redpanda (Kafka-compatible broker + Tiered Storage)                │
 │  RustFS S3-compatible object store                                  │
 │    bronze/  →  silver/  →  gold/   (Parquet, partitioned by date)  │
-│  PostgreSQL  (service metadata databases)                           │
 └──────────────────────┬──────────────────────────────────────────────┘
-                       │ cleaned/aggregated Parquet
+                       │ events / parquet
 ┌──────────────────────▼──────────────────────────────────────────────┐
-│  LAYER 3 – PROCESS (ETL)                                            │
-│  Mage.ai orchestration engine                                       │
-│    Pipelines: etl_postgres_to_lakehouse, etl_excel_to_lakehouse,   │
-│               etl_csv_upload_to_reporting                           │
+│  LAYER 3 – PROCESS (ETL & CDC)                                      │
+│  Redpanda Connect (ultra-light CDC engine)                          │
+│  Mage.ai orchestration engine (batch & dbt)                         │
 └──────────────────────┬──────────────────────────────────────────────┘
-                       │ INSERT from RustFS gold
+                       │ unified records
 ┌──────────────────────▼──────────────────────────────────────────────┐
 │  LAYER 4 – SERVING (OLAP Warehouse)                                 │
 │  ClickHouse  (columnar, analytics-optimized)                        │
-│    database: analytics                                              │
 └──────────────────────┬──────────────────────────────────────────────┘
                        │ SQL queries
 ┌──────────────────────▼──────────────────────────────────────────────┐
 │  LAYER 5 – REPORTING                                                │
 │  Apache Superset  (business dashboards)                             │
-│  Grafana          (operational / pipeline monitoring)               │
+│  Grafana          (operational monitoring)                          │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
 Supporting infrastructure (cuts across all layers):
-- **Redis** – shared cache and queue (Superset results, Authentik sessions).
+- **Redis** – shared cache and queue.
 - **Authentik** – centralised identity provider (SSO, RBAC).
-- **CloudBeaver** – web SQL IDE for PostgreSQL and ClickHouse.
-- **Nginx Proxy Manager** – optional reverse proxy with automatic TLS.
-- **Data Healer** – autonomous reconciliation service that ensures Lake-to-Warehouse consistency.
+- **Redpanda Console** – Web UI for managing topics and events.
+- **Data Healer** – autonomous lake-to-warehouse consistency engine.
 
 ---
 
@@ -52,49 +49,54 @@ Supporting infrastructure (cuts across all layers):
 
 | Container | Image | Role | Default Port |
 |-----------|-------|------|--------------|
-| `dlh-postgres` | `postgres:17-alpine` | Central metadata DB for all stack services + operational source data | `25432` |
-| `dlh-postgres-bootstrap` | `postgres:17-alpine` | One-shot init: creates per-service DB roles and schemas | — |
-| `dlh-rustfs` | `rustfs/rustfs` | S3-compatible object storage (Bronze / Silver / Gold lake buckets) | API `29100`, Console `29101` |
-| `dlh-rustfs-init` | `minio/mc` | One-shot init: creates `bronze`, `silver`, `gold` buckets | — |
-| `dlh-clickhouse` | `clickhouse/clickhouse-server:25.4-alpine` | Columnar OLAP engine | HTTP `28123`, TCP `29000` |
-| `dlh-redis` | `redis/redis-stack:7.4.2-v3` | Shared cache/queue + Redis Insight GUI | Redis `26379`, GUI `25540` |
-| `dlh-mage` | `mageai/mageai:0.9.76` | ETL orchestration — runs and schedules pipelines | `26789` |
-| `dlh-superset` | `apache/superset:4.1.2` | Business intelligence dashboard UI | `28088` |
-| `dlh-grafana` | `grafana/grafana:12.0.0` | Operational monitoring | `23001` |
-| `dlh-authentik-server` | `goauthentik/server:2026.2.1` | Identity provider — web + API server | `29090` |
-| `dlh-authentik-worker` | `goauthentik/server:2026.2.1` | Background worker for Authentik tasks | — |
-| `dlh-cloudbeaver` | `dbeaver/cloudbeaver` | Web SQL IDE | `28978` |
-| `dlh-dockhand` | `fnsys/dockhand:latest` | Docker management UI | `23000` |
-| `dlh-nginx-proxy-manager` | `jc21/nginx-proxy-manager` | Reverse proxy + TLS termination | `80`, `443`, admin `28081` |
-
-All containers share the external Docker network `web_network`.
+| `dlh-redpanda` | `redpandadata/redpanda:v23.2.19` | Kafka broker with Tiered Storage (Archival to S3) | `29092` |
+| `dlh-ingest-cdc` | `redpandadata/connect` | Ultra-light CDC engine (Postgres → ClickHouse/Redpanda) | `4195` |
+| `dlh-redpanda-console` | `redpandadata/console` | Web UI for Redpanda topic management | `29080` |
+| `dlh-postgres` | `postgres:17-alpine` | Central metadata DB + Source DB (Logical Replication enabled) | `25432` |
+| `dlh-rustfs` | `rustfs/rustfs` | S3-compatible object storage (Lake layers) | API `29100` |
+| `dlh-clickhouse` | `clickhouse/clickhouse-server` | Columnar OLAP engine for real-time & batch | TCP `29000` |
+| `dlh-mage` | `mageai/mageai` | ETL orchestration — batch pipelines + dbt | `26789` |
 
 ---
 
 ## Data Flow
 
-### Primary pipeline: PostgreSQL → Lakehouse
+### 1. Real-time Pipeline (CDC): PostgreSQL → ClickHouse
 
 ```
-PostgreSQL source table
+PostgreSQL public.demo (Source)
     │
-    ▼  [extract_postgres.py]
-    DataFrame + metadata columns (_pipeline_run_id, _extracted_at, _source_table)
+    ▼ [Redpanda Connect - Go engine]
+    ├──▶ [Speed Layer] Direct INSERT into ClickHouse analytics.silver_demo
+    └──▶ [Storage Layer] Push to Redpanda Topic: dbserver1.public.demo
+            │
+            ▼ [Redpanda Tiered Storage]
+            Automatically archived to s3://bronze/topics/dbserver1.public.demo/
+```
+
+### 2. Batch Pipeline: Excel/CSV → Lakehouse
+
+```
+Excel file uploaded locally or to RustFS
     │
-    ├──▶ [bronze_to_rustfs.py]  →  s3://bronze/{table}/dt=YYYY-MM-DD/{run_id}.parquet
+    ▼ [scripts/realtime_watcher.sh]
+    Triggers Ingestion to RustFS Bronze
     │
-    ▼  [transform_silver.py]
-    Cleaned DataFrame (dedup, type cast, text normalisation, email validation)
+    ▼ [Mage.ai Pipeline]
+    Bronze (Raw) → Silver (Cleaned) → Gold (Aggregated) → ClickHouse
+```
+
+### 3. Unified Serving: dbt Transformations
+
+```
+ClickHouse analytics.silver_demo (CDC)
+ClickHouse analytics.project_reports (Excel)
     │
-    ├──▶ [silver_to_rustfs.py]  →  s3://silver/{table}/dt=YYYY-MM-DD/{run_id}.parquet
+    ▼ [dbt Mart: fct_projects_summary]
+    Standardises and Unions both sources into a single Reporting Table
     │
-    ▼  [transform_gold.py]
-    Aggregated dict: {gold_daily, gold_weekly, gold_monthly, gold_yearly, gold_region, gold_category}
-    │
-    ├──▶ [gold_to_rustfs.py]    →  s3://gold/{table}_{granularity}/dt=YYYY-MM-DD/{run_id}.parquet
-    │
-    ▼  [load_to_clickhouse.py]
-    Reads Parquet from RustFS Silver + Gold  →  INSERT INTO ClickHouse analytics.*
+    ▼ [Superset Dashboard]
+    Real-time unified project visibility
 ```
 
 ### Excel upload → Lakehouse
