@@ -240,6 +240,8 @@ health() {
   echo "=== Service Health Endpoints ==="
   local services=(
     "dlh-postgres:5432:PostgreSQL"
+    "dlh-redpanda:29092:Redpanda (Kafka)"
+    "dlh-ingest-cdc:4195:Redpanda Connect (CDC)"
     "dlh-rustfs:${DLH_RUSTFS_API_PORT:-29100}:RustFS API"
     "dlh-clickhouse:${DLH_CLICKHOUSE_HTTP_PORT:-28123}:ClickHouse"
     "dlh-mage:${DLH_MAGE_PORT:-26789}:Mage"
@@ -254,9 +256,9 @@ health() {
     local label="${service_info##*:}"
     
     if docker exec "$name" true 2>/dev/null; then
-      printf "  ✓ %-20s (http://localhost:%-5s) [RUNNING]\n" "$label" "$port"
+      printf "  ✓ %-25s (port %-5s) [RUNNING]\n" "$label" "$port"
     else
-      printf "  ✗ %-20s (http://localhost:%-5s) [STOPPED/ERROR]\n" "$label" "$port"
+      printf "  ✗ %-25s (port %-5s) [STOPPED/ERROR]\n" "$label" "$port"
     fi
   done
   echo
@@ -279,6 +281,8 @@ diagnose() {
   info "1. Checking host-side port conflicts..."
   local ports=(
     "DLH_POSTGRES_PORT:${DLH_POSTGRES_PORT:-25432}"
+    "DLH_REDPANDA_KAFKA_PORT:${DLH_REDPANDA_KAFKA_PORT:-29092}"
+    "DLH_REDPANDA_CONSOLE_PORT:${DLH_REDPANDA_CONSOLE_PORT:-29080}"
     "DLH_RUSTFS_API_PORT:${DLH_RUSTFS_API_PORT:-29100}"
     "DLH_RUSTFS_CONSOLE_PORT:${DLH_RUSTFS_CONSOLE_PORT:-29101}"
     "DLH_CLICKHOUSE_HTTP_PORT:${DLH_CLICKHOUSE_HTTP_PORT:-28123}"

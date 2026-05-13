@@ -8,6 +8,39 @@ SQLALCHEMY_DATABASE_URI = (
 
 SECRET_KEY = os.getenv('SUPERSET_SECRET_KEY', 'replace-this-secret')
 
+# --- Authentication Configuration (OIDC/SSO) ---
+try:
+    from flask_appbuilder.security.manager import AUTH_OAUTH
+    HAS_OIDC = True
+except ImportError:
+    AUTH_OAUTH = 1
+    HAS_OIDC = False
+
+AUTH_TYPE = AUTH_OAUTH if (os.getenv("SUPERSET_OIDC_CLIENT_ID") and HAS_OIDC) else 1 
+AUTH_USER_REGISTRATION = True
+AUTH_USER_REGISTRATION_ROLE = "Public" # Default role for new users
+
+OIDC_CLIENT_ID = os.getenv("SUPERSET_OIDC_CLIENT_ID")
+OIDC_CLIENT_SECRET = os.getenv("SUPERSET_OIDC_CLIENT_SECRET")
+OIDC_DISCOVERY_URL = os.getenv("SUPERSET_OIDC_DISCOVERY_URL")
+
+if AUTH_TYPE == AUTH_OAUTH:
+    OAUTH_PROVIDERS = [
+        {
+            "name": "authentik",
+            "token_key": "access_token",
+            "icon": "fa-address-card",
+            "remote_app": {
+                "client_id": OIDC_CLIENT_ID,
+                "client_secret": OIDC_CLIENT_SECRET,
+                "server_metadata_url": OIDC_DISCOVERY_URL,
+                "client_kwargs": {
+                    "scope": "openid email profile"
+                },
+            },
+        }
+    ]
+
 # Allow ClickHouse (via clickhouse-connect) and PostgreSQL connections from the UI
 PREVENT_UNSAFE_DB_CONNECTIONS = False
 
@@ -18,7 +51,6 @@ FEATURE_FLAGS = {
 }
 
 # Honor X-Forwarded-* headers when running behind reverse proxies
-# (e.g., Nginx Proxy Manager / openresty) so login redirects keep HTTPS.
 ENABLE_PROXY_FIX = True
 PROXY_FIX_CONFIG = {
     "x_for": 1,
@@ -27,10 +59,17 @@ PROXY_FIX_CONFIG = {
     "x_port": 1,
     "x_prefix": 1,
 }
-PREFERRED_URL_SCHEME = os.getenv("SUPERSET_PREFERRED_URL_SCHEME", "http")
+PREFERRED_URL_SCHEME = os.getenv("SUPERSET_PREFERRED_URL_SCHEME", "https")
 
-# Pre-register ClickHouse as an allowed database engine
-# Requires: pip install clickhouse-connect (installed in docker-compose command)
+# Session and CSRF
+SESSION_COOKIE_SAMESITE = "None"
+SESSION_COOKIE_SECURE = True
+WTF_CSRF_ENABLED = False # Disable CSRF temporarily to troubleshoot login if needed, though not recommended for prod
+TALISMAN_CONFIG = {
+    "content_security_policy": None,
+    "force_https": False,
+}
+
 ADDITIONAL_DATABASE_CONFIG_MAP = {}
 
 REDIS_HOST = os.getenv("REDIS_HOST", "dlh-redis")
@@ -47,7 +86,7 @@ else:
 REDIS_CACHE_URI = f"redis://{REDIS_AUTH}{REDIS_HOST}:{REDIS_PORT}/{SUPERSET_REDIS_CACHE_DB}"
 REDIS_RESULTS_URI = f"redis://{REDIS_AUTH}{REDIS_HOST}:{REDIS_PORT}/{SUPERSET_REDIS_RESULTS_DB}"
 
-# Shared caching layer for charts/dashboard metadata and SQL Lab async results.
+# Shared caching layer
 CACHE_CONFIG = {
     "CACHE_TYPE": "RedisCache",
     "CACHE_DEFAULT_TIMEOUT": 300,
@@ -68,4 +107,3 @@ RESULTS_BACKEND = {
     "CACHE_KEY_PREFIX": "superset_results_",
     "CACHE_REDIS_URL": REDIS_RESULTS_URI,
 }
-
