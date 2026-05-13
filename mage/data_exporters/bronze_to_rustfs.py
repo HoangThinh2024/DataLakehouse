@@ -90,8 +90,10 @@ def _existing_hash_for_partition(client, bucket: str, prefix: str, date_str: str
                     continue
                 last_modified = obj.get('LastModified')
                 if last_modified is None:
-                    print(f"[bronze_to_rustfs] Warning: Missing LastModified for s3://{bucket}/{key}")
-                    continue
+                    raise RuntimeError(
+                        f"[bronze_to_rustfs] Unexpected S3 response: missing LastModified "
+                        f"for s3://{bucket}/{key}"
+                    )
                 current_sort_key = (last_modified, key)
                 if latest_sort_key is None or current_sort_key > latest_sort_key:
                     latest_obj = obj
