@@ -8,6 +8,9 @@ SQLALCHEMY_DATABASE_URI = (
 
 SECRET_KEY = os.getenv('SUPERSET_SECRET_KEY', 'replace-this-secret')
 
+SUPERSET_AUTH_TYPE = os.getenv("SUPERSET_AUTH_TYPE", "db").strip().lower()
+SUPERSET_PREFERRED_URL_SCHEME = os.getenv("SUPERSET_PREFERRED_URL_SCHEME", "http").strip().lower()
+
 # --- Authentication Configuration (OIDC/SSO) ---
 try:
     from flask_appbuilder.security.manager import AUTH_OAUTH
@@ -16,13 +19,21 @@ except ImportError:
     AUTH_OAUTH = 1
     HAS_OIDC = False
 
-AUTH_TYPE = AUTH_OAUTH if (os.getenv("SUPERSET_OIDC_CLIENT_ID") and HAS_OIDC) else 1 
-AUTH_USER_REGISTRATION = True
-AUTH_USER_REGISTRATION_ROLE = "Public" # Default role for new users
-
 OIDC_CLIENT_ID = os.getenv("SUPERSET_OIDC_CLIENT_ID")
 OIDC_CLIENT_SECRET = os.getenv("SUPERSET_OIDC_CLIENT_SECRET")
 OIDC_DISCOVERY_URL = os.getenv("SUPERSET_OIDC_DISCOVERY_URL")
+
+OIDC_ENABLED = (
+    SUPERSET_AUTH_TYPE == "oauth"
+    and HAS_OIDC
+    and bool(OIDC_CLIENT_ID)
+    and bool(OIDC_CLIENT_SECRET)
+    and bool(OIDC_DISCOVERY_URL)
+)
+
+AUTH_TYPE = AUTH_OAUTH if OIDC_ENABLED else 1
+AUTH_USER_REGISTRATION = OIDC_ENABLED
+AUTH_USER_REGISTRATION_ROLE = "Public"  # Default role for new users
 
 if AUTH_TYPE == AUTH_OAUTH:
     OAUTH_PROVIDERS = [
@@ -59,15 +70,15 @@ PROXY_FIX_CONFIG = {
     "x_port": 1,
     "x_prefix": 1,
 }
-PREFERRED_URL_SCHEME = os.getenv("SUPERSET_PREFERRED_URL_SCHEME", "https")
+PREFERRED_URL_SCHEME = SUPERSET_PREFERRED_URL_SCHEME
 
 # Session and CSRF
-SESSION_COOKIE_SAMESITE = "None"
-SESSION_COOKIE_SECURE = True
-WTF_CSRF_ENABLED = False # Disable CSRF temporarily to troubleshoot login if needed, though not recommended for prod
+SESSION_COOKIE_SECURE = PREFERRED_URL_SCHEME == "https"
+SESSION_COOKIE_SAMESITE = "None" if SESSION_COOKIE_SECURE else "Lax"
+WTF_CSRF_ENABLED = False  # Disable CSRF temporarily to troubleshoot login if needed, though not recommended for prod
 TALISMAN_CONFIG = {
     "content_security_policy": None,
-    "force_https": False,
+    "force_https": SESSION_COOKIE_SECURE,
 }
 
 ADDITIONAL_DATABASE_CONFIG_MAP = {}
