@@ -23,6 +23,7 @@ Key settings applied:
 | `CACHE_CONFIG` | Redis-backed cache using DB `SUPERSET_REDIS_CACHE_DB` (default: 2) |
 | `RESULTS_BACKEND` | Redis-backed SQL Lab results backend using DB `SUPERSET_REDIS_RESULTS_DB` (default: 3) |
 | `SECRET_KEY` | Flask session secret (`SUPERSET_SECRET_KEY` from `.env`) |
+| `SUPERSET_AUTH_TYPE` | `db` for local login or `oauth` for Authentik SSO |
 | `PREFERRED_URL_SCHEME` | `http` or `https` depending on `SUPERSET_PREFERRED_URL_SCHEME` |
 | `SQLALCHEMY_DATABASE_URI` | PostgreSQL metadata DB (`dlh_superset`) |
 
@@ -40,6 +41,24 @@ Default credentials (change before production use):
 ```
 Username: admin   (SUPERSET_ADMIN_USER in .env)
 Password: admin   (SUPERSET_ADMIN_PASSWORD in .env)
+```
+
+If you want Authentik SSO instead of local database login, set:
+
+```ini
+SUPERSET_AUTH_TYPE=oauth
+SUPERSET_OIDC_CLIENT_ID=dlh-superset
+SUPERSET_OIDC_CLIENT_SECRET=...
+SUPERSET_OIDC_DISCOVERY_URL=https://<authentik-host>/application/o/superset/.well-known/openid-configuration
+```
+
+For local development, keep `SUPERSET_AUTH_TYPE=db` so the `admin/admin` account works.
+
+If login still fails after changing the password in `.env`, restart Superset so the
+startup command can re-apply the password to the metadata database:
+
+```bash
+docker compose up -d --force-recreate superset
 ```
 
 ---
