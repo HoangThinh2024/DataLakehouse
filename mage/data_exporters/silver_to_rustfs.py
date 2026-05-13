@@ -81,17 +81,17 @@ def _existing_hash_for_partition(client, bucket: str, prefix: str, date_str: str
     """Return the content-sha256 stored on the latest object in today's partition, or None."""
     try:
         latest_obj = None
+        latest_sort_key = None
         paginator = client.get_paginator('list_objects_v2')
         for page in paginator.paginate(Bucket=bucket, Prefix=f'{prefix}/dt={date_str}/'):
             for obj in page.get('Contents', []):
                 key = obj.get('Key', '')
                 if not key.endswith('.parquet'):
                     continue
-                if latest_obj is None or (obj.get('LastModified'), key) > (
-                    latest_obj.get('LastModified'),
-                    latest_obj.get('Key', ''),
-                ):
+                current_sort_key = (obj.get('LastModified'), key)
+                if latest_sort_key is None or current_sort_key > latest_sort_key:
                     latest_obj = obj
+                    latest_sort_key = current_sort_key
 
         if not latest_obj:
             return None
