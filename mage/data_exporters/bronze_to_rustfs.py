@@ -88,9 +88,7 @@ def _existing_hash_for_partition(client, bucket: str, prefix: str, date_str: str
                 key = obj.get('Key', '')
                 if not key.endswith('.parquet'):
                     continue
-                last_modified = obj.get('LastModified')
-                if last_modified is None:
-                    continue
+                last_modified = obj['LastModified']
                 current_sort_key = (last_modified, key)
                 if latest_sort_key is None or current_sort_key > latest_sort_key:
                     latest_obj = obj
