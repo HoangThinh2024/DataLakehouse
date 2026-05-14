@@ -102,7 +102,7 @@ def load_data(*args, **kwargs):
 
     objects_all = [
         obj for obj in response.get('Contents', [])
-        if obj.get('Key', '').lower().endswith('.csv')
+        if obj.get('Key', '').lower().endswith('.csv') and obj.get('Size', 0) > 0
     ]
 
     if allow_anywhere:
