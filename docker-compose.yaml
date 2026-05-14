@@ -46,8 +46,9 @@ services:
   # ==========================================================
 
   redpanda:
-    image: docker.redpanda.com/redpandadata/redpanda:v23.2.19
+    image: docker.redpanda.com/redpandadata/redpanda:v26.1.7
     container_name: dlh-redpanda
+    restart: always
     command:
       - redpanda
       - start
@@ -92,8 +93,9 @@ services:
       start_period: 20s
 
   redpanda-console:
-    image: docker.redpanda.com/redpandadata/console:v2.3.8
+    image: docker.redpanda.com/redpandadata/console:latest
     container_name: dlh-redpanda-console
+    restart: always
     entrypoint: /bin/sh
     command: -c "echo \"$$CONSOLE_CONFIG_FILE\" > /tmp/config.yml; /app/console"
     environment:
@@ -133,6 +135,7 @@ services:
   redpanda-connect:
     image: redpandadata/connect:latest
     container_name: dlh-ingest-cdc
+    restart: always
     volumes:
       - ./connect/redpanda-connect.yaml:/connect.yaml
     command: ["-c", "/connect.yaml"]
