@@ -26,17 +26,19 @@ x-dlh-timezone: &dlh-timezone
 x-authentik-env: &authentik-env
   TZ: ${TZ:-Asia/Ho_Chi_Minh}
   AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-change-this-authentik-secret-key}
-  AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+  AUTHENTIK_ERROR_REPORTING_ENABLED: "false"
   AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
-  AUTHENTIK_REDIS__HOST: ${REDIS_HOST:-dlh-redis}
-  AUTHENTIK_REDIS__PORT: 6379
-  AUTHENTIK_REDIS__PASSWORD: ${REDIS_PASSWORD:-change-this-redis-password}
-  AUTHENTIK_REDIS__DB: ${REDIS_AUTHENTIK_DB:-1}
+  AUTHENTIK__REDIS_HOST: ${REDIS_HOST:-dlh-redis}
+  AUTHENTIK__REDIS_PORT: 6379
+  AUTHENTIK__REDIS_PASSWORD: ${REDIS_PASSWORD:-change-this-redis-password}
+  AUTHENTIK__REDIS_DB: ${REDIS_AUTHENTIK_DB:-1}
   AUTHENTIK_POSTGRESQL__HOST: ${POSTGRES_HOST:-dlh-postgres}
   AUTHENTIK_POSTGRESQL__PORT: 5432
   AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_DB_NAME:-${POSTGRES_DB:-postgres}}
   AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_DB_USER:-${POSTGRES_USER:-postgres}}
   AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_DB_PASSWORD:-${POSTGRES_PASSWORD:-postgres}}
+  AUTHENTIK_SESSION_ENGINE: django.contrib.sessions.backends.cache
+  AUTHENTIK_CACHE__BACKEND: redis
 
 services:
   # ==========================================================
@@ -305,24 +307,23 @@ services:
 
   # Redis – shared cache/queue backend for platform services
   # redis/redis-stack bundles Redis server + Redis Stack modules + Redis Insight GUI (port 8001)
+# Redis 8 Server - Core database
   dlh-redis:
     <<: *dlh-runtime
-    image: redis/redis-stack:${REDIS_STACK_IMAGE_VERSION:-7.4.2-v3}
+    image: redis:8.6.3 # Hoặc redis:8-alpine khi bản chính thức ổn định
     container_name: dlh-redis
+    command: >
+      redis-server 
+      --requirepass ${REDIS_PASSWORD:-change-this-redis-password}
+      --maxmemory ${REDIS_MAXMEMORY:-512mb}
+      --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
+      --appendonly ${REDIS_APPENDONLY:-yes}
     env_file:
       - .env
     environment:
-      TZ: ${TZ:-Asia/Ho_Chi_Minh}
-      # Sử dụng REDIS_ARGS để cấu hình Redis Server bên trong Stack
-      REDIS_ARGS: >
-        --requirepass ${REDIS_PASSWORD:-change-this-redis-password}
-        --maxmemory ${REDIS_MAXMEMORY:-512mb}
-        --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
-        --appendonly ${REDIS_APPENDONLY:-yes}
-          --protected-mode ${REDIS_PROTECTED_MODE:-no}
+      <<: *dlh-timezone
     ports:
       - "${REDIS_BIND_IP:-127.0.0.1}:${DLH_REDIS_PORT:-26379}:6379"
-      - "${REDIS_BIND_IP:-127.0.0.1}:${DLH_REDIS_GUI_PORT:-25540}:8001"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -331,6 +332,21 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  # Redis Insight - GUI Management (Tách riêng)
+  dlh-redis-insight:
+    <<: *dlh-runtime
+    image: redis/redisinsight:latest
+    container_name: dlh-redis-insight
+    environment:
+      <<: *dlh-timezone
+    ports:
+      - "${REDIS_BIND_IP:-127.0.0.1}:${DLH_REDIS_GUI_PORT:-25540}:5540"
+    volumes:
+      - redis_insight_data:/data
+    depends_on:
+      dlh-redis:
+        condition: service_healthy
 
   # ==========================================================
   # LAYER 3: PROCESSING
@@ -798,6 +814,8 @@ volumes:
   prometheus_data:
     driver: local
   guacamole_init:
+    driver: local
+  redis_insight_data:
     driver: local
 
 networks:
