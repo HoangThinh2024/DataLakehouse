@@ -103,9 +103,9 @@ services:
       CONSOLE_CONFIG_FILE: |
         kafka:
           brokers: ["redpanda:9092"]
-          schemaRegistry:
-            enabled: true
-            urls: ["http://redpanda:8081"]
+        schemaRegistry:
+          enabled: true
+          urls: ["http://redpanda:8081"]
         redpanda:
           adminApi:
             enabled: true
@@ -664,7 +664,7 @@ services:
     volumes:
       - authentik_media:/media
       - authentik_templates:/templates
-      - ./authentik/blueprints:/blueprints:ro
+      - ./authentik/blueprints:/blueprints/datalakehouse:ro
     depends_on:
       postgres-bootstrap:
         condition: service_completed_successfully
@@ -683,7 +683,7 @@ services:
     volumes:
       - authentik_media:/media
       - authentik_templates:/templates
-      - ./authentik/blueprints:/blueprints:ro
+      - ./authentik/blueprints:/blueprints/datalakehouse:ro
     healthcheck:
       test: ["CMD", "ak", "healthcheck"]
       interval: 30s
@@ -705,9 +705,9 @@ services:
     environment:
       <<: *authentik-env
       HOME: /tmp
-    command: ["apply_blueprint", "/blueprints/datalakehouse-sso.yaml"]
+    command: ["apply_blueprint", "/blueprints/datalakehouse/datalakehouse-sso.yaml"]
     volumes:
-      - ./authentik/blueprints:/blueprints:ro
+      - ./authentik/blueprints:/blueprints/datalakehouse:ro
     depends_on:
       authentik-server:
         condition: service_healthy
