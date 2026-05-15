@@ -32,14 +32,14 @@ This page describes the system layers, component roles, data flow, and deploymen
                        │ SQL queries
 ┌──────────────────────▼──────────────────────────────────────────────┐
 │  LAYER 5 – REPORTING                                                │
-│  Apache Superset  (business dashboards)                             │
-│  Grafana          (operational monitoring)                          │
+│  Apache Superset  (Premium Business Dashboards)                     │
+│  Grafana          (Operational Monitoring)                           │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
 Supporting infrastructure (cuts across all layers):
 - **Redis 8** – shared cache and queue.
-- **Redis Insight** – Web UI for Redis management.
+- **Redis Insight** – Web UI for Redis management (Port 25540).
 - **Authentik** – centralised identity provider (SSO, RBAC).
 - **Redpanda Console** – Web UI for managing topics and events.
 - **Data Healer** – autonomous lake-to-warehouse consistency engine.
@@ -156,6 +156,13 @@ CSV file uploaded to RustFS bronze/csv_upload/
 | `gold_demo_by_region` | Gold | Metrics grouped by geographic region |
 | `gold_demo_by_category` | Gold | Metrics grouped by product category |
 | `pipeline_runs` | Monitoring | Run ID, status, row counts, error messages per execution |
+
+### Dashboard Metric Convention
+
+To avoid naming collisions between data columns and aggregated metrics in ClickHouse/Superset, the automated dashboard script uses an `m_` prefix for all calculated metrics:
+- `m_total_revenue`: `SUM(total_revenue)`
+- `m_order_count`: `SUM(order_count)`
+- `m_avg_order_value`: `SUM(total_revenue) / SUM(order_count)` (Weighted Average)
 
 ### Excel pipeline tables
 

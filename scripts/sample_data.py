@@ -1,0 +1,52 @@
+"""
+Sample data for the DataLakehouse demo.
+"""
+
+from typing import Any
+
+SCHEMA_NAME = "public"
+TABLE_NAME = "sales_orders"
+
+SCHEMA_DEFINITION = """
+    id           SERIAL PRIMARY KEY,
+    product_name TEXT        NOT NULL,
+    category     TEXT,
+    value        NUMERIC(14,2),
+    quantity     INTEGER,
+    order_date   DATE,
+    region       TEXT,
+    status       TEXT,
+    customer_name TEXT,
+    customer_email TEXT,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+"""
+
+SAMPLE_ROWS: list[tuple[Any, ...]] = [
+    ("Laptop Pro 15",   "Electronics",  25000000, 1, "2024-01-03", "Hanoi",        "completed", "Nguyen Van A", "a@example.com"),
+    ("Smart Watch X",   "Electronics",   4500000, 2, "2024-01-05", "Ho Chi Minh",  "completed", "Tran Thi B", "b@example.com"),
+    ("Running Shoes",   "Sports",        1200000, 3, "2024-01-07", "Da Nang",       "completed", "Le Van C", "c@example.com"),
+    ("Cookbook Deluxe", "Books",          350000, 5, "2024-01-09", "Can Tho",       "completed", "Pham Thi D", "d@example.com"),
+    ("Yoga Mat Premium","Sports",         750000, 2, "2024-01-11", "Hanoi",         "processing","Hoang Van E", "e@example.com"),
+    ("Bluetooth Speaker","Electronics",  2100000, 1, "2024-01-13", "Hai Phong",    "completed", "Vu Thi F", "f@example.com"),
+    ("Linen Shirt",     "Fashion",        480000, 4, "2024-01-15", "Ho Chi Minh",  "completed", "Dang Van G", "g@example.com"),
+    ("Garden Hose 20m", "Home & Garden",  390000, 2, "2024-01-17", "Hanoi",        "completed", "Bui Thi H", "h@example.com"),
+    ("Novel Bestseller","Books",          120000, 8, "2024-01-19", "Da Nang",      "completed", "Nguyen Van I", "i@example.com"),
+    ("4K Monitor",      "Electronics",  12500000, 1, "2024-01-21", "Ho Chi Minh",  "pending",   "Tran Van J", "j@example.com"),
+    ("Trekking Poles",  "Sports",         920000, 2, "2024-02-01", "Hanoi",        "completed", "Le Thi K", "k@example.com"),
+    ("Ceramic Pots Set","Home & Garden",  670000, 3, "2024-02-03", "Can Tho",      "completed", "Pham Van L", "l@example.com"),
+    ("Denim Jacket",    "Fashion",        990000, 2, "2024-02-05", "Ho Chi Minh",  "returned",  "Hoang Thi M", "m@example.com"),
+    ("USB-C Hub",       "Electronics",   1350000, 2, "2024-02-07", "Hanoi",        "completed", "Vu Van N", "n@example.com"),
+    ("Planter Box",     "Home & Garden",  290000, 5, "2024-02-09", "Da Nang",      "completed", "Dang Thi O", "o@example.com"),
+    ("Bicycle Helmet",  "Sports",         650000, 1, "2024-02-11", "Hai Phong",    "completed", "Bui Van P", "p@example.com"),
+    ("Python Cookbook", "Books",          280000, 4, "2024-02-13", "Ho Chi Minh",  "completed", "Nguyen Thi Q", "q@example.com"),
+    ("Gaming Chair",    "Electronics",   5800000, 1, "2024-02-15", "Hanoi",        "completed", "Tran Van R", "r@example.com"),
+    ("Summer Dress",    "Fashion",        420000, 3, "2024-02-17", "Can Tho",      "completed", "Le Van S", "s@example.com"),
+    ("Electric Kettle", "Home & Garden",  480000, 2, "2024-02-19", "Ho Chi Minh",  "completed", "Pham Thi T", "t@example.com"),
+]
+
+INSERT_QUERY = """
+    INSERT INTO "{schema}"."{table}"
+      (product_name, category, value, quantity, order_date, region, status, customer_name, customer_email)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+    ON CONFLICT DO NOTHING
+"""

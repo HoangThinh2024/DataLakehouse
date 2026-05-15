@@ -277,59 +277,19 @@ def _list_tables(conn, schema: str) -> list[str]:
 
 def create_sample_table(conn, schema: str, table_name: str) -> int:
     """Create a sample sales table and insert demo rows. Returns row count inserted."""
+    from scripts.sample_data import INSERT_QUERY, SAMPLE_ROWS, SCHEMA_DEFINITION
+
     with conn.cursor() as cur:
         cur.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
         cur.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS "{schema}"."{table_name}" (
-                id           SERIAL PRIMARY KEY,
-                product_name TEXT        NOT NULL,
-                category     TEXT,
-                unit_price   NUMERIC(14,2),
-                quantity     INTEGER,
-                order_date   DATE,
-                region       TEXT,
-                status       TEXT,
-                customer     TEXT,
-                created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-            """
+            f'CREATE TABLE IF NOT EXISTS "{schema}"."{table_name}" ({SCHEMA_DEFINITION})'
         )
-        rows: list[tuple[Any, ...]] = [
-            ("Laptop Pro 15",   "Electronics",  25000000, 1, "2024-01-03", "Hanoi",        "completed", "Nguyen Van A"),
-            ("Smart Watch X",   "Electronics",   4500000, 2, "2024-01-05", "Ho Chi Minh",  "completed", "Tran Thi B"),
-            ("Running Shoes",   "Sports",        1200000, 3, "2024-01-07", "Da Nang",       "completed", "Le Van C"),
-            ("Cookbook Deluxe", "Books",          350000, 5, "2024-01-09", "Can Tho",       "completed", "Pham Thi D"),
-            ("Yoga Mat Premium","Sports",         750000, 2, "2024-01-11", "Hanoi",         "processing","Hoang Van E"),
-            ("Bluetooth Speaker","Electronics",  2100000, 1, "2024-01-13", "Hai Phong",    "completed", "Vu Thi F"),
-            ("Linen Shirt",     "Fashion",        480000, 4, "2024-01-15", "Ho Chi Minh",  "completed", "Dang Van G"),
-            ("Garden Hose 20m", "Home & Garden",  390000, 2, "2024-01-17", "Hanoi",        "completed", "Bui Thi H"),
-            ("Novel Bestseller","Books",          120000, 8, "2024-01-19", "Da Nang",      "completed", "Nguyen Van I"),
-            ("4K Monitor",      "Electronics",  12500000, 1, "2024-01-21", "Ho Chi Minh",  "pending",   "Tran Van J"),
-            ("Trekking Poles",  "Sports",         920000, 2, "2024-02-01", "Hanoi",        "completed", "Le Thi K"),
-            ("Ceramic Pots Set","Home & Garden",  670000, 3, "2024-02-03", "Can Tho",      "completed", "Pham Van L"),
-            ("Denim Jacket",    "Fashion",        990000, 2, "2024-02-05", "Ho Chi Minh",  "returned",  "Hoang Thi M"),
-            ("USB-C Hub",       "Electronics",   1350000, 2, "2024-02-07", "Hanoi",        "completed", "Vu Van N"),
-            ("Planter Box",     "Home & Garden",  290000, 5, "2024-02-09", "Da Nang",      "completed", "Dang Thi O"),
-            ("Bicycle Helmet",  "Sports",         650000, 1, "2024-02-11", "Hai Phong",    "completed", "Bui Van P"),
-            ("Python Cookbook", "Books",          280000, 4, "2024-02-13", "Ho Chi Minh",  "completed", "Nguyen Thi Q"),
-            ("Gaming Chair",    "Electronics",   5800000, 1, "2024-02-15", "Hanoi",        "completed", "Tran Van R"),
-            ("Summer Dress",    "Fashion",        420000, 3, "2024-02-17", "Can Tho",      "completed", "Le Van S"),
-            ("Electric Kettle", "Home & Garden",  480000, 2, "2024-02-19", "Ho Chi Minh",  "completed", "Pham Thi T"),
-        ]
         cur.executemany(
-            f"""
-            INSERT INTO "{schema}"."{table_name}"
-              (product_name, category, unit_price, quantity, order_date, region, status, customer)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            -- Skip rows that already exist (primary-key conflict on id).
-            -- Safe to re-run: existing data is not modified.
-            ON CONFLICT DO NOTHING
-            """,
-            rows,
+            INSERT_QUERY.format(schema=schema, table=table_name),
+            SAMPLE_ROWS,
         )
         conn.commit()
-        return len(rows)
+        return len(SAMPLE_ROWS)
 
 
 # ---------------------------------------------------------------------------
