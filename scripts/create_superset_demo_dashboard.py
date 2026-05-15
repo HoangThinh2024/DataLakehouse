@@ -160,52 +160,92 @@ def ensure_database(client: SupersetClient) -> int:
     return int(created["id"])
 
 
+def cleanup_old_resources(client: SupersetClient) -> None:
+    # Delete old "DLH –" charts
+    charts = client.get(f"/api/v1/chart/?q={_query()}").get("result", [])
+    for c in charts:
+        if c.get("slice_name", "").startswith("DLH –"):
+            try:
+                client.session.delete(f"{BASE_URL}/api/v1/chart/{c['id']}", headers=client.headers, timeout=30)
+                print(f"Deleted old chart: {c['slice_name']}")
+            except Exception:
+                pass
+
 def ensure_dataset(
     client: SupersetClient,
     database_id: int,
     table_name: str,
     *,
     datetime_col: str | None = None,
+    metrics: List[Dict[str, Any]] | None = None,
 ) -> int:
     items = client.get(f"/api/v1/dataset/?q={_query()}").get("result", [])
+    dataset_id = None
     for item in items:
         db = item.get("database") or {}
         if db.get("id") == database_id and item.get("schema") == SCHEMA and item.get("table_name") == table_name:
             dataset_id = int(item["id"])
-            if datetime_col:
-                client.put(
-                    f"/api/v1/dataset/{dataset_id}",
-                    {
-                        "database_id": database_id,
-                        "schema": SCHEMA,
-                        "table_name": table_name,
-                        "main_dttm_col": datetime_col,
-                    },
-                )
-            return dataset_id
+            break
 
-    payload: Dict[str, Any] = {
-        "database": database_id,
+    if dataset_id is None:
+        payload: Dict[str, Any] = {
+            "database": database_id,
+            "schema": SCHEMA,
+            "table_name": table_name,
+        }
+        created = client.post("/api/v1/dataset/", payload)
+        dataset_raw_id = created.get("id") or (created.get("result") or {}).get("id")
+        if not dataset_raw_id:
+            raise RuntimeError(f"Could not parse dataset id from Superset response: {created}")
+        dataset_id = int(dataset_raw_id)
+
+    # Fetch full dataset metadata to get existing metrics and columns
+    ds_data = client.get(f"/api/v1/dataset/{dataset_id}")["result"]
+    existing_metrics = ds_data.get("metrics", [])
+    
+    update_payload: Dict[str, Any] = {
+        "database_id": database_id,
         "schema": SCHEMA,
         "table_name": table_name,
     }
-    created = client.post("/api/v1/dataset/", payload)
-    dataset_raw_id = created.get("id") or (created.get("result") or {}).get("id")
-    if not dataset_raw_id:
-        raise RuntimeError(f"Could not parse dataset id from Superset response: {created}")
-    dataset_id = int(dataset_raw_id)
-
-    # Superset versions may reject main_dttm_col during POST /dataset but allow it on PUT.
+    
     if datetime_col:
-        client.put(
-            f"/api/v1/dataset/{dataset_id}",
-            {
-                "database_id": database_id,
-                "schema": SCHEMA,
-                "table_name": table_name,
-                "main_dttm_col": datetime_col,
-            },
-        )
+        update_payload["main_dttm_col"] = datetime_col
+
+    if metrics:
+        new_metrics = []
+        for m in metrics:
+            found = False
+            for em in existing_metrics:
+                if em["metric_name"] == m["metric_name"]:
+                    # Preserve ID to update instead of create duplicate
+                    m_copy = m.copy()
+                    m_copy["id"] = em["id"]
+                    new_metrics.append(m_copy)
+                    found = True
+                    break
+            if not found:
+                new_metrics.append(m)
+        
+        # We also need to keep other existing metrics that aren't in our 'metrics' list
+        # but for this demo script, we prefer to have only what we define.
+        update_payload["metrics"] = new_metrics
+        
+    client.put(f"/api/v1/dataset/{dataset_id}", update_payload)
+    
+    # Ensure the datetime column is marked as is_dttm
+    if datetime_col:
+        # Re-fetch as put might have changed things
+        ds_data = client.get(f"/api/v1/dataset/{dataset_id}")["result"]
+        cols = ds_data.get("columns", [])
+        changed = False
+        for c in cols:
+            if c["column_name"] == datetime_col and not c.get("is_dttm"):
+                c["is_dttm"] = True
+                changed = True
+        if changed:
+            client.put(f"/api/v1/dataset/{dataset_id}", {"columns": cols})
+
     return dataset_id
 
 
@@ -227,6 +267,14 @@ def _simple_metric(column_name: str, aggregate: str, label: str) -> Dict[str, An
         "label": label,
     }
 
+def _time_filter(column: str, time_range: str = "No filter") -> Dict[str, Any]:
+    return {
+        "expressionType": "SIMPLE",
+        "subject": column,
+        "operator": "TEMPORAL_RANGE",
+        "comparator": time_range,
+        "clause": "WHERE",
+    }
 
 def ensure_chart(
     client: SupersetClient,
@@ -237,6 +285,9 @@ def ensure_chart(
     viz_type: str,
     params: Dict[str, Any],
 ) -> int:
+    # Ensure params contains datasource
+    params["datasource"] = f"{dataset_id}__table"
+    
     items = client.get(f"/api/v1/chart/?q={_query()}").get("result", [])
     for item in items:
         if item.get("slice_name") == slice_name:
@@ -269,18 +320,30 @@ def ensure_chart(
 
 def build_layout(chart_ids: Dict[str, int]) -> Dict[str, Any]:
     """
-    Layout structure (3 rows):
-      Row 1 – KPI metrics (3 big-number tiles)
-      Row 2 – Bar (category revenue) + Pie (region orders)
-      Row 3 – Line graph (daily revenue) + Table (daily summary)
-      Row 4 – Bar (top regions by revenue)
+    Improved layout structure:
+      - Header (Markdown)
+      - Row 1: KPI metrics (3 tiles)
+      - Divider
+      - Row 2: Analysis (Bar + Pie)
+      - Divider
+      - Row 3: Trends (Line)
+      - Row 4: Details (Table)
     """
     layout: Dict[str, Any] = {
         "ROOT_ID": {"id": "ROOT_ID", "type": "ROOT", "children": ["GRID_ID"], "parents": []},
         "GRID_ID": {
             "id": "GRID_ID",
             "type": "GRID",
-            "children": ["ROW-kpi", "ROW-cat-region", "ROW-time-table", "ROW-region-bar"],
+            "children": [
+                "ROW-header",
+                "ROW-kpi",
+                "DIVIDER-1",
+                "ROW-cat-region",
+                "DIVIDER-2",
+                "ROW-line",
+                "ROW-table",
+                "ROW-region-bar"
+            ],
             "parents": ["ROOT_ID"],
         },
     }
@@ -303,25 +366,60 @@ def build_layout(chart_ids: Dict[str, int]) -> Dict[str, Any]:
             "meta": {"chartId": chart_id, "width": width, "height": height},
         }
 
+    def _markdown_cell(cell_id: str, row_id: str, code: str, width: int = 12, height: int = 20) -> Dict[str, Any]:
+        return {
+            "id": cell_id,
+            "type": "MARKDOWN",
+            "children": [],
+            "parents": ["ROOT_ID", "GRID_ID", row_id],
+            "meta": {"width": width, "height": height, "code": code},
+        }
+
+    def _divider(div_id: str) -> Dict[str, Any]:
+        return {
+            "id": div_id,
+            "type": "DIVIDER",
+            "children": [],
+            "parents": ["ROOT_ID", "GRID_ID"],
+        }
+
+    # Header
+    header_md = (
+        "<div style='text-align: center; background: linear-gradient(90deg, #1d3557 0%, #457b9d 100%); "
+        "padding: 20px; border-radius: 8px; color: white; margin-bottom: 20px;'>"
+        "<h1 style='margin: 0; font-size: 32px;'>🚀 DataLakehouse Analytics</h1>"
+        "<p style='margin: 5px 0 0; opacity: 0.8;'>Hệ thống phân tích dữ liệu bán hàng đa kênh – Real-time Dashboard</p>"
+        "</div>"
+    )
+    layout["ROW-header"] = _row("ROW-header", ["MD-header"])
+    layout["MD-header"] = _markdown_cell("MD-header", "ROW-header", header_md, 12, 25)
+
     # Row 1 – KPI
     layout["ROW-kpi"] = _row("ROW-kpi", ["CHART-kpi-revenue", "CHART-kpi-orders", "CHART-kpi-avg"])
-    layout["CHART-kpi-revenue"] = _chart_cell("CHART-kpi-revenue", "ROW-kpi", chart_ids["kpi_revenue"], 4, 40)
-    layout["CHART-kpi-orders"] = _chart_cell("CHART-kpi-orders", "ROW-kpi", chart_ids["kpi_orders"], 4, 40)
-    layout["CHART-kpi-avg"] = _chart_cell("CHART-kpi-avg", "ROW-kpi", chart_ids["kpi_avg"], 4, 40)
+    layout["CHART-kpi-revenue"] = _chart_cell("CHART-kpi-revenue", "ROW-kpi", chart_ids["kpi_revenue"], 4, 30)
+    layout["CHART-kpi-orders"] = _chart_cell("CHART-kpi-orders", "ROW-kpi", chart_ids["kpi_orders"], 4, 30)
+    layout["CHART-kpi-avg"] = _chart_cell("CHART-kpi-avg", "ROW-kpi", chart_ids["kpi_avg"], 4, 30)
+
+    # Dividers
+    layout["DIVIDER-1"] = _divider("DIVIDER-1")
+    layout["DIVIDER-2"] = _divider("DIVIDER-2")
 
     # Row 2 – Bar + Pie
     layout["ROW-cat-region"] = _row("ROW-cat-region", ["CHART-bar-cat", "CHART-pie-region"])
-    layout["CHART-bar-cat"] = _chart_cell("CHART-bar-cat", "ROW-cat-region", chart_ids["bar_category"], 6, 60)
-    layout["CHART-pie-region"] = _chart_cell("CHART-pie-region", "ROW-cat-region", chart_ids["pie_region"], 6, 60)
+    layout["CHART-bar-cat"] = _chart_cell("CHART-bar-cat", "ROW-cat-region", chart_ids["bar_category"], 7, 60)
+    layout["CHART-pie-region"] = _chart_cell("CHART-pie-region", "ROW-cat-region", chart_ids["pie_region"], 5, 60)
 
-    # Row 3 – Line + Table
-    layout["ROW-time-table"] = _row("ROW-time-table", ["CHART-line-daily", "CHART-table-daily"])
-    layout["CHART-line-daily"] = _chart_cell("CHART-line-daily", "ROW-time-table", chart_ids["line_daily"], 6, 60)
-    layout["CHART-table-daily"] = _chart_cell("CHART-table-daily", "ROW-time-table", chart_ids["table_daily"], 6, 60)
+    # Row 3 – Trends
+    layout["ROW-line"] = _row("ROW-line", ["CHART-line-daily"])
+    layout["CHART-line-daily"] = _chart_cell("CHART-line-daily", "ROW-line", chart_ids["line_daily"], 12, 60)
 
-    # Row 4 – Top regions bar
+    # Row 4 – Details
+    layout["ROW-table"] = _row("ROW-table", ["CHART-table-daily"])
+    layout["CHART-table-daily"] = _chart_cell("CHART-table-daily", "ROW-table", chart_ids["table_daily"], 12, 80)
+
+    # Row 5 – Region Bar (Secondary)
     layout["ROW-region-bar"] = _row("ROW-region-bar", ["CHART-bar-region"])
-    layout["CHART-bar-region"] = _chart_cell("CHART-bar-region", "ROW-region-bar", chart_ids["bar_region"], 12, 60)
+    layout["CHART-bar-region"] = _chart_cell("CHART-bar-region", "ROW-region-bar", chart_ids["bar_region"], 12, 50)
 
     return layout
 
@@ -334,12 +432,29 @@ def main() -> None:
     print(f"Connecting to Superset at {BASE_URL} …")
     client = SupersetClient(BASE_URL, ADMIN_USER, ADMIN_PASSWORD)
 
+    cleanup_old_resources(client)
+
     db_id = ensure_database(client)
     print(f"ClickHouse database id: {db_id}")
 
-    ds_daily = ensure_dataset(client, db_id, "gold_demo_daily", datetime_col="order_date")
-    ds_region = ensure_dataset(client, db_id, "gold_demo_by_region", datetime_col="report_date")
-    ds_category = ensure_dataset(client, db_id, "gold_demo_by_category", datetime_col="report_date")
+    # Standard metrics with 'm_' prefix to avoid collision with column names
+    metrics_daily = [
+        {"metric_name": "m_total_revenue", "expression": "SUM(total_revenue)", "d3format": ",.2f", "metric_type": "sum"},
+        {"metric_name": "m_order_count", "expression": "SUM(order_count)", "d3format": ",", "metric_type": "sum"},
+        {"metric_name": "m_avg_order_value", "expression": "SUM(total_revenue) / SUM(order_count)", "d3format": ",.2f", "metric_type": "other"},
+    ]
+    metrics_region = [
+        {"metric_name": "m_total_revenue", "expression": "SUM(total_revenue)", "d3format": ",.2f", "metric_type": "sum"},
+        {"metric_name": "m_order_count", "expression": "SUM(order_count)", "d3format": ",", "metric_type": "sum"},
+    ]
+    metrics_category = [
+        {"metric_name": "m_total_revenue", "expression": "SUM(total_revenue)", "d3format": ",.2f", "metric_type": "sum"},
+        {"metric_name": "m_order_count", "expression": "SUM(order_count)", "d3format": ",", "metric_type": "sum"},
+    ]
+
+    ds_daily = ensure_dataset(client, db_id, "gold_demo_daily", datetime_col="order_date", metrics=metrics_daily)
+    ds_region = ensure_dataset(client, db_id, "gold_demo_by_region", datetime_col="report_date", metrics=metrics_region)
+    ds_category = ensure_dataset(client, db_id, "gold_demo_by_category", datetime_col="report_date", metrics=metrics_category)
     ds_silver = ensure_dataset(client, db_id, "silver_demo", datetime_col="_silver_processed_at")
     dashboard_id = ensure_dashboard(client)
 
@@ -347,173 +462,167 @@ def main() -> None:
 
     chart_ids: Dict[str, int] = {}
 
-    # ── KPI: Total Revenue ──────────────────────────────────────────────────
-    chart_ids["kpi_revenue"] = ensure_chart(
-        client,
-        dashboard_id=dashboard_id,
-        dataset_id=ds_daily,
-        slice_name="DLH – Tổng Doanh Thu (Total Revenue)",
-        viz_type="big_number_total",
-        params={
-            "datasource": f"{ds_daily}__table",
-            "viz_type": "big_number_total",
-            "metric": _simple_metric("total_revenue", "SUM", "Total Revenue"),
-            "adhoc_filters": [],
-            "subheader": "VND",
-            "header_font_size": 0.4,
-            "subheader_font_size": 0.15,
+    CHART_CONFIGS = [
+        {
+            "key": "kpi_revenue",
+            "dataset": ds_daily,
+            "name": "[KPI] Tổng Doanh Thu",
+            "type": "big_number_total",
+            "params": {
+                "metric": "m_total_revenue",
+                "adhoc_filters": [_time_filter("order_date")],
+                "subheader": "VND",
+                "y_axis_format": ",.2f",
+                "header_font_size": 0.4,
+                "subheader_font_size": 0.15,
+            },
         },
-    )
+        {
+            "key": "kpi_orders",
+            "dataset": ds_daily,
+            "name": "[KPI] Tổng Đơn Hàng",
+            "type": "big_number_total",
+            "params": {
+                "metric": "m_order_count",
+                "adhoc_filters": [_time_filter("order_date")],
+                "subheader": "đơn hàng",
+                "y_axis_format": ",",
+                "header_font_size": 0.4,
+                "subheader_font_size": 0.15,
+            },
+        },
+        {
+            "key": "kpi_avg",
+            "dataset": ds_daily,
+            "name": "[KPI] Giá Trị TB / Đơn",
+            "type": "big_number_total",
+            "params": {
+                "metric": "m_avg_order_value",
+                "adhoc_filters": [_time_filter("order_date")],
+                "subheader": "VND",
+                "y_axis_format": ",.2f",
+                "header_font_size": 0.4,
+                "subheader_font_size": 0.15,
+            },
+        },
+        {
+            "key": "bar_category",
+            "dataset": ds_category,
+            "name": "Doanh Thu theo Danh Mục",
+            "type": "echarts_timeseries_bar",
+            "params": {
+                "x_axis": "category",
+                "groupby": [],
+                "metrics": ["m_total_revenue"],
+                "adhoc_filters": [_time_filter("report_date")],
+                "time_range": "No filter",
+                "row_limit": 50,
+                "order_desc": True,
+                "show_bar_value": True,
+                "y_axis_format": ",.0f",
+                "orientation": "vertical",
+                "timeseries_limit_metric": "m_total_revenue",
+                "show_legend": False,
+                "rich_tooltip": True,
+            },
+        },
+        {
+            "key": "pie_region",
+            "dataset": ds_region,
+            "name": "Phân Bổ Đơn Hàng theo Vùng",
+            "type": "pie",
+            "params": {
+                "groupby": ["region"],
+                "metric": "m_order_count",
+                "adhoc_filters": [_time_filter("report_date")],
+                "row_limit": 20,
+                "show_labels": True,
+                "show_legend": True,
+                "donut": True,
+                "label_type": "key_value_percent",
+                "roseType": "area",
+                "innerRadius": 40,
+            },
+        },
+        {
+            "key": "line_daily",
+            "dataset": ds_daily,
+            "name": "Diễn Biến Doanh Thu theo Ngày",
+            "type": "echarts_timeseries_line",
+            "params": {
+                "x_axis": "order_date",
+                "groupby": [],
+                "metrics": ["m_total_revenue"],
+                "adhoc_filters": [_time_filter("order_date")],
+                "time_grain_sqla": None,
+                "time_range": "No filter",
+                "row_limit": 500,
+                "show_legend": True,
+                "smooth": True,
+                "y_axis_format": ",.0f",
+                "order_desc": False,
+                "rich_tooltip": True,
+                "markerEnabled": True,
+            },
+        },
+        {
+            "key": "table_daily",
+            "dataset": ds_daily,
+            "name": "Chi Tiết Doanh Số Hàng Ngày",
+            "type": "table",
+            "params": {
+                "all_columns": [
+                    "order_date", "order_count", "total_revenue",
+                    "avg_order_value", "total_quantity",
+                    "unique_customers", "unique_regions",
+                ],
+                "metrics": [],
+                "adhoc_filters": [_time_filter("order_date")],
+                "time_grain_sqla": None,
+                "order_desc": True,
+                "row_limit": 100,
+                "include_search": True,
+                "show_cell_bars": True,
+                "table_timestamp_format": "smart_date",
+                "column_config": {
+                    "total_revenue": {"d3NumberFormat": ",.2f", "horizontalAlign": "right"},
+                    "avg_order_value": {"d3NumberFormat": ",.2f", "horizontalAlign": "right"},
+                    "order_count": {"horizontalAlign": "center"},
+                    "order_date": {"columnWidth": 120},
+                },
+            },
+        },
+        {
+            "key": "bar_region",
+            "dataset": ds_region,
+            "name": "Top Vùng Miền theo Doanh Thu",
+            "type": "echarts_timeseries_bar",
+            "params": {
+                "x_axis": "region",
+                "groupby": [],
+                "metrics": ["m_total_revenue"],
+                "adhoc_filters": [_time_filter("report_date")],
+                "time_range": "No filter",
+                "row_limit": 20,
+                "order_desc": True,
+                "show_bar_value": True,
+                "y_axis_format": ",.0f",
+                "timeseries_limit_metric": "m_total_revenue",
+                "show_legend": False,
+                "rich_tooltip": True,
+            },
+        },
+    ]
 
-    # ── KPI: Total Orders ───────────────────────────────────────────────────
-    chart_ids["kpi_orders"] = ensure_chart(
-        client,
-        dashboard_id=dashboard_id,
-        dataset_id=ds_daily,
-        slice_name="DLH – Tổng Đơn Hàng (Total Orders)",
-        viz_type="big_number_total",
-        params={
-            "datasource": f"{ds_daily}__table",
-            "viz_type": "big_number_total",
-            "metric": _simple_metric("order_count", "SUM", "Total Orders"),
-            "adhoc_filters": [],
-            "subheader": "đơn hàng",
-            "header_font_size": 0.4,
-            "subheader_font_size": 0.15,
-        },
-    )
-
-    # ── KPI: Average Order Value ────────────────────────────────────────────
-    chart_ids["kpi_avg"] = ensure_chart(
-        client,
-        dashboard_id=dashboard_id,
-        dataset_id=ds_daily,
-        slice_name="DLH – Giá Trị ĐH Trung Bình (Avg Order Value)",
-        viz_type="big_number_total",
-        params={
-            "datasource": f"{ds_daily}__table",
-            "viz_type": "big_number_total",
-            "metric": _simple_metric("avg_order_value", "AVG", "Avg Order Value"),
-            "adhoc_filters": [],
-            "subheader": "VND / đơn",
-            "header_font_size": 0.4,
-            "subheader_font_size": 0.15,
-        },
-    )
-
-    # ── Bar chart: Revenue by Category ─────────────────────────────────────
-    chart_ids["bar_category"] = ensure_chart(
-        client,
-        dashboard_id=dashboard_id,
-        dataset_id=ds_category,
-        slice_name="DLH – Doanh Thu theo Danh Mục (Revenue by Category)",
-        viz_type="echarts_timeseries_bar",
-        params={
-            "datasource": f"{ds_category}__table",
-            "viz_type": "echarts_timeseries_bar",
-            "x_axis": "report_date",
-            "orientation": "vertical",
-            "groupby": ["category"],
-            "metrics": [_simple_metric("total_revenue", "SUM", "Doanh Thu")],
-            "adhoc_filters": [],
-            "time_grain_sqla": "P1D",
-            "time_range": "No filter",
-            "row_limit": 50,
-            "order_desc": True,
-            "show_legend": False,
-            "show_bar_value": True,
-        },
-    )
-
-    # ── Pie chart: Orders by Region ─────────────────────────────────────────
-    chart_ids["pie_region"] = ensure_chart(
-        client,
-        dashboard_id=dashboard_id,
-        dataset_id=ds_region,
-        slice_name="DLH – Đơn Hàng theo Vùng (Orders by Region)",
-        viz_type="pie",
-        params={
-            "datasource": f"{ds_region}__table",
-            "viz_type": "pie",
-            "groupby": ["region"],
-            "metric": _simple_metric("order_count", "SUM", "Số Đơn"),
-            "adhoc_filters": [],
-            "row_limit": 20,
-            "show_labels": True,
-            "show_legend": True,
-            "donut": False,
-        },
-    )
-
-    # ── Line graph: Daily Revenue Over Time ─────────────────────────────────
-    chart_ids["line_daily"] = ensure_chart(
-        client,
-        dashboard_id=dashboard_id,
-        dataset_id=ds_daily,
-        slice_name="DLH – Doanh Thu Theo Ngày (Daily Revenue)",
-        viz_type="echarts_timeseries_line",
-        params={
-            "datasource": f"{ds_daily}__table",
-            "viz_type": "echarts_timeseries_line",
-            "x_axis": "order_date",
-            "metrics": [_simple_metric("total_revenue", "SUM", "Doanh Thu")],
-            "groupby": [],
-            "adhoc_filters": [],
-            "time_grain_sqla": "P1D",
-            "time_range": "No filter",
-            "row_limit": 500,
-            "show_legend": True,
-            "area": False,
-            "smooth": True,
-        },
-    )
-
-    # ── Table: Daily Sales Summary ───────────────────────────────────────────
-    chart_ids["table_daily"] = ensure_chart(
-        client,
-        dashboard_id=dashboard_id,
-        dataset_id=ds_daily,
-        slice_name="DLH – Bảng Tổng Hợp Doanh Số (Daily Sales Table)",
-        viz_type="table",
-        params={
-            "datasource": f"{ds_daily}__table",
-            "viz_type": "table",
-            "all_columns": [
-                "order_date", "order_count", "total_revenue",
-                "avg_order_value", "total_quantity",
-                "unique_customers", "unique_regions",
-            ],
-            "adhoc_filters": [],
-            "order_desc": True,
-            "row_limit": 100,
-            "include_search": True,
-            "show_cell_bars": True,
-        },
-    )
-
-    # ── Bar chart: Top Regions by Revenue ───────────────────────────────────
-    chart_ids["bar_region"] = ensure_chart(
-        client,
-        dashboard_id=dashboard_id,
-        dataset_id=ds_region,
-        slice_name="DLH – Doanh Thu theo Vùng (Revenue by Region)",
-        viz_type="echarts_timeseries_bar",
-        params={
-            "datasource": f"{ds_region}__table",
-            "viz_type": "echarts_timeseries_bar",
-            "x_axis": "report_date",
-            "orientation": "vertical",
-            "groupby": ["region"],
-            "metrics": [_simple_metric("total_revenue", "SUM", "Doanh Thu")],
-            "adhoc_filters": [],
-            "time_grain_sqla": "P1D",
-            "time_range": "No filter",
-            "row_limit": 20,
-            "order_desc": True,
-            "show_legend": False,
-            "show_bar_value": True,
-        },
-    )
+    for cfg in CHART_CONFIGS:
+        chart_ids[cfg["key"]] = ensure_chart(
+            client,
+            dashboard_id=dashboard_id,
+            dataset_id=cfg["dataset"],
+            slice_name=cfg["name"],
+            viz_type=cfg["type"],
+            params=cfg["params"],
+        )
 
     # ── Assemble dashboard layout ───────────────────────────────────────────
     layout = build_layout(chart_ids)
@@ -521,7 +630,15 @@ def main() -> None:
         f"/api/v1/dashboard/{dashboard_id}",
         {
             "position_json": _to_params(layout),
-            "json_metadata": _to_params({"color_scheme": "supersetColors"}),
+            "json_metadata": _to_params({
+                "color_scheme": "d3Category10",
+                "refresh_frequency": 60,
+                "filter_scopes": {},
+                "native_filter_configuration": [],
+                "global_chart_configuration": {
+                    "crossFilters": {"enabled": True}
+                }
+            }),
             "published": True,
         },
     )
@@ -533,18 +650,8 @@ def main() -> None:
     print(f"   Title : {DASHBOARD_TITLE}")
     print(f"   URL   : {BASE_URL}{dashboard_url}")
     print("\nCharts created:")
-    chart_labels = {
-        "kpi_revenue": "KPI – Tổng Doanh Thu",
-        "kpi_orders": "KPI – Tổng Đơn Hàng",
-        "kpi_avg": "KPI – Giá Trị TB",
-        "bar_category": "Biểu đồ cột – Doanh Thu / Danh Mục",
-        "pie_region": "Biểu đồ tròn – Đơn Hàng / Vùng",
-        "line_daily": "Đồ thị đường – Doanh Thu Theo Ngày",
-        "table_daily": "Bảng tính – Tổng Hợp Doanh Số",
-        "bar_region": "Biểu đồ cột – Doanh Thu / Vùng",
-    }
-    for key, label in chart_labels.items():
-        print(f"   [{chart_ids[key]:>5}] {label}")
+    for key, cid in chart_ids.items():
+        print(f"   [{cid:>5}] {key}")
 
 
 if __name__ == "__main__":

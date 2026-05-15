@@ -22,7 +22,7 @@ OLAP analytics, and business intelligence dashboards — all on a single host.
 | **Monitoring** | Grafana | Pipeline operational monitoring |
 | **Identity** | Authentik | Centralised SSO and RBAC |
 | **Cache** | Redis 8 | Shared high-performance cache and queue |
-| **GUI (Redis)** | Redis Insight | Web-based management for Redis |
+| **GUI (Redis)** | Redis Insight | Web-based management for Redis (Port 25540) |
 | **SQL IDE** | CloudBeaver | Web-based SQL client |
 | **Remote Desktop** | Apache Guacamole | Browser-based VNC / RDP / SSH gateway |
 | **Docker Mgmt** | Dockhand | Web-based Docker management UI |

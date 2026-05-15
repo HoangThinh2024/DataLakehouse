@@ -189,27 +189,38 @@ bash scripts/stackctl.sh redeploy
 
 ## ETL Operations
 
-### Manual ETL run (interactive)
+### Unified Demo Runner (Recommended)
+
+The easiest way to populate the lakehouse and create a professional dashboard is using the unified runner script. It handles everything from sample data generation to Superset configuration.
 
 ```bash
+# Interactive mode
 uv run python scripts/run_etl_and_dashboard.py
+
+# Non-interactive / CI mode (auto-creates sample table if missing)
+uv run python scripts/run_etl_and_dashboard.py --auto --create-sample-table
 ```
 
-### Non-interactive / CI
+### Manual ETL run (individual steps)
 
-```bash
-# Auto mode — no prompts
-uv run python scripts/run_etl_and_dashboard.py --auto
+If you prefer to run steps individually:
 
-# Force a specific source table
-uv run python scripts/run_etl_and_dashboard.py --auto --table sales_orders
+1.  **Generate sample data in Postgres:**
+    ```bash
+    # Uses scripts/sample_data.py for the schema and rows
+    uv run python -c "from scripts.run_etl_and_dashboard import main; main(['--auto', '--create-sample-table', '--skip-dashboard'])"
+    ```
 
-# Create sample data, then run ETL
-uv run python scripts/run_etl_and_dashboard.py --auto --create-sample-table --table sales_orders
+2.  **Trigger Mage pipeline:**
+    ```bash
+    docker compose exec -T mage mage run /home/src etl_postgres_to_lakehouse
+    ```
 
-# ETL only — skip dashboard creation
-uv run python scripts/run_etl_and_dashboard.py --auto --skip-dashboard
-```
+3.  **Automate Superset Dashboard:**
+    ```bash
+    # Creates datasets, metrics, and a Premium UI dashboard
+    uv run python scripts/create_superset_demo_dashboard.py
+    ```
 
 ### Via Mage UI
 
@@ -250,6 +261,17 @@ nohup bash scripts/realtime_watcher.sh >> /var/log/dlh-watcher.log 2>&1 &
 |-----------|-------------------|
 | `*.xlsx` | `etl_excel_to_lakehouse` |
 | `*.csv` | `etl_csv_upload_to_reporting` |
+
+---
+
+## Superset Dashboard Automation
+
+The `create_superset_demo_dashboard.py` script provides a **Premium UI** experience by:
+-   **Markdown Headers:** Dynamic gradients and title blocks.
+-   **Nightingale Rose Charts:** Advanced Pie chart visualization for regional distribution.
+-   **Cross-filtering:** Clicking a category filters all other charts.
+-   **D3 Formatting:** Professional VND currency and number formatting.
+-   **Stability:** Automatically handles ClickHouse `GROUP BY` quirks by disabling redundant time graining on pre-aggregated gold tables.
 
 ---
 
