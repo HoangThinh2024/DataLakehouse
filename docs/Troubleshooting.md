@@ -191,6 +191,23 @@ On first visit add a connection:
 
 ---
 
+## Superset: Could not load database driver for: clickhouse
+
+### Symptoms
+- Error message: `Could not load database driver for: clickhouse`
+- SQLAlchemy error: `Can't load plugin: sqlalchemy.dialects:clickhouse.connect`
+
+### Cause
+The system uses the `clickhouse-connect` driver, which requires the protocol **`clickhousedb://`** (or `clickhousedb+connect://`) instead of the older `clickhouse://`.
+
+### Fix
+Update the SQLAlchemy URI in **Settings → Database Connections**:
+
+- **Incorrect:** `clickhouse://...`
+- **Correct:** `clickhousedb://doe:password@dlh-clickhouse:8123/analytics`
+
+---
+
 ## Authentik Background Tasks Not Processing
 
 ### Symptoms
