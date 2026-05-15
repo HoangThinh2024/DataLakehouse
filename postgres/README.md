@@ -26,9 +26,9 @@ Scripts with `.sh` and `.sql` extensions are executed **alphabetically**, but
 exists from a previous deployment, these scripts are skipped.
 
 Files executed in order:
-1. `000_create_app_security.sh` — creates databases, users, schemas
-2. `001_lakehouse_metadata.sql` — creates metadata tracking tables
-3. `002_sample_data.sql` — inserts sample data (demo tables)
+1. `000_create_app_security.sh` -- creates databases, users, schemas
+2. `001_lakehouse_metadata.sql` -- creates metadata tracking tables
+3. `002_sample_data.sql` -- inserts sample data (demo tables)
 
 ### Re-sync on every `docker compose up` (`postgres-bootstrap` service)
 
@@ -78,7 +78,7 @@ docker compose exec dlh-postgres \
 
 ### Via CloudBeaver (web UI)
 
-Open `http://localhost:28978`, create a new PostgreSQL connection:
+Open http://localhost:28978, create a new PostgreSQL connection:
 
 - Host: `dlh-postgres`
 - Port: `5432`
@@ -114,7 +114,7 @@ To add a new application database to the stack:
    create_db_and_user "${NEW_DB_NAME}" "${NEW_DB_USER}" "${NEW_DB_PASSWORD}"
    ```
 2. Add the corresponding variables to `.env.example` and `.env`.
-3. Run `bash scripts/stackctl.sh redeploy` — the bootstrap service will create the new DB/user.
+3. Run `bash scripts/stackctl.sh redeploy` -- the bootstrap service will create the new DB/user.
 
 ---
 

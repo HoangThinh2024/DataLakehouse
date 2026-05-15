@@ -1,0 +1,240 @@
+# ============================================================
+# Infra services: Nginx Proxy Manager + Dockhand + Authentik
+# Guacamole is optional (disabled by default; enable via profile)
+# Usage:
+#   docker compose -f docker-compose.dlh.yaml -f docker-compose.infra.yaml up -d
+#   docker compose -f docker-compose.dlh.yaml -f docker-compose.infra.yaml --profile guacamole up -d
+# ============================================================
+
+x-dlh-runtime: &dlh-runtime
+  networks:
+    - web_network
+  restart: always
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-dlh-timezone: &dlh-timezone
+  TZ: ${TZ:-Asia/Ho_Chi_Minh}
+
+x-authentik-env: &authentik-env
+  TZ: ${TZ:-Asia/Ho_Chi_Minh}
+  AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-change-this-authentik-secret-key}
+  AUTHENTIK_ERROR_REPORTING_ENABLED: "false"
+  AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
+  AUTHENTIK_POSTGRESQL__HOST: ${POSTGRES_HOST:-dlh-postgres}
+  AUTHENTIK_POSTGRESQL__PORT: 5432
+  AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_DB_NAME:-${POSTGRES_DB:-postgres}}
+  AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_DB_USER:-${POSTGRES_USER:-postgres}}
+  AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_DB_PASSWORD:-${POSTGRES_PASSWORD:-postgres}}
+
+services:
+  # ==========================================================
+  # INFRA: AUTHENTICATION (Authentik)
+  # ==========================================================
+
+  authentik-server:
+    <<: *dlh-runtime
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_IMAGE_VERSION:-2026.2.1}
+    container_name: dlh-authentik-server
+    env_file:
+      - .env
+    environment:
+      <<: *authentik-env
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-admin@authentik.local}
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-admin}
+      AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-}
+    command: server
+    ports:
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_AUTHENTIK_PORT:-29090}:9000"
+    volumes:
+      - ./data/authentik/media:/media
+      - ./data/authentik/templates:/templates
+      - ./authentik/blueprints:/blueprints/datalakehouse:ro
+    depends_on:
+      postgres-bootstrap:
+        condition: service_completed_successfully
+
+  authentik-worker:
+    <<: *dlh-runtime
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_IMAGE_VERSION:-2026.2.1}
+    container_name: dlh-authentik-worker
+    env_file:
+      - .env
+    environment:
+      <<: *authentik-env
+    command: worker
+    volumes:
+      - ./data/authentik/media:/media
+      - ./data/authentik/templates:/templates
+      - ./authentik/blueprints:/blueprints/datalakehouse:ro
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      postgres-bootstrap:
+        condition: service_completed_successfully
+
+  authentik-blueprint-apply:
+    <<: *dlh-runtime
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_IMAGE_VERSION:-2026.2.1}
+    container_name: dlh-authentik-blueprint-apply
+    env_file:
+      - .env
+    environment:
+      <<: *authentik-env
+      HOME: /tmp
+    command: ["apply_blueprint", "/blueprints/datalakehouse/datalakehouse-sso.yaml"]
+    volumes:
+      - ./authentik/blueprints:/blueprints/datalakehouse:ro
+    depends_on:
+      authentik-server:
+        condition: service_healthy
+      authentik-worker:
+        condition: service_healthy
+    restart: "no"
+
+  # ==========================================================
+  # INFRA: REVERSE PROXY (Nginx Proxy Manager)
+  # ==========================================================
+
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: dlh-nginx-proxy-manager
+    restart: always
+    ports:
+      - "${DLH_NPM_HTTP_PORT:-80}:80"
+      - "${DLH_NPM_HTTPS_PORT:-443}:443"
+      - "${DLH_NPM_ADMIN_PORT:-28081}:81"
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      DB_SQLITE_FILE: /data/database.sqlite
+      DISABLE_IPV6: "true"
+    volumes:
+      - ./data/npm:/data
+      - ./data/npm-letsencrypt:/etc/letsencrypt
+    networks:
+      - web_network
+
+  # ==========================================================
+  # INFRA: DOCKER MANAGEMENT (Dockhand)
+  # ==========================================================
+
+  dockhand:
+    image: fnsys/dockhand:latest
+    container_name: dlh-dockhand
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    ports:
+      - "${DLH_APP_BIND_IP:-127.0.0.1}:${DLH_DOCKHAND_PORT:-23000}:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data/dockhand:/app/data
+      - /mnt/d:/mnt/d
+      - /home/johndoe:/home/johndoe
+    networks:
+      - web_network
+
+  # ==========================================================
+  # OPTIONAL: GUACAMOLE (disabled by default)
+  # ==========================================================
+
+  guacamole-db-init:
+    image: guacamole/guacamole:${GUACAMOLE_IMAGE_VERSION:-latest}
+    container_name: dlh-guacamole-db-init
+    user: root
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    volumes:
+      - ./data/guacamole/init:/init
+    entrypoint:
+      - /bin/sh
+      - -c
+      - test -f /init/initdb.sql || /opt/guacamole/bin/initdb.sh --postgresql > /init/initdb.sql
+    networks:
+      - web_network
+    restart: "no"
+    profiles: ["guacamole"]
+
+  guacamole-db-apply:
+    image: postgres:${POSTGRES_IMAGE_VERSION:-17-alpine}
+    container_name: dlh-guacamole-db-apply
+    depends_on:
+      guacamole-db-init:
+        condition: service_completed_successfully
+      postgres-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      PGHOST: ${POSTGRES_HOST:-dlh-postgres}
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${GUACAMOLE_DB_NAME:-dlh_guacamole}
+      GUACAMOLE_DB_USER: ${GUACAMOLE_DB_USER:-dlh_guacamole_user}
+    volumes:
+      - ./data/guacamole/init:/init:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        if psql -c "SELECT 1 FROM guacamole_user LIMIT 1" >/dev/null 2>&1; then
+          echo "guacamole schema already initialized, skipping"
+          exit 0
+        fi
+        psql -f /init/initdb.sql &&
+        psql -c "GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO \"$$GUACAMOLE_DB_USER\"" &&
+        psql -c "GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA public TO \"$$GUACAMOLE_DB_USER\""
+    networks:
+      - web_network
+    restart: "no"
+    profiles: ["guacamole"]
+
+  guacd:
+    <<: *dlh-runtime
+    image: guacamole/guacd:${GUACAMOLE_IMAGE_VERSION:-latest}
+    container_name: dlh-guacd
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    profiles: ["guacamole"]
+
+  guacamole:
+    <<: *dlh-runtime
+    image: guacamole/guacamole:${GUACAMOLE_IMAGE_VERSION:-latest}
+    container_name: dlh-guacamole
+    volumes:
+      - /home/johndoe/guacamole/fonts:/usr/share/fonts/truetype/jetbrains:ro
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      GUACD_HOSTNAME: dlh-guacd
+      GUACD_PORT: 4822
+      POSTGRESQL_HOSTNAME: ${POSTGRES_HOST:-dlh-postgres}
+      POSTGRESQL_PORT: 5432
+      POSTGRESQL_DATABASE: ${GUACAMOLE_DB_NAME:-dlh_guacamole}
+      POSTGRESQL_USERNAME: ${GUACAMOLE_DB_USER:-dlh_guacamole_user}
+      POSTGRESQL_PASSWORD: ${GUACAMOLE_DB_PASSWORD:-change-me}
+    ports:
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_GUACAMOLE_PORT:-28090}:8080"
+    depends_on:
+      guacd:
+        condition: service_started
+      guacamole-db-apply:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/guacamole/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    profiles: ["guacamole"]
+
+networks:
+  web_network:
+    external: true
+    name: web_network

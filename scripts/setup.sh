@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# DataLakehouse – Interactive Deployment Setup & Bootstrap
+# DataLakehouse - Interactive Deployment Setup & Bootstrap
 # ============================================================================
 # Purpose:
 #   Complete guided setup for DataLakehouse deployment:
@@ -34,7 +34,7 @@ else
   exit 1
 fi
 
-# ── Python environment helpers (uv) ───────────────────────
+# -- Python environment helpers (uv) -----------------------
 ensure_uv() {
   if command -v uv >/dev/null 2>&1; then
     info "Found uv: $(uv --version)"
@@ -74,23 +74,23 @@ sync_python_env() {
     return 1
   fi
 
-  info "Syncing Python dependencies with uv (all groups) …"
+  info "Syncing Python dependencies with uv (all groups) ..."
   (cd "$REPO_ROOT" && uv sync --all-groups)
   info "Python environment ready at $REPO_ROOT/.venv"
   return 0
 }
 
-# ── Default values (sourced from existing .env or hardcoded) ─
+# -- Default values (sourced from existing .env or hardcoded) --
 load_env_file
 
 # =============================================================
-header "DataLakehouse – Guided Setup"
+header "DataLakehouse - Guided Setup"
 echo "  This wizard configures your .env file and deploys the stack."
 echo "  Press Enter to accept the value shown in [ ]."
 echo "  Existing values from .env are shown as defaults."
 
-# ── Phase 0: Pre-flight Checks ───────────────────────────────
-header "0 / 8 – Pre-flight Checks"
+# -- Phase 0: Pre-flight Checks -----------------------------
+header "0 / 8 - Pre-flight Checks"
 
 check_failed=0
 
@@ -122,7 +122,7 @@ fi
 info "All critical prerequisites met."
 
 # =============================================================
-header "1 / 8 – Global Settings"
+header "1 / 8 - Global Settings"
 
 TZ=$(ask_input "Timezone" "${TZ:-Asia/Ho_Chi_Minh}")
 DLH_BIND_IP=$(ask_input "Bind IP (127.0.0.1 = local only)" "${DLH_BIND_IP:-127.0.0.1}")
@@ -132,7 +132,7 @@ DLH_LAN_CIDR=$(ask_input "LAN CIDR for firewall rules" "${DLH_LAN_CIDR:-192.168.
 UFW_ALLOW_DATA_PORTS=$(ask_input "Allow data ports to LAN (true/false)" "${UFW_ALLOW_DATA_PORTS:-false}")
 
 # =============================================================
-header "2 / 8 – Docker Image Versions"
+header "2 / 8 - Docker Image Versions"
 
 POSTGRES_IMAGE_VERSION=$(ask_input "PostgreSQL image tag" "${POSTGRES_IMAGE_VERSION:-17-alpine}")
 RUSTFS_IMAGE_VERSION=$(ask_input "RustFS image tag" "${RUSTFS_IMAGE_VERSION:-latest}")
@@ -143,7 +143,7 @@ SUPERSET_IMAGE_VERSION=$(ask_input "Superset image tag" "${SUPERSET_IMAGE_VERSIO
 GRAFANA_IMAGE_VERSION=$(ask_input "Grafana image tag" "${GRAFANA_IMAGE_VERSION:-latest}")
 
 # =============================================================
-header "3 / 8 – Core PostgreSQL (Admin)"
+header "3 / 8 - Core PostgreSQL (Admin)"
 
 POSTGRES_DB=$(ask_input "Admin database name" "${POSTGRES_DB:-datalakehouse}")
 POSTGRES_USER=$(ask_input "Admin username" "${POSTGRES_USER:-dlh_admin}")
@@ -160,7 +160,7 @@ SUGGESTED_RP_CONSOLE_PORT=$(suggest_port "${DLH_REDPANDA_CONSOLE_PORT:-29080}")
 DLH_REDPANDA_CONSOLE_PORT=$(ask_input "Host port for Redpanda Console" "$SUGGESTED_RP_CONSOLE_PORT")
 
 # =============================================================
-header "4 / 8 – Custom Workspace (optional)"
+header "4 / 8 - Custom Workspace (optional)"
 echo "  Create an isolated PostgreSQL database / schema / user for your"
 echo "  own ETL and reporting. Leave CUSTOM_DB_NAME empty to skip."
 
@@ -184,7 +184,7 @@ else
 fi
 
 # =============================================================
-header "5 / 8 – RustFS (Object Storage)"
+header "5 / 8 - RustFS (Object Storage)"
 
 RUSTFS_ACCESS_KEY=$(ask_input "RustFS access key" "${RUSTFS_ACCESS_KEY:-rustfsadmin}")
 RUSTFS_SECRET_KEY=$(ask_input "RustFS secret key" "${RUSTFS_SECRET_KEY:-rustfsadmin}")
@@ -194,18 +194,18 @@ SUGGESTED_RUSTFS_CONSOLE_PORT=$(suggest_port "${DLH_RUSTFS_CONSOLE_PORT:-29101}"
 DLH_RUSTFS_CONSOLE_PORT=$(ask_input "Host port for RustFS console" "$SUGGESTED_RUSTFS_CONSOLE_PORT")
 
 # =============================================================
-header "6 / 8 – ClickHouse"
+header "6 / 8 - ClickHouse"
 
 CLICKHOUSE_DB=$(ask_input "ClickHouse database" "${CLICKHOUSE_DB:-analytics}")
 CLICKHOUSE_USER=$(ask_input "ClickHouse user" "${CLICKHOUSE_USER:-default}")
 CLICKHOUSE_PASSWORD=$(ask_input "ClickHouse password (blank ok)" "${CLICKHOUSE_PASSWORD:-}")
 SUGGESTED_CH_HTTP_PORT=$(suggest_port "${DLH_CLICKHOUSE_HTTP_PORT:-28123}")
-DLH_CLICKHOUSE_HTTP_PORT=$(ask_input "Host port – ClickHouse HTTP" "$SUGGESTED_CH_HTTP_PORT")
+DLH_CLICKHOUSE_HTTP_PORT=$(ask_input "Host port - ClickHouse HTTP" "$SUGGESTED_CH_HTTP_PORT")
 SUGGESTED_CH_TCP_PORT=$(suggest_port "${DLH_CLICKHOUSE_TCP_PORT:-29000}")
-DLH_CLICKHOUSE_TCP_PORT=$(ask_input "Host port – ClickHouse TCP" "$SUGGESTED_CH_TCP_PORT")
+DLH_CLICKHOUSE_TCP_PORT=$(ask_input "Host port - ClickHouse TCP" "$SUGGESTED_CH_TCP_PORT")
 
 # =============================================================
-header "7 / 8 – App Service Passwords"
+header "7 / 8 - App Service Passwords"
 echo "  (Mage, Superset, Grafana metadata DB passwords)"
 
 MAGE_DB_PASSWORD=$(ask_input "Mage DB password" "${MAGE_DB_PASSWORD:-change-this-mage-password}")
@@ -222,16 +222,16 @@ GRAFANA_ADMIN_PASSWORD=$(ask_input "Grafana admin password" "${GRAFANA_ADMIN_PAS
 GUACAMOLE_DB_PASSWORD=$(ask_input "Guacamole DB password" "${GUACAMOLE_DB_PASSWORD:-change-this-guacamole-db-password}")
 
 # =============================================================
-header "8 / 8 – Port Assignments"
+header "8 / 8 - Port Assignments"
 
 SUGGESTED_MAGE_PORT=$(suggest_port "${DLH_MAGE_PORT:-26789}")
-DLH_MAGE_PORT=$(ask_input "Host port – Mage" "$SUGGESTED_MAGE_PORT")
+DLH_MAGE_PORT=$(ask_input "Host port - Mage" "$SUGGESTED_MAGE_PORT")
 SUGGESTED_SUPERSET_PORT=$(suggest_port "${DLH_SUPERSET_PORT:-28088}")
-DLH_SUPERSET_PORT=$(ask_input "Host port – Superset" "$SUGGESTED_SUPERSET_PORT")
+DLH_SUPERSET_PORT=$(ask_input "Host port - Superset" "$SUGGESTED_SUPERSET_PORT")
 SUGGESTED_GRAFANA_PORT=$(suggest_port "${DLH_GRAFANA_PORT:-23001}")
-DLH_GRAFANA_PORT=$(ask_input "Host port – Grafana" "$SUGGESTED_GRAFANA_PORT")
+DLH_GRAFANA_PORT=$(ask_input "Host port - Grafana" "$SUGGESTED_GRAFANA_PORT")
 SUGGESTED_GUACAMOLE_PORT=$(suggest_port "${DLH_GUACAMOLE_PORT:-28090}")
-DLH_GUACAMOLE_PORT=$(ask_input "Host port – Guacamole" "$SUGGESTED_GUACAMOLE_PORT")
+DLH_GUACAMOLE_PORT=$(ask_input "Host port - Guacamole" "$SUGGESTED_GUACAMOLE_PORT")
 
 
 # =============================================================
@@ -247,10 +247,10 @@ cat > "$ENV_FILE" <<EOF
 # Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
 #
 # IMPORTANT NOTES:
-#  • Keep credentials secure (do NOT commit to Git)
-#  • Port values (DLH_*_PORT) must be unique
-#  • Changes take effect after: docker compose restart <service>
-#  • Use stackctl.sh for common operations:
+#  - Keep credentials secure (do NOT commit to Git)
+#  - Port values (DLH_*_PORT) must be unique
+#  - Changes take effect after: docker compose restart <service>
+#  - Use stackctl.sh for common operations:
 #    - bash scripts/stackctl.sh up
 #    - bash scripts/stackctl.sh down
 #    - bash scripts/stackctl.sh redeploy
@@ -258,7 +258,7 @@ cat > "$ENV_FILE" <<EOF
 #    - bash scripts/stackctl.sh check-system
 # ============================================================
 
-# ─ Global Settings ─────────────────────────────────────────
+# - Global Settings -
 TZ=${TZ}
 DLH_BIND_IP=${DLH_BIND_IP}
 DLH_APP_BIND_IP=${DLH_APP_BIND_IP}
@@ -266,7 +266,7 @@ DLH_DATA_BIND_IP=${DLH_DATA_BIND_IP}
 DLH_LAN_CIDR=${DLH_LAN_CIDR}
 UFW_ALLOW_DATA_PORTS=${UFW_ALLOW_DATA_PORTS}
 
-# ─ Docker Image Versions ───────────────────────────────────
+# - Docker Image Versions -
 # Pin versions for reproducibility. Use 'latest' for auto-updates.
 POSTGRES_IMAGE_VERSION=${POSTGRES_IMAGE_VERSION}
 RUSTFS_IMAGE_VERSION=${RUSTFS_IMAGE_VERSION}
@@ -278,26 +278,26 @@ GRAFANA_IMAGE_VERSION=${GRAFANA_IMAGE_VERSION}
 REDIS_STACK_IMAGE_VERSION=${REDIS_STACK_IMAGE_VERSION:-latest}
 AUTHENTIK_IMAGE_VERSION=${AUTHENTIK_IMAGE_VERSION:-2026.2.1}
 
-# ─ Core PostgreSQL (System Admin) ──────────────────────────
+# - Core PostgreSQL (System Admin) -
 POSTGRES_DB=${POSTGRES_DB}
 POSTGRES_USER=${POSTGRES_USER}
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 DLH_POSTGRES_PORT=${DLH_POSTGRES_PORT}
 POSTGRES_HOST=dlh-postgres
 
-# ─ Redpanda (Event Broker / Kafka) ────────────────────────
+# - Redpanda (Event Broker / Kafka) -
 DLH_REDPANDA_KAFKA_PORT=${DLH_REDPANDA_KAFKA_PORT}
 DLH_REDPANDA_CONSOLE_PORT=${DLH_REDPANDA_CONSOLE_PORT}
 DLH_REDPANDA_REGISTRY_PORT=29081
 DLH_REDPANDA_PROXY_PORT=29082
 
-# ─ Custom Workspace (for isolated ETL/reporting) ───────────
+# - Custom Workspace (for isolated ETL/reporting) -
 CUSTOM_DB_NAME=${CUSTOM_DB_NAME}
 CUSTOM_DB_USER=${CUSTOM_DB_USER}
 CUSTOM_DB_PASSWORD=${CUSTOM_DB_PASSWORD}
 CUSTOM_SCHEMA=${CUSTOM_SCHEMA}
 
-# ─ RustFS (Object Storage via S3-like API) ────────────────
+# - RustFS (Object Storage via S3-like API) -
 RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY}
 RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY}
 DLH_RUSTFS_API_PORT=${DLH_RUSTFS_API_PORT}
@@ -309,14 +309,14 @@ RUSTFS_BRONZE_BUCKET=bronze
 RUSTFS_SILVER_BUCKET=silver
 RUSTFS_GOLD_BUCKET=gold
 
-# ─ ClickHouse (Analytics Data Warehouse) ───────────────────
+# - ClickHouse (Analytics Data Warehouse) -
 CLICKHOUSE_DB=${CLICKHOUSE_DB}
 CLICKHOUSE_USER=${CLICKHOUSE_USER}
 CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
 DLH_CLICKHOUSE_HTTP_PORT=${DLH_CLICKHOUSE_HTTP_PORT}
 DLH_CLICKHOUSE_TCP_PORT=${DLH_CLICKHOUSE_TCP_PORT}
 
-# ─ Redis (Shared Cache / Queue Backend) ───────────────────
+# - Redis (Shared Cache / Queue Backend) -
 REDIS_HOST=dlh-redis
 REDIS_BIND_IP=${REDIS_BIND_IP:-127.0.0.1}
 DLH_REDIS_PORT=${DLH_REDIS_PORT:-26379}
@@ -332,7 +332,7 @@ REDIS_AUTHENTIK_DB=${REDIS_AUTHENTIK_DB:-1}
 SUPERSET_REDIS_CACHE_DB=${SUPERSET_REDIS_CACHE_DB:-2}
 SUPERSET_REDIS_RESULTS_DB=${SUPERSET_REDIS_RESULTS_DB:-3}
 
-# ─ Mage (ETL Orchestration) ────────────────────────────────
+# - Mage (ETL Orchestration) -
 DLH_MAGE_PORT=${DLH_MAGE_PORT}
 MAGE_DB_NAME=dlh_mage
 MAGE_DB_USER=dlh_mage_user
@@ -354,7 +354,7 @@ CSV_UPLOAD_SEPARATOR=,
 CSV_UPLOAD_ENCODING=utf-8
 CSV_UPLOAD_SCAN_LIMIT=200
 
-# ─ Superset (BI and Analytics) ─────────────────────────────
+# - Superset (BI and Analytics) -
 DLH_SUPERSET_PORT=${DLH_SUPERSET_PORT}
 SUPERSET_SECRET_KEY=${SUPERSET_SECRET_KEY}
 SUPERSET_DB_NAME=dlh_superset
@@ -366,7 +366,7 @@ SUPERSET_ADMIN_EMAIL=admin@superset.local
 SUPERSET_PREFERRED_URL_SCHEME=http
 SUPERSET_PIP_REQUIREMENTS=${SUPERSET_PIP_REQUIREMENTS:-psycopg2-binary==2.9.9 clickhouse-connect==0.8.3}
 
-# ─ Authentik (Identity Provider) ───────────────────────────
+# - Authentik (Identity Provider) -
 DLH_AUTHENTIK_PORT=${DLH_AUTHENTIK_PORT:-29090}
 AUTHENTIK_SECRET_KEY=${AUTHENTIK_SECRET_KEY:-replace-this-with-a-long-random-secret}
 AUTHENTIK_DB_NAME=${AUTHENTIK_DB_NAME:-dlh_authentik}
@@ -376,7 +376,7 @@ AUTHENTIK_BOOTSTRAP_EMAIL=${AUTHENTIK_BOOTSTRAP_EMAIL:-admin@authentik.local}
 AUTHENTIK_BOOTSTRAP_PASSWORD=${AUTHENTIK_BOOTSTRAP_PASSWORD:-admin}
 AUTHENTIK_BOOTSTRAP_TOKEN=${AUTHENTIK_BOOTSTRAP_TOKEN:-}
 
-# ─ Grafana (Monitoring & Dashboards) ───────────────────────
+# - Grafana (Monitoring & Dashboards) -
 DLH_GRAFANA_PORT=${DLH_GRAFANA_PORT}
 GRAFANA_DB_NAME=dlh_grafana
 GRAFANA_DB_USER=dlh_grafana_user
@@ -384,14 +384,14 @@ GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD}
 GRAFANA_ADMIN_USER=${GRAFANA_ADMIN_USER}
 GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
 
-# ─ Apache Guacamole (Browser-based Remote Desktop Gateway) ─
+# - Apache Guacamole (Browser-based Remote Desktop Gateway) -
 GUACAMOLE_IMAGE_VERSION=${GUACAMOLE_IMAGE_VERSION:-latest}
 DLH_GUACAMOLE_PORT=${DLH_GUACAMOLE_PORT}
 GUACAMOLE_DB_NAME=dlh_guacamole
 GUACAMOLE_DB_USER=dlh_guacamole_user
 GUACAMOLE_DB_PASSWORD=${GUACAMOLE_DB_PASSWORD}
 
-# ─ Nginx Proxy Manager (optional, for reverse proxy) ───────
+# - Nginx Proxy Manager (optional, for reverse proxy) -
 DLH_NPM_HTTP_PORT=28080
 DLH_NPM_HTTPS_PORT=28443
 DLH_NPM_ADMIN_PORT=28081
@@ -407,7 +407,7 @@ header "Docker Network"
 if docker network inspect web_network >/dev/null 2>&1; then
   info "Docker network 'web_network' already exists."
 else
-  info "Creating Docker network 'web_network' …"
+  info "Creating Docker network 'web_network' ..."
   docker network create web_network
   info "Network created."
 fi
@@ -441,7 +441,7 @@ echo "    Redis GUI  : http://localhost:${DLH_REDIS_GUI_PORT:-25540}"
 if [ "$DLH_BIND_IP" != "127.0.0.1" ]; then
   echo
   if ask_yn "Configure UFW + ufw-docker for LAN access now?" "y"; then
-    info "Configuring host firewall for LAN CIDR ${DLH_LAN_CIDR} …"
+    info "Configuring host firewall for LAN CIDR ${DLH_LAN_CIDR} ..."
     bash "$REPO_ROOT/scripts/setup_ufw_docker.sh" "$DLH_LAN_CIDR" || \
       warn "Firewall setup script failed. Review output and rerun manually."
   else
@@ -469,7 +469,7 @@ fi
 echo
 if ask_yn "Run ETL and create Superset dashboards now? (requires services to be healthy)" "n"; then
   echo
-  info "Launching ETL and dashboard setup …"
+  info "Launching ETL and dashboard setup ..."
   if command -v uv >/dev/null 2>&1; then
     (cd "$REPO_ROOT" && uv run python scripts/run_etl_and_dashboard.py --auto)
   else

@@ -57,6 +57,33 @@ bash scripts/setup.sh
 
 ---
 
+## Sao luu va khoi phuc nhanh (toan bo stack)
+
+Khi can di chuyen host hoac snapshot nhanh, dung [scripts/backup.sh](scripts/backup.sh) va [scripts/restore.sh](scripts/restore.sh).
+
+```bash
+# Tao ban sao luu (tu dong stop stack)
+bash scripts/backup.sh
+```
+
+Ten file backup theo mau:
+
+```
+DataLakehouse_backup_YYYYMMDD_HHMM.tar.gz
+```
+
+```bash
+# Khoi phuc tu file backup
+bash scripts/restore.sh /path/to/DataLakehouse_backup_YYYYMMDD_HHMM.tar.gz [target_parent_dir]
+
+# Khoi dong lai stack
+docker compose -f docker-compose.dlh.yaml -f docker-compose.infra.yaml up -d
+```
+
+Huong dan day du xem tai [docs/Backup-and-Restore.md](docs/Backup-and-Restore.md).
+
+---
+
 ## Health Monitoring
 
 ### Status and health checks
