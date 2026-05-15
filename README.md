@@ -160,6 +160,33 @@ See [`scripts/README.md`](scripts/README.md) for the full script reference.
 
 ---
 
+## Sao luu va khoi phuc nhanh
+
+De snapshot toan bo stack (ma nguon + du lieu Docker volumes), dung cac script co san:
+
+```bash
+# Tao ban sao luu (tu dong stop stack truoc khi dong goi)
+bash scripts/backup.sh
+```
+
+File sao luu duoc luu tai thu muc backup duoi repo, ten file theo mau:
+
+```
+DataLakehouse_backup_YYYYMMDD_HHMM.tar.gz
+```
+
+```bash
+# Khoi phuc tu file backup (co the truyen them thu muc cha dich)
+bash scripts/restore.sh /path/to/DataLakehouse_backup_YYYYMMDD_HHMM.tar.gz [target_parent_dir]
+
+# Khoi dong lai stack
+docker compose -f docker-compose.dlh.yaml -f docker-compose.infra.yaml up -d
+```
+
+Luu y: backup bo qua thu muc virtual env va thu muc git de giam dung luong.
+
+---
+
 ## Project Structure
 
 ```

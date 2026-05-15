@@ -8,6 +8,36 @@ This page covers how to back up and restore data in the DataLakehouse stack.
 
 ---
 
+## Sao luu va khoi phuc toan bo stack
+
+Neu ban muon snapshot toan bo he thong (ma nguon + du lieu Docker volumes), hay dung [scripts/backup.sh](scripts/backup.sh) va [scripts/restore.sh](scripts/restore.sh).
+
+```bash
+# Tao ban sao luu (tu dong stop stack truoc khi dong goi)
+bash scripts/backup.sh
+```
+
+Backup se duoc luu tai thu muc backup duoi repo, ten file theo mau:
+
+```
+DataLakehouse_backup_YYYYMMDD_HHMM.tar.gz
+```
+
+Script se bo qua thu muc virtual env va thu muc git de giam dung luong.
+
+```bash
+# Khoi phuc tu file backup
+bash scripts/restore.sh /path/to/DataLakehouse_backup_YYYYMMDD_HHMM.tar.gz [target_parent_dir]
+
+# Khoi dong lai stack
+docker compose -f docker-compose.dlh.yaml -f docker-compose.infra.yaml up -d
+```
+
+`restore.sh` tu dong sua quyen thu muc du lieu pho bien (PostgreSQL, Grafana, Superset, Authentik, ...).
+Neu image/user khac, ban co the dieu chinh lai quyen sau khi khoi phuc.
+
+---
+
 ## ClickHouse Backup
 
 ### How it works

@@ -92,3 +92,7 @@ bash scripts/stackctl.sh health
 ```
 
 See [Deployment Guide](DEPLOYMENT_GUIDE) for the full step-by-step instructions.
+
+### Sao luu va khoi phuc nhanh
+
+Dung [scripts/backup.sh](scripts/backup.sh) de tao snapshot toan bo stack va [scripts/restore.sh](scripts/restore.sh) de khoi phuc. Chi tiet xem [docs/Backup-and-Restore.md](docs/Backup-and-Restore.md).

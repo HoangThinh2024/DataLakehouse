@@ -1,0 +1,571 @@
+# ============================================================
+# DataLakehouse – Modern Data Stack (DLH services)
+# Split from original docker-compose.yaml
+# Usage:
+#   docker compose -f docker-compose.dlh.yaml up -d
+# ============================================================
+
+x-dlh-runtime: &dlh-runtime
+  networks:
+    - web_network
+  restart: always
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-dlh-timezone: &dlh-timezone
+  TZ: ${TZ:-Asia/Ho_Chi_Minh}
+
+services:
+  # ==========================================================
+  # LAYER 1: INGESTION (Real-time CDC)
+  # ==========================================================
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v26.1.7
+    container_name: dlh-redpanda
+    restart: always
+    command:
+      - redpanda
+      - start
+      - --smp 1
+      - --memory 512M
+      - --reserve-memory 0M
+      - --overprovisioned
+      - --node-id 0
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:${DLH_REDPANDA_KAFKA_PORT:-29092}
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:${DLH_REDPANDA_PROXY_PORT:-29082}
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr redpanda:33145
+      - --advertise-rpc-addr redpanda:33145
+      # Tiered Storage Configuration (Archival to RustFS)
+      - --set cloud_storage_enabled=true
+      - --set cloud_storage_access_key=${RUSTFS_ACCESS_KEY}
+      - --set cloud_storage_secret_key=${RUSTFS_SECRET_KEY}
+      - --set cloud_storage_region=us-east-1
+      - --set cloud_storage_bucket=bronze
+      - --set cloud_storage_api_endpoint=rustfs
+      - --set cloud_storage_api_endpoint_port=9000
+      - --set cloud_storage_disable_tls=true
+    ports:
+      - "${DLH_DATA_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_REDPANDA_KAFKA_PORT:-29092}:19092"
+      - "${DLH_DATA_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_REDPANDA_REGISTRY_PORT:-29081}:18081"
+      - "${DLH_DATA_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_REDPANDA_PROXY_PORT:-29082}:18082"
+    volumes:
+      - ./data/redpanda:/var/lib/redpanda/data
+    networks:
+      - web_network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:latest
+    container_name: dlh-redpanda-console
+    restart: always
+    entrypoint: /bin/sh
+    command: -c "echo \"$$CONSOLE_CONFIG_FILE\" > /tmp/config.yml; /app/console"
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda:9092"]
+        schemaRegistry:
+          enabled: true
+          urls: ["http://redpanda:8081"]
+        redpanda:
+          adminApi:
+            enabled: true
+            urls: ["http://redpanda:9644"]
+    ports:
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_REDPANDA_CONSOLE_PORT:-29080}:8080"
+    networks:
+      - web_network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    depends_on:
+      redpanda:
+        condition: service_healthy
+
+  redpanda-connect:
+    image: redpandadata/connect:latest
+    container_name: dlh-ingest-cdc
+    restart: always
+    volumes:
+      - ./connect/redpanda-connect.yaml:/connect.yaml:ro
+    command: ["-c", "/connect.yaml"]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      dlh-postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - web_network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  debezium:
+    image: debezium/connect:${DEBEZIUM_VERSION:-2.5.4.Final}
+    container_name: dlh-debezium
+    restart: always
+    environment:
+      BOOTSTRAP_SERVERS: redpanda:9092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: debezium_configs
+      OFFSET_STORAGE_TOPIC: debezium_offsets
+      STATUS_STORAGE_TOPIC: debezium_statuses
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_INTERNAL_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_INTERNAL_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: http://redpanda:8081
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://redpanda:8081
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      dlh-postgres:
+        condition: service_healthy
+    networks:
+      - web_network
+    ports:
+      - "${DLH_DATA_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_DEBEZIUM_PORT:-28083}:8083"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  # ==========================================================
+  # LAYER 2: STORAGE
+  # ==========================================================
+
+  dlh-postgres:
+    <<: *dlh-runtime
+    image: postgres:${POSTGRES_IMAGE_VERSION:-17-alpine}
+    container_name: dlh-postgres
+    command: ["postgres", "-c", "wal_level=logical"]
+    env_file:
+      - .env
+    environment:
+      <<: *dlh-timezone
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGTZ: ${TZ:-Asia/Ho_Chi_Minh}
+    ports:
+      - "${DLH_DATA_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_POSTGRES_PORT:-25432}:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 20s
+      timeout: 8s
+      retries: 5
+      start_period: 30s
+
+  postgres-bootstrap:
+    <<: *dlh-runtime
+    image: postgres:${POSTGRES_IMAGE_VERSION:-17-alpine}
+    container_name: dlh-postgres-bootstrap
+    env_file:
+      - .env
+    environment:
+      <<: *dlh-timezone
+      PGHOST: ${POSTGRES_HOST:-dlh-postgres}
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+      CUSTOM_DB_NAME: ${CUSTOM_DB_NAME:-}
+      CUSTOM_DB_USER: ${CUSTOM_DB_USER:-}
+      CUSTOM_DB_PASSWORD: ${CUSTOM_DB_PASSWORD:-}
+      CUSTOM_SCHEMA: ${CUSTOM_SCHEMA:-}
+    volumes:
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    depends_on:
+      dlh-postgres:
+        condition: service_healthy
+    restart: "no"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - /docker-entrypoint-initdb.d/000_create_app_security.sh
+
+  rustfs:
+    <<: *dlh-runtime
+    image: rustfs/rustfs:${RUSTFS_IMAGE_VERSION:-latest}
+    container_name: dlh-rustfs
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      RUSTFS_VOLUMES: ${RUSTFS_VOLUMES:-/data}
+      RUSTFS_ADDRESS: ${RUSTFS_ADDRESS:-0.0.0.0:9000}
+      RUSTFS_CONSOLE_ADDRESS: ${RUSTFS_CONSOLE_ADDRESS:-0.0.0.0:9001}
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CORS_ALLOWED_ORIGINS: ${RUSTFS_CORS_ALLOWED_ORIGINS:-http://localhost:29100}
+      RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS: ${RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS:-http://localhost:29101}
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+    ports:
+      - "${DLH_DATA_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_RUSTFS_API_PORT:-29100}:9000"
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_RUSTFS_CONSOLE_PORT:-29101}:9001"
+    volumes:
+      - ./data/rustfs:/data
+    healthcheck:
+      test:
+        [
+          "CMD", "sh", "-c",
+          "curl -f http://127.0.0.1:9000/health && curl -f http://127.0.0.1:9001/rustfs/console/health"
+        ]
+      interval: 20s
+      timeout: 8s
+      retries: 4
+      start_period: 40s
+
+  rustfs-init:
+    image: minio/mc:${MINIO_MC_IMAGE_VERSION:-latest}
+    container_name: dlh-rustfs-init
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        mc alias set rustfs http://rustfs:9000 ${RUSTFS_ACCESS_KEY} ${RUSTFS_SECRET_KEY}
+        mc mb --ignore-existing rustfs/bronze
+        mc mb --ignore-existing rustfs/silver
+        mc mb --ignore-existing rustfs/gold
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    networks:
+      - web_network
+    restart: "no"
+
+  clickhouse:
+    <<: *dlh-runtime
+    image: clickhouse/clickhouse-server:${CLICKHOUSE_IMAGE_VERSION:-latest}
+    container_name: dlh-clickhouse
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-analytics}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+    ports:
+      - "${DLH_DATA_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_CLICKHOUSE_HTTP_PORT:-28123}:8123"
+      - "${DLH_DATA_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_CLICKHOUSE_TCP_PORT:-29000}:9000"
+    volumes:
+      - ./data/clickhouse:/var/lib/clickhouse
+      - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8123/ping"]
+      interval: 20s
+      timeout: 8s
+      retries: 5
+      start_period: 30s
+
+  dlh-redis:
+    <<: *dlh-runtime
+    image: redis:8.6.3
+    container_name: dlh-redis
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-change-this-redis-password}
+      --maxmemory ${REDIS_MAXMEMORY:-512mb}
+      --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
+      --appendonly ${REDIS_APPENDONLY:-yes}
+    env_file:
+      - .env
+    environment:
+      <<: *dlh-timezone
+    ports:
+      - "${REDIS_BIND_IP:-127.0.0.1}:${DLH_REDIS_PORT:-26379}:6379"
+    volumes:
+      - ./data/redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-change-this-redis-password} ping | grep -q PONG"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  dlh-redis-insight:
+    <<: *dlh-runtime
+    image: redis/redisinsight:latest
+    container_name: dlh-redis-insight
+    environment:
+      <<: *dlh-timezone
+    ports:
+      - "${REDIS_BIND_IP:-127.0.0.1}:${DLH_REDIS_GUI_PORT:-25540}:5540"
+    volumes:
+      - ./data/redis-insight:/data
+    depends_on:
+      dlh-redis:
+        condition: service_healthy
+
+  # ==========================================================
+  # LAYER 3: PROCESSING
+  # ==========================================================
+
+  mage:
+    <<: *dlh-runtime
+    image: mageai/mageai:${MAGE_IMAGE_VERSION:-latest}
+    container_name: dlh-mage
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      MAGE_CODE_PATH: ${MAGE_CODE_PATH:-/home/src}
+      USER_CODE_PATH: ${USER_CODE_PATH:-/home/src}
+      POSTGRES_HOST: ${POSTGRES_HOST:-dlh-postgres}
+      DATABASE_CONNECTION_URL: postgresql+psycopg2://${MAGE_DB_USER:-dlh_mage_user}:${MAGE_DB_PASSWORD:-change-me}@${POSTGRES_HOST:-dlh-postgres}:5432/${MAGE_DB_NAME:-dlh_mage}
+      MAGE_DATABASE_CONNECTION_URL: postgresql+psycopg2://${MAGE_DB_USER:-dlh_mage_user}:${MAGE_DB_PASSWORD:-change-me}@${POSTGRES_HOST:-dlh-postgres}:5432/${MAGE_DB_NAME:-dlh_mage}
+      DEFAULT_OWNER_EMAIL: ${MAGE_DEFAULT_OWNER_EMAIL:-admin@admin.com}
+      DEFAULT_OWNER_PASSWORD: ${MAGE_DEFAULT_OWNER_PASSWORD:-admin}
+      DEFAULT_OWNER_USERNAME: ${MAGE_DEFAULT_OWNER_USERNAME:-admin}
+      SOURCE_DB_HOST: ${POSTGRES_HOST:-dlh-postgres}
+      SOURCE_DB_PORT: "5432"
+      SOURCE_DB_NAME: ${SOURCE_DB_NAME:-${POSTGRES_DB:-postgres}}
+      SOURCE_DB_USER: ${SOURCE_DB_USER:-${POSTGRES_USER:-postgres}}
+      SOURCE_DB_PASSWORD: ${SOURCE_DB_PASSWORD:-${POSTGRES_PASSWORD:-postgres}}
+      SOURCE_SCHEMA: ${SOURCE_SCHEMA:-public}
+      SOURCE_TABLE: ${SOURCE_TABLE:-}
+      SOURCE_TABLE_CANDIDATES: ${SOURCE_TABLE_CANDIDATES:-Demo,test_projects}
+      CUSTOM_DB_NAME: ${CUSTOM_DB_NAME:-}
+      CUSTOM_DB_USER: ${CUSTOM_DB_USER:-}
+      CUSTOM_DB_PASSWORD: ${CUSTOM_DB_PASSWORD:-}
+      CUSTOM_SCHEMA: ${CUSTOM_SCHEMA:-}
+      CSV_UPLOAD_BUCKET: ${CSV_UPLOAD_BUCKET:-bronze}
+      CSV_UPLOAD_PREFIX: ${CSV_UPLOAD_PREFIX:-csv_upload/}
+      CSV_UPLOAD_ALLOW_ANYWHERE: ${CSV_UPLOAD_ALLOW_ANYWHERE:-true}
+      CSV_UPLOAD_SEPARATOR: ${CSV_UPLOAD_SEPARATOR:-,}
+      CSV_UPLOAD_ENCODING: ${CSV_UPLOAD_ENCODING:-utf-8}
+      CSV_UPLOAD_SCAN_LIMIT: ${CSV_UPLOAD_SCAN_LIMIT:-200}
+      RUSTFS_ENDPOINT_URL: ${RUSTFS_ENDPOINT_URL:-http://dlh-rustfs:9000}
+      RUSTFS_BRONZE_BUCKET: ${RUSTFS_BRONZE_BUCKET:-bronze}
+      RUSTFS_SILVER_BUCKET: ${RUSTFS_SILVER_BUCKET:-silver}
+      RUSTFS_GOLD_BUCKET: ${RUSTFS_GOLD_BUCKET:-gold}
+      CLICKHOUSE_HOST: ${CLICKHOUSE_HOST:-dlh-clickhouse}
+      CLICKHOUSE_HTTP_PORT: "8123"
+      CLICKHOUSE_TCP_PORT: "9000"
+    ports:
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_MAGE_PORT:-26789}:6789"
+    volumes:
+      - ./mage:/home/src
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:6789/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      postgres-bootstrap:
+        condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
+    command: mage start
+
+  # ==========================================================
+  # LAYER 4: SERVING
+  # ==========================================================
+
+  cloudbeaver:
+    <<: *dlh-runtime
+    image: dbeaver/cloudbeaver:latest
+    container_name: dlh-cloudbeaver
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    ports:
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_CLOUDBEAVER_PORT:-28978}:8978"
+    volumes:
+      - ./data/cloudbeaver:/opt/cloudbeaver/workspace
+    depends_on:
+      postgres-bootstrap:
+        condition: service_completed_successfully
+
+  # ==========================================================
+  # LAYER 5: REPORTING
+  # ==========================================================
+
+  superset:
+    <<: *dlh-runtime
+    image: apache/superset:${SUPERSET_IMAGE_VERSION:-latest}
+    container_name: dlh-superset
+    user: root
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      PYTHONPATH: /app/pythonpath:/app/.venv/lib/python3.10/site-packages
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
+      SUPERSET_CONFIG_PATH: ${SUPERSET_CONFIG_PATH:-/app/pythonpath/superset_config.py}
+      SUPERSET_LOAD_EXAMPLES: "${SUPERSET_LOAD_EXAMPLES:-no}"
+      SUPERSET_DB_NAME: ${SUPERSET_DB_NAME:-dlh_superset}
+      SUPERSET_DB_USER: ${SUPERSET_DB_USER:-dlh_superset_user}
+      SUPERSET_DB_PASSWORD: ${SUPERSET_DB_PASSWORD:-change-me}
+      SUPERSET_AUTH_TYPE: ${SUPERSET_AUTH_TYPE:-db}
+      REDIS_HOST: ${REDIS_HOST:-dlh-redis}
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-change-this-redis-password}
+      SUPERSET_REDIS_CACHE_DB: ${SUPERSET_REDIS_CACHE_DB:-2}
+      SUPERSET_REDIS_RESULTS_DB: ${SUPERSET_REDIS_RESULTS_DB:-3}
+      _PIP_ADDITIONAL_REQUIREMENTS: psycopg2-binary==2.9.9 clickhouse-connect==0.8.3 Authlib==1.3.1
+      SUPERSET_OIDC_CLIENT_ID: ${SUPERSET_OIDC_CLIENT_ID}
+      SUPERSET_OIDC_CLIENT_SECRET: ${SUPERSET_OIDC_CLIENT_SECRET}
+      SUPERSET_OIDC_DISCOVERY_URL: ${SUPERSET_OIDC_DISCOVERY_URL}
+    ports:
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_SUPERSET_PORT:-28088}:8088"
+    volumes:
+      - ./data/superset:/var/lib/superset
+      - ./superset/superset_config.py:/app/pythonpath/superset_config.py:ro
+    depends_on:
+      postgres-bootstrap:
+        condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
+      dlh-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8088/health || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 5
+      start_period: 600s
+    deploy:
+      resources:
+        limits:
+          memory: 1.5G
+    command: >
+      /bin/sh -c "
+      /usr/local/bin/pip install --no-cache-dir --target /app/.venv/lib/python3.10/site-packages $${_PIP_ADDITIONAL_REQUIREMENTS} && \
+      superset db upgrade && \
+      superset fab create-admin --username ${SUPERSET_ADMIN_USER:-admin} --firstname Admin --lastname User --email ${SUPERSET_ADMIN_EMAIL:-admin@superset.local} --password ${SUPERSET_ADMIN_PASSWORD:-admin} || true && \
+      superset fab reset-password --username ${SUPERSET_ADMIN_USER:-admin} --password ${SUPERSET_ADMIN_PASSWORD:-admin} || true && \
+      superset init && \
+      superset run -h 0.0.0.0 -p 8088 --with-threads
+      "
+
+  grafana:
+    <<: *dlh-runtime
+    image: grafana/grafana:${GRAFANA_IMAGE_VERSION:-latest}
+    container_name: dlh-grafana
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      GF_SERVER_ROOT_URL: https://grafana.datahcg.duckdns.org
+      GF_SERVER_DOMAIN: grafana.datahcg.duckdns.org
+      GF_AUTH_GENERIC_OAUTH_ENABLED: "true"
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DATABASE_TYPE: postgres
+      GF_DATABASE_HOST: ${GF_DATABASE_HOST:-dlh-postgres:5432}
+      GF_DATABASE_NAME: ${GRAFANA_DB_NAME:-dlh_grafana}
+      GF_DATABASE_USER: ${GRAFANA_DB_USER:-dlh_grafana_user}
+      GF_DATABASE_PASSWORD: ${GRAFANA_DB_PASSWORD:-change-me}
+      GF_INSTALL_PLUGINS: ${GF_INSTALL_PLUGINS:-grafana-piechart-panel,grafana-clickhouse-datasource}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-analytics}
+      POSTGRES_DB: ${POSTGRES_DB:-datalakehouse}
+      POSTGRES_USER: ${POSTGRES_USER:-dlh_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    ports:
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_GRAFANA_PORT:-23001}:3000"
+    volumes:
+      - ./data/grafana:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      postgres-bootstrap:
+        condition: service_completed_successfully
+
+  # ==========================================================
+  # MONITORING
+  # ==========================================================
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: dlh-node-exporter
+    restart: always
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc|run/user)($$|/)' 
+    networks:
+      - web_network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: dlh-prometheus
+    restart: always
+    user: root
+    volumes:
+      - ./data/prometheus:/prometheus
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - web_network
+    depends_on:
+      - node-exporter
+
+networks:
+  web_network:
+    external: true
+    name: web_network

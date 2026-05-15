@@ -78,6 +78,12 @@ and business intelligence dashboards — all on a single host.
 
 ---
 
+## Sao luu va khoi phuc nhanh
+
+Dung [scripts/backup.sh](scripts/backup.sh) de tao snapshot toan bo stack va [scripts/restore.sh](scripts/restore.sh) de khoi phuc. Chi tiet xem [docs/Backup-and-Restore.md](docs/Backup-and-Restore.md).
+
+---
+
 ## Further Documentation
 
 The `docs/` directory in the repository contains detailed reference documents:
