@@ -38,7 +38,8 @@ This page describes the system layers, component roles, data flow, and deploymen
 ```
 
 Supporting infrastructure (cuts across all layers):
-- **Redis** – shared cache and queue.
+- **Redis 8** – shared cache and queue.
+- **Redis Insight** – Web UI for Redis management.
 - **Authentik** – centralised identity provider (SSO, RBAC).
 - **Redpanda Console** – Web UI for managing topics and events.
 - **Data Healer** – autonomous lake-to-warehouse consistency engine.
@@ -49,13 +50,15 @@ Supporting infrastructure (cuts across all layers):
 
 | Container | Image | Role | Default Port |
 |-----------|-------|------|--------------|
-| `dlh-redpanda` | `redpandadata/redpanda:v23.2.19` | Kafka broker with Tiered Storage (Archival to S3) | `29092` |
-| `dlh-ingest-cdc` | `redpandadata/connect` | Ultra-light CDC engine (Postgres → ClickHouse/Redpanda) | `4195` |
+| `dlh-redpanda` | `redpandadata/redpanda:v26.1.7` | Kafka broker with Tiered Storage (Archival to S3) | `29092` |
+| `dlh-ingest-cdc` | `redpandadata/connect` | Ultra-light CDC engine (Postgres → ClickHouse/Redpanda) | (Internal) |
 | `dlh-redpanda-console` | `redpandadata/console` | Web UI for Redpanda topic management | `29080` |
 | `dlh-postgres` | `postgres:17-alpine` | Central metadata DB + Source DB (Logical Replication enabled) | `25432` |
 | `dlh-rustfs` | `rustfs/rustfs` | S3-compatible object storage (Lake layers) | API `29100` |
 | `dlh-clickhouse` | `clickhouse/clickhouse-server` | Columnar OLAP engine for real-time & batch | TCP `29000` |
 | `dlh-mage` | `mageai/mageai` | ETL orchestration — batch pipelines + dbt | `26789` |
+| `dlh-redis` | `redis:8` | Shared high-performance cache and queue | `26379` |
+| `dlh-redis-insight` | `redis/redisinsight` | Web-based management for Redis | `25540` |
 
 ---
 

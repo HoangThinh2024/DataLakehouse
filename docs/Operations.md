@@ -77,7 +77,7 @@ DataLakehouse_backup_YYYYMMDD_HHMM.tar.gz
 bash scripts/restore.sh /path/to/DataLakehouse_backup_YYYYMMDD_HHMM.tar.gz [target_parent_dir]
 
 # Khoi dong lai stack
-docker compose -f docker-compose.dlh.yaml -f docker-compose.infra.yaml up -d
+docker compose up -d
 ```
 
 Huong dan day du xem tai [docs/Backup-and-Restore.md](docs/Backup-and-Restore.md).

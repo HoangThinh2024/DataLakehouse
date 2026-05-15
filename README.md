@@ -14,14 +14,15 @@ OLAP analytics, and business intelligence dashboards — all on a single host.
 |-------|-----------|------|
 | **Ingest (Real-time)** | Redpanda Connect (Go) | Ultra-light CDC from PostgreSQL to Redpanda/ClickHouse |
 | **Ingest (Batch)** | RustFS Console, scripts | Source data entry for Excel/CSV |
-| **Broker** | Redpanda (v23.2.19) | Kafka-compatible broker with Tiered Storage (S3) |
+| **Broker** | Redpanda (v26.1.7) | Kafka-compatible broker with Tiered Storage (S3) |
 | **Storage (Lake)** | RustFS (S3-compatible) | Medallion Lake (Bronze/Silver/Gold) + CDC Archival |
 | **Process (ETL)** | Mage.ai | Orchestrates batch pipelines and dbt transformations |
 | **Warehouse** | ClickHouse | Columnar OLAP engine for serving and real-time ingestion |
 | **Dashboards** | Apache Superset | Business intelligence dashboards |
 | **Monitoring** | Grafana | Pipeline operational monitoring |
 | **Identity** | Authentik | Centralised SSO and RBAC |
-| **Cache / GUI** | Redis Stack | Shared cache/queue + built-in Redis Insight UI |
+| **Cache** | Redis 8 | Shared high-performance cache and queue |
+| **GUI (Redis)** | Redis Insight | Web-based management for Redis |
 | **SQL IDE** | CloudBeaver | Web-based SQL client |
 | **Remote Desktop** | Apache Guacamole | Browser-based VNC / RDP / SSH gateway |
 | **Docker Mgmt** | Dockhand | Web-based Docker management UI |
@@ -39,6 +40,7 @@ OLAP analytics, and business intelligence dashboards — all on a single host.
 | Superset | http://localhost:28088 | `SUPERSET_ADMIN_USER` / `SUPERSET_ADMIN_PASSWORD` |
 | Grafana | http://localhost:23001 | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` |
 | Authentik | http://localhost:29090 | `AUTHENTIK_BOOTSTRAP_EMAIL` / `AUTHENTIK_BOOTSTRAP_PASSWORD` |
+| Redis Insight | http://localhost:25540 | (configured on first login) |
 | CloudBeaver | http://localhost:28978 | (configured on first login) |
 | Guacamole | http://localhost:28090/guacamole/ | `guacadmin` / `guacadmin` |
 | Dockhand | http://localhost:23000 | (no auth by default) |
@@ -46,10 +48,8 @@ OLAP analytics, and business intelligence dashboards — all on a single host.
 | ClickHouse HTTP | http://localhost:28123 | `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` |
 | Redpanda Kafka | localhost:29092 | (No auth by default) |
 
-> **Redis Insight** is built into the `redis/redis-stack` image and served from the same
-> container as Redis (port 8001 inside the container, mapped to `DLH_REDIS_GUI_PORT`).
-> No separate container is required.  On first visit add a connection to
-> `dlh-redis:6379` (or `127.0.0.1:6379` from the host) with your `REDIS_PASSWORD`.
+> **Redis Insight** is provided as a separate service (`dlh-redis-insight`). 
+> On first visit, add a connection to `dlh-redis:6379` with your `REDIS_PASSWORD`.
 
 All credentials are set in `.env`. Default values are for local development only —
 **rotate all passwords before production use.**
@@ -180,7 +180,7 @@ DataLakehouse_backup_YYYYMMDD_HHMM.tar.gz
 bash scripts/restore.sh /path/to/DataLakehouse_backup_YYYYMMDD_HHMM.tar.gz [target_parent_dir]
 
 # Khoi dong lai stack
-docker compose -f docker-compose.dlh.yaml -f docker-compose.infra.yaml up -d
+docker compose up -d
 ```
 
 Luu y: backup bo qua thu muc virtual env va thu muc git de giam dung luong.
