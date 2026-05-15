@@ -10,7 +10,7 @@ ARCHIVE_PATH="${OUT_DIR}/${ARCHIVE_NAME}"
 mkdir -p "${OUT_DIR}"
 
 # Stop stack to keep data consistent
-( cd "${ROOT_DIR}" && docker compose -f docker-compose.dlh.yaml -f docker-compose.infra.yaml down )
+( cd "${ROOT_DIR}" && docker compose down )
 
 # Create archive
 ( cd "$(dirname "${ROOT_DIR}")" && \

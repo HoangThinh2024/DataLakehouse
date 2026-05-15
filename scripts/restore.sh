@@ -31,4 +31,4 @@ fi
 echo "Restore complete at: ${TARGET_DIR}"
 echo "Next:"
 echo "  cd ${TARGET_DIR}"
-echo "  docker compose -f docker-compose.dlh.yaml -f docker-compose.infra.yaml up -d"
+echo "  docker compose up -d"

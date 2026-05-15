@@ -34,7 +34,8 @@ and business intelligence dashboards — all on a single host.
 | **Dashboards** | Apache Superset | Business intelligence dashboards |
 | **Monitoring** | Grafana | Pipeline operational monitoring |
 | **Identity** | Authentik | Centralised SSO and RBAC |
-| **Cache / GUI** | Redis Stack | Shared cache/queue + built-in Redis Insight UI |
+| **Cache** | Redis 8 | Shared high-performance cache and queue |
+| **GUI (Redis)** | Redis Insight | Web-based management for Redis |
 | **SQL IDE** | CloudBeaver | Web-based SQL client for PostgreSQL and ClickHouse |
 | **Remote Desktop** | Apache Guacamole | Browser-based VNC/RDP/SSH remote desktop gateway |
 | **Docker Mgmt** | Dockhand | Lightweight web-based Docker management UI |
