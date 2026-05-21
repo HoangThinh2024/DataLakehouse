@@ -105,7 +105,7 @@ ClickHouse analytics.project_reports (Excel)
 ### Excel upload → Lakehouse
 
 ```
-Excel file uploaded to RustFS bronze/excel_upload/
+Excel file uploaded to RustFS bronze/ (e.g. prefix Data Mẫu 12 dự án/)
     │
     ▼  [extract_excel_from_rustfs.py]
     ▼  [clean_excel_data.py]

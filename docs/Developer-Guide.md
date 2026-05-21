@@ -187,7 +187,7 @@ df = read_latest_layer(bucket='silver', prefix='Demo', date_str='2024-11-01')
 
 5. **Test** the pipeline via the Mage UI or CLI:
    ```bash
-   docker compose exec dlh-mage magic run your_new_pipeline
+    docker compose exec dlh-mage mage run /home/src your_new_pipeline
    ```
 
 ---
@@ -269,6 +269,12 @@ bash scripts/stackctl.sh check-system
 | `scripts/maintenance_tasks.py` | ClickHouse backup + RustFS cleanup |
 | `scripts/realtime_watcher.sh` | File-upload event watcher → ETL trigger (with lock file protection) |
 | `scripts/setup_ufw_docker.sh` | Docker-aware UFW firewall management |
+| `scripts/cleanup_lakehouse_data.py` | Lakehouse purge & clean reload (Silver/Gold layers clean restart) |
+| `scripts/durability_test.py` | Watcher & pipeline load/stress tester |
+| `scripts/test_individual_services.py` | Individual container and services diagnostics check |
+| `scripts/backup.sh` / `restore.sh` | Compressed stack backup and restore (code + volumes) |
+| `scripts/deploy_connectors.sh` | Register CDC source & sink connectors in Kafka Connect |
+| `scripts/setup_clickhouse_kafka.sh` | Setup ClickHouse Kafka Engine tables and MV for CDC |
 
 ---
 

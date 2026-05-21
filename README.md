@@ -211,7 +211,11 @@ DataLakehouse/
 │   ├── demo_to_lakehouse.py    # Sample data loader
 │   ├── verify_lakehouse_architecture.py   # End-to-end architecture validator
 │   ├── maintenance_tasks.py    # ClickHouse backup + RustFS cleanup
-│   ├── realtime_watcher.sh     # File-upload event watcher → ETL trigger
+│   ├── realtime_watcher.sh     # File-upload event watcher (monitors S3) → ETL trigger
+│   ├── cleanup_lakehouse_data.py # Lakehouse purge and clean reload
+│   ├── durability_test.py      # Watcher & pipeline stability/load test
+│   ├── test_individual_services.py # Stack container and services diagnostics check
+│   ├── backup.sh / restore.sh  # Stack backup and restore scripts
 │   └── setup_ufw_docker.sh     # Docker-aware UFW firewall management
 │
 └── docs/

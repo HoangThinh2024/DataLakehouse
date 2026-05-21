@@ -7,6 +7,8 @@ dependencies = [
   "boto3>=1.34.0",
   "psycopg2-binary>=2.9.9",
   "requests>=2.31.0",
+  "python-dotenv>=1.0.1",
+  "clickhouse-driver>=0.2.9",
 ]
 
 [dependency-groups]

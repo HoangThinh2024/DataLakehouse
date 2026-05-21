@@ -278,8 +278,7 @@ bash scripts/stackctl.sh redeploy --with-etl
 
 ### Enable realtime processing for file uploads
 
-The watcher script now includes **lock file protection** to prevent race
-conditions from multiple simultaneous file uploads.
+The watcher script monitors the S3 `bronze` bucket recursively by polling the `dlh-rustfs` container every 10 seconds. It detects changes using `docker exec` commands to find updated metadata files (like `xl.meta` inside `.xlsx/` or `.csv/` paths) and triggers the corresponding Mage pipeline. It includes **lock file protection** to prevent race conditions from multiple simultaneous file uploads.
 
 ```bash
 # Start in foreground

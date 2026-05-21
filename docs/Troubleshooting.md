@@ -87,7 +87,7 @@ bash scripts/setup.sh
 
 Check the pipeline run status:
 ```bash
-docker compose exec dlh-mage magic run etl_postgres_to_lakehouse
+docker compose exec dlh-mage mage run /home/src etl_postgres_to_lakehouse
 bash scripts/stackctl.sh logs dlh-mage
 ```
 

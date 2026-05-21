@@ -92,7 +92,8 @@ blocks:
 - all_upstream_blocks_executed: true
   color: null
   configuration: {}
-  downstream_blocks: []
+  downstream_blocks:
+  - run_dbt_transformations
   executor_config: null
   executor_type: local_python
   has_callback: false
@@ -109,7 +110,8 @@ blocks:
 - all_upstream_blocks_executed: true
   color: null
   configuration: {}
-  downstream_blocks: []
+  downstream_blocks:
+  - run_dbt_transformations
   executor_config: null
   executor_type: local_python
   has_callback: false
@@ -122,6 +124,24 @@ blocks:
   upstream_blocks:
   - transform_gold_postgres
   uuid: load_to_clickhouse
+
+- all_upstream_blocks_executed: true
+  color: pink
+  configuration: {}
+  downstream_blocks: []
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: Run dbt Transformations
+  retry_config: null
+  status: not_executed
+  timeout: null
+  type: custom
+  upstream_blocks:
+  - gold_to_rustfs_postgres
+  - load_to_clickhouse
+  uuid: run_dbt_transformations
 
 name: ETL Postgres to Lakehouse
 type: python

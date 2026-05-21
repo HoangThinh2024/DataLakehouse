@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Real-time Data Watcher & Ingester for DataLakehouse
-# 1. Monitors mage/bronze_local for new files and ingests them to S3.
-# 2. Monitors S3 bronze bucket and triggers Mage AI pipelines.
+# Monitors S3 bronze bucket recursively and triggers Mage AI pipelines.
 
 set -euo pipefail
 
@@ -26,12 +25,13 @@ if ! flock -n 200; then
   exit 1
 fi
 
-header "DataLakehouse Real-time Watcher & Ingester"
-info "Monitoring local: mage/bronze_local/"
-info "Monitoring S3:    dlh-rustfs (bronze bucket)"
+header "DataLakehouse Real-time S3 Event Watcher"
+info "Monitoring S3:    dlh-rustfs (bronze bucket, recursive)"
 info "Polling interval: 10s"
 
 last_s3_state=""
+last_excel_state=""
+last_csv_state=""
 
 # Cleanup on exit
 cleanup() {
@@ -42,28 +42,17 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 while true; do
-  # --- PHASE 1: LOCAL INGESTION ---
-  # Check if there are any .xlsx or .csv files in mage/bronze_local
-  if ls "$REPO_ROOT/mage/bronze_local/"*.xlsx "$REPO_ROOT/mage/bronze_local/"*.csv 1>/dev/null 2>&1; then
-    info "New local files detected. Starting ingestion to S3 Bronze..."
-    if uv run --with boto3 --with python-dotenv python "$REPO_ROOT/scripts/ingest_to_bronze.py"; then
-      info "✓ Local ingestion complete."
-    else
-      err "✗ Local ingestion failed!"
-    fi
-  fi
-
-  # --- PHASE 2: S3 MONITORING & PIPELINE TRIGGER ---
+  # --- S3 MONITORING & PIPELINE TRIGGER ---
   if ! docker ps -q --filter "name=dlh-rustfs" | grep -q . ; then
     warn "Container dlh-rustfs is not running. Skipping S3 check..."
     sleep 10
     continue
   fi
 
-  # Detect changes in S3 Bronze (Excel)
-  current_excel_state=$(docker exec dlh-rustfs ls -lR "/data/bronze/Data Mẫu 12 dự án" 2>/dev/null | grep ".xlsx" || echo "")
-  # Detect changes in S3 Bronze (CSV)
-  current_csv_state=$(docker exec dlh-rustfs ls -lR /data/bronze/csv_upload 2>/dev/null | grep ".csv" || echo "")
+  # Detect changes in S3 Bronze recursively for Excel files (monitoring xl.meta within .xlsx folders)
+  current_excel_state=$(docker exec dlh-rustfs find /data/bronze -path "*.xlsx/xl.meta" 2>/dev/null | sort | xargs -I {} docker exec dlh-rustfs stat -c "%n %s %Y" {} 2>/dev/null || echo "")
+  # Detect changes in S3 Bronze recursively for CSV files (monitoring xl.meta within .csv folders)
+  current_csv_state=$(docker exec dlh-rustfs find /data/bronze -path "*.csv/xl.meta" 2>/dev/null | sort | xargs -I {} docker exec dlh-rustfs stat -c "%n %s %Y" {} 2>/dev/null || echo "")
   
   current_s3_state="${current_excel_state}${current_csv_state}"
 
@@ -74,18 +63,20 @@ while true; do
       header "Change Detected in RustFS Bronze"
       
       # Trigger Excel pipeline if Excel files changed
-      if [[ "$current_excel_state" != *"${last_s3_state}"* ]]; then
+      if [[ "$current_excel_state" != "$last_excel_state" ]]; then
         info "Triggering Mage Pipeline: $PIPELINE_EXCEL ..."
         docker exec dlh-mage mage run /home/src "$PIPELINE_EXCEL" || err "✗ $PIPELINE_EXCEL failed!"
       fi
 
       # Trigger CSV pipeline if CSV files changed
-      if [[ "$current_csv_state" != *"${last_s3_state}"* ]]; then
+      if [[ "$current_csv_state" != "$last_csv_state" ]]; then
         info "Triggering Mage Pipeline: $PIPELINE_CSV ..."
         docker exec dlh-mage mage run /home/src "$PIPELINE_CSV" || err "✗ $PIPELINE_CSV failed!"
       fi
     fi
     last_s3_state="$current_s3_state"
+    last_excel_state="$current_excel_state"
+    last_csv_state="$current_csv_state"
   fi
   
   sleep 10
