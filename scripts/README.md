@@ -149,6 +149,39 @@ inside and outside the container network.
 
 ---
 
+### `cleanup_lakehouse_data.py` – Lakehouse Purge & Clean Reload
+
+Purges existing processed data from the lakehouse to enable a clean restart.
+
+```bash
+uv run python scripts/cleanup_lakehouse_data.py
+```
+
+What it does:
+1. **S3 Purge:** Deletes Excel-derived Parquet files from Silver (`excel_projects/`) and Gold (`projects/` and `workload/`) layers.
+2. **ClickHouse Truncate:** Truncates serving tables (`analytics.project_reports`, `analytics.gold_projects_summary`, `analytics.gold_workload_report`) and the upload event log (`analytics.excel_upload_events`).
+3. **Mage Reload:** Automatically triggers the `etl_excel_to_lakehouse` Mage pipeline to re-read all raw Excel files in the Bronze layer and rebuild the warehouse cleanly.
+
+---
+
+### `test_individual_services.py` – Individual Service Diagnostics
+
+Performs deep functional diagnostics on individual stack components.
+
+```bash
+uv run python scripts/test_individual_services.py
+```
+
+What it checks:
+1. **Container States:** Verifies all 18 Docker containers are running.
+2. **PostgreSQL:** Checks readiness and runs test queries.
+3. **ClickHouse:** Validates OLAP engine queries.
+4. **Redis:** Validates memory store via PING commands.
+5. **Redpanda:** Performs Kafka cluster health analysis.
+6. **HTTP Ports:** Validates all web consoles and APIs (Mage, Superset, Grafana, Authentik, Redpanda Console, CloudBeaver, Dockhand).
+
+---
+
 ### `reconcile_data.py` – Data healer and sync checker
 
 Ensures data integrity across the lakehouse layers by comparing source files in
@@ -192,8 +225,7 @@ docker exec dlh-mage python3 /home/src/scripts/maintenance_tasks.py
 
 ### `realtime_watcher.sh` – File-upload trigger
 
-Monitors the RustFS Docker volume using `inotifywait`. When a new Excel or CSV
-file is detected, it immediately triggers the corresponding Mage pipeline.
+Monitors S3 (RustFS) by polling the `dlh-rustfs` container every 10 seconds. It recursively lists the bronze bucket looking for updated metadata files (such as `xl.meta` inside `.xlsx/` or `.csv/` object folders) using `find` and `stat` via `docker exec`. When a change is detected, it triggers the corresponding Mage pipeline via `docker exec`.
 
 **Now includes lock file protection** to prevent race conditions from multiple
 simultaneous uploads.
@@ -227,6 +259,68 @@ bash scripts/setup_ufw_docker.sh --down
 ```
 
 **Important:** This script does **not** modify SSH rules. Safe to run on remote servers.
+
+---
+
+### `durability_test.py` – Watcher & Pipeline Load Tester
+
+Automates load testing by uploading files directly to S3 and verifying pipeline triggering.
+
+```bash
+uv run python scripts/durability_test.py
+```
+
+What it does:
+1. Resets any running `realtime_watcher.sh` instances and starts a fresh one in the background (logging to `watcher_test.log`).
+2. Uploads 2 Excel files and 1 CSV file directly to RustFS S3 buckets under separate polling windows (using unique filenames).
+3. Verifies that ClickHouse serving tables receive new rows.
+4. Asserts that the watcher successfully logs 2 Excel triggers and 1 CSV trigger with no errors.
+5. Cleans up test objects from S3 and stops the background watcher process.
+
+---
+
+### `backup.sh` & `restore.sh` – Stack Backup & Restore
+
+Performs compressed snapshots of source files and Docker volumes.
+
+```bash
+# Backup (stops stack, packages code + volumes, starts stack)
+bash scripts/backup.sh
+
+# Restore
+bash scripts/restore.sh /path/to/backup.tar.gz [target_parent_directory]
+```
+
+---
+
+### `deploy_connectors.sh` – Kafka Connector Registration
+
+Registers PostgreSQL CDC source and RustFS S3 sink connectors in Kafka Connect.
+
+```bash
+bash scripts/deploy_connectors.sh
+```
+
+---
+
+### `setup_clickhouse_kafka.sh` – ClickHouse Kafka CDC Setup
+
+Applies SQL DDL to ClickHouse to consume CDC records from Redpanda (via Kafka Engine tables).
+
+```bash
+bash scripts/setup_clickhouse_kafka.sh
+```
+
+---
+
+### S3 Utility Scripts – `count_datalake_objects.py` & `list_datalake_contents.py`
+
+S3 utility scripts to count objects across all buckets or list object metadata.
+
+```bash
+uv run python scripts/count_datalake_objects.py
+uv run python scripts/list_datalake_contents.py
+```
 
 ---
 

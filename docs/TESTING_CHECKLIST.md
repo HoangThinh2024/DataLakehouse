@@ -87,7 +87,7 @@ Or check via the RustFS Console at `http://localhost:29101`.
 ```bash
 # Via Mage UI: http://localhost:26789 → Pipelines → etl_postgres_to_lakehouse → Run Now
 # Or via CLI:
-docker compose exec dlh-mage magic run etl_postgres_to_lakehouse
+docker compose exec dlh-mage mage run /home/src etl_postgres_to_lakehouse
 ```
 
 ### Step 2 – Monitor execution
@@ -171,10 +171,10 @@ Expected: count > 0.
 
 ```bash
 # Upload a sample Excel file from the samples/ directory
-mc cp samples/Tong\ hop\ tien\ do\ 12\ du\ an.xlsx local/bronze/excel_upload/
+mc cp samples/Tong\ hop\ tien\ do\ 12\ du\ an.xlsx "local/bronze/Data Mẫu 12 dự án/"
 
 # Trigger manually via Mage UI or:
-docker compose exec dlh-mage magic run etl_excel_to_lakehouse
+docker compose exec dlh-mage mage run /home/src etl_excel_to_lakehouse
 
 # Then verify:
 docker compose exec dlh-clickhouse clickhouse-client \

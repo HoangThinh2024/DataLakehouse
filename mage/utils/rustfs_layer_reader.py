@@ -174,23 +174,129 @@ def read_all_gold() -> dict:
     }
 
 
+def read_accumulated_layer(bucket: str, prefix: str, deduplicate_by: Optional[str] = None, timestamp_col: Optional[str] = None) -> pd.DataFrame:
+    """
+    Read all parquet files from all date partitions under a layer prefix,
+    combine them, and optionally deduplicate to keep only the latest version of each group.
+    """
+    client = _s3_client()
+    dfs = []
+    
+    try:
+        paginator = client.get_paginator('list_objects_v2')
+        parquet_count = 0
+        
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+            for obj in page.get('Contents', []):
+                key = obj.get('Key', '')
+                if not key.endswith('.parquet'):
+                    continue
+                if '/dt=' not in key:
+                    continue
+                parquet_count += 1
+                obj_response = client.get_object(Bucket=bucket, Key=key)
+                buffer = io.BytesIO(obj_response['Body'].read())
+                df = pd.read_parquet(buffer, engine='pyarrow')
+                dfs.append(df)
+                print(f"[read_accumulated_layer] Read {len(df)} rows from s3://{bucket}/{key}")
+                
+        if parquet_count == 0:
+            return pd.DataFrame()
+            
+    except ClientError as exc:
+        print(f"[read_accumulated_layer] Error reading s3://{bucket}/{prefix}: {exc}")
+        return pd.DataFrame()
+        
+    if not dfs:
+        return pd.DataFrame()
+        
+    result = pd.concat(dfs, ignore_index=True)
+    print(f"[read_accumulated_layer] Combined {len(result)} rows from {len(dfs)} files")
+    
+    if deduplicate_by and timestamp_col and deduplicate_by in result.columns and timestamp_col in result.columns:
+        result[timestamp_col] = pd.to_datetime(result[timestamp_col], errors='coerce')
+        latest_versions = result.groupby(deduplicate_by)[timestamp_col].max().reset_index()
+        result = pd.merge(result, latest_versions, on=[deduplicate_by, timestamp_col], how='inner')
+        print(f"[read_accumulated_layer] Deduplicated to {len(result)} rows for latest versions of each {deduplicate_by}")
+        
+    return result
+
+
 def read_latest_excel_silver(date_str: Optional[str] = None) -> pd.DataFrame:
     """Read latest Excel projects Silver layer data."""
+    if date_str:
+        bucket = os.getenv('RUSTFS_SILVER_BUCKET', 'silver')
+        prefix = 'excel_projects'
+        return read_latest_layer(bucket, prefix, date_str)
+        
     bucket = os.getenv('RUSTFS_SILVER_BUCKET', 'silver')
     prefix = 'excel_projects'
-    return read_latest_layer(bucket, prefix, date_str)
+    return read_accumulated_layer(
+        bucket=bucket,
+        prefix=prefix,
+        deduplicate_by='_source_file_key',
+        timestamp_col='_extracted_at'
+    )
 
 
 def read_latest_excel_gold_projects(date_str: Optional[str] = None) -> pd.DataFrame:
     """Read latest Excel Gold projects summary aggregation."""
+    if date_str:
+        bucket = os.getenv('RUSTFS_GOLD_BUCKET', 'gold')
+        return read_latest_layer(bucket, 'projects', date_str)
+        
     bucket = os.getenv('RUSTFS_GOLD_BUCKET', 'gold')
-    return read_latest_layer(bucket, 'projects', date_str)
+    return read_accumulated_layer(
+        bucket=bucket,
+        prefix='projects',
+        deduplicate_by='_source_file_key',
+        timestamp_col='_gold_processed_at'
+    )
 
 
 def read_latest_excel_gold_workload(date_str: Optional[str] = None) -> pd.DataFrame:
     """Read latest Excel Gold workload aggregation."""
-    bucket = os.getenv('RUSTFS_GOLD_BUCKET', 'gold')
-    return read_latest_layer(bucket, 'workload', date_str)
+    if date_str:
+        bucket = os.getenv('RUSTFS_GOLD_BUCKET', 'gold')
+        return read_latest_layer(bucket, 'workload', date_str)
+        
+    # Dynamically calculate workload from accumulated Silver to ensure consistency across all projects
+    df_silver = read_latest_excel_silver()
+    if df_silver.empty:
+        return pd.DataFrame()
+        
+    df = df_silver.copy()
+    assignee_col = 'Người thực hiện'
+    fallback_col = 'Người giao việc'
+    
+    if assignee_col not in df.columns:
+        possible_names = ['assignee', 'người thực hiện', 'người làm', 'nhân sự']
+        for col in df.columns:
+            if str(col).lower().strip() in possible_names:
+                df[assignee_col] = df[col]
+                break
+                
+    if assignee_col in df.columns:
+        if fallback_col in df.columns:
+            df[assignee_col] = df[assignee_col].fillna(df[fallback_col])
+            df.loc[df[assignee_col].isin(['', 'nan', 'None']), assignee_col] = df.loc[df[assignee_col].isin(['', 'nan', 'None']), fallback_col]
+            
+        df[assignee_col] = df[assignee_col].fillna('Chưa phân công').replace(
+            {'': 'Chưa phân công', 'nan': 'Chưa phân công', 'None': 'Chưa phân công'}
+        )
+    else:
+        df[assignee_col] = df[fallback_col] if fallback_col in df.columns else 'Chưa phân công'
+        df[assignee_col] = df[assignee_col].fillna('Chưa phân công')
+        
+    workload = df.groupby('Người thực hiện').agg(
+        task_count=('Mã công việc (ID)', 'count'),
+        urgent_tasks=('Khẩn cấp', lambda x: (x == 'Có').sum())
+    ).reset_index()
+    
+    workload['_pipeline_run_id'] = 'dynamic_calc'
+    workload['_gold_processed_at'] = dt.datetime.now(dt.timezone.utc).isoformat().replace('+00:00', 'Z')
+    return workload
+
 
 
 def read_all_excel_gold() -> dict:

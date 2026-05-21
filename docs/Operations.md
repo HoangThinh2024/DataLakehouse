@@ -232,9 +232,9 @@ If you prefer to run steps individually:
 ### Via CLI inside the Mage container
 
 ```bash
-docker compose exec dlh-mage magic run etl_postgres_to_lakehouse
-docker compose exec dlh-mage magic run etl_excel_to_lakehouse
-docker compose exec dlh-mage magic run etl_csv_upload_to_reporting
+docker compose exec dlh-mage mage run /home/src etl_postgres_to_lakehouse
+docker compose exec dlh-mage mage run /home/src etl_excel_to_lakehouse
+docker compose exec dlh-mage mage run /home/src etl_csv_upload_to_reporting
 ```
 
 ### Loading sample data into PostgreSQL
@@ -247,7 +247,7 @@ docker exec -i dlh-postgres psql -U postgres -d datalakehouse < postgres/init/00
 
 ## Realtime File Watcher
 
-`scripts/realtime_watcher.sh` monitors the RustFS Docker volume and triggers ETL automatically when files are uploaded. It includes **lock file protection** to prevent race conditions during simultaneous uploads.
+`scripts/realtime_watcher.sh` monitors the RustFS S3 `bronze` bucket recursively by polling the `dlh-rustfs` container every 10 seconds. It detects changes using `docker exec` (via `find` and `stat` for metadata files inside `.xlsx` and `.csv` object paths) and triggers Mage ETL pipelines automatically when files are uploaded. It includes **lock file protection** to prevent race conditions during simultaneous uploads.
 
 ```bash
 # Foreground

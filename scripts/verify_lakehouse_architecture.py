@@ -288,6 +288,16 @@ def check_clickhouse_architecture(results: dict) -> bool:
 
 
 def main():
+    # Load .env if running locally
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env_path = os.path.join(repo_root, ".env")
+    if os.path.exists(env_path):
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(env_path)
+        except ImportError:
+            pass
+
     parser = argparse.ArgumentParser(description="Verify Data Lakehouse Architecture")
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
     args = parser.parse_args()

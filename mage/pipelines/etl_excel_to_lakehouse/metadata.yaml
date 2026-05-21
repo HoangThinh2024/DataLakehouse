@@ -104,7 +104,8 @@ blocks:
 - all_upstream_blocks_executed: true
   color: null
   configuration: {}
-  downstream_blocks: []
+  downstream_blocks:
+  - run_dbt_transformations
   executor_config: null
   executor_type: local_python
   has_callback: false
@@ -120,7 +121,8 @@ blocks:
 - all_upstream_blocks_executed: true
   color: null
   configuration: {}
-  downstream_blocks: []
+  downstream_blocks:
+  - run_dbt_transformations
   executor_config: null
   executor_type: local_python
   has_callback: false

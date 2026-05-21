@@ -4,7 +4,7 @@
   "database.hostname": "dlh-postgres",
   "database.port": "5432",
   "database.user": "doe",
-  "database.password": "Do12345678910..",
+  "database.password": "YOUR_POSTGRES_PASSWORD",
   "database.dbname": "datalakehouse",
   "database.server.name": "dbserver1",
   "topic.prefix": "dbserver1",

@@ -377,7 +377,7 @@ gold/demo_by_category/dt=YYYY-MM-DD/<run_id>.parquet
 
 **File:** `mage/pipelines/etl_excel_to_lakehouse/`
 **Trigger:** Manual or file-upload watcher
-**Source:** Excel files in RustFS `bronze/excel_upload/`
+**Source:** Excel files in RustFS `bronze/` (e.g. prefix `Data Mẫu 12 dự án/`)
 **Destination:** RustFS (Silver/Gold) + ClickHouse
 
 This pipeline handles the "12 projects" reporting. It enforces a strict Medallion flow where Excel data is cleaned, stored as Silver Parquet, aggregated, stored as Gold Parquet, and finally loaded into ClickHouse.

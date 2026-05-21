@@ -1,11 +1,31 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# ============================================================================
+# DataLakehouse – ClickHouse Kafka Ingestion Setup Script
+# ============================================================================
+
 set -e
 
-DB="analytics"
-USER="doe"
-PASS="Do12345678910.."
-BROKERS="redpanda:9092"
-REGISTRY="http://redpanda:8081"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENV_FILE="$PROJECT_ROOT/.env"
+
+# Load environment library
+if [[ -f "$SCRIPT_DIR/lib_env.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR/lib_env.sh"
+else
+  echo "Error: lib_env.sh not found in $SCRIPT_DIR"
+  exit 1
+fi
+
+# Load environment variables
+load_env_file "$ENV_FILE"
+
+DB="${CLICKHOUSE_DB:-analytics}"
+USER="${CLICKHOUSE_USER:-doe}"
+PASS="${CLICKHOUSE_PASSWORD:-change-me-in-production}"
+BROKERS="${REDPANDA_BROKERS:-redpanda:9092}"
+REGISTRY="${SCHEMA_REGISTRY_URL:-http://redpanda:8081}"
 
 echo "Creating Kafka Engine table: kafka_demo..."
 docker exec dlh-clickhouse clickhouse-client -u $USER --password "$PASS" -d $DB -q "

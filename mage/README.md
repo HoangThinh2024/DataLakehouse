@@ -18,7 +18,6 @@ mage/
 ├── utils/                  # Shared utilities
 │   ├── __init__.py
 │   └── rustfs_layer_reader.py   # Helper functions for reading RustFS lake layers
-└── bronze_local/           # Local staging area for file uploads (used by watchers)
 ```
 
 ---
@@ -28,7 +27,7 @@ mage/
 | Pipeline | Trigger | Source | Destination |
 |----------|---------|--------|-------------|
 | `etl_postgres_to_lakehouse` | Scheduled (every 6 h) | PostgreSQL table | RustFS Bronze/Silver/Gold + ClickHouse |
-| `etl_excel_to_lakehouse` | Manual / watcher | Excel files in RustFS `bronze/excel_upload/` | ClickHouse `project_reports`, `gold_projects_summary`, `gold_workload_report` |
+| `etl_excel_to_lakehouse` | Manual / watcher | Excel files in RustFS `bronze/` (e.g., prefix `Data Mẫu 12 dự án/`) | ClickHouse `project_reports`, `gold_projects_summary`, `gold_workload_report` |
 | `etl_csv_upload_to_reporting` | Scheduled (every 5 min) | CSV files in RustFS `bronze/csv_upload/` | RustFS Silver + ClickHouse `csv_clean_rows` |
 
 ---
@@ -56,7 +55,7 @@ All credentials are resolved from environment variables at runtime using Mage's
 | File | Description |
 |------|-------------|
 | `data_loaders/extract_postgres.py` | Connects to PostgreSQL, auto-discovers source table, returns DataFrame with lineage metadata |
-| `data_loaders/extract_excel_from_rustfs.py` | Lists and downloads Excel files from RustFS `bronze/excel_upload/`, returns concatenated DataFrame |
+| `data_loaders/extract_excel_from_rustfs.py` | Lists and downloads Excel files from RustFS `bronze/` bucket (e.g. prefix `Data Mẫu 12 dự án/`), returns concatenated DataFrame |
 | `data_loaders/extract_csv_from_rustfs.py` | Lists and downloads CSV files from RustFS `bronze/csv_upload/`, returns raw DataFrame |
 
 **Table selection logic in `extract_postgres.py`:**

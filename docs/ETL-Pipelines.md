@@ -10,7 +10,7 @@ the most common data ingestion patterns.
 | Pipeline | Schedule | Source | Output |
 |----------|----------|--------|--------|
 | `etl_postgres_to_lakehouse` | Every 6 h (`0 */6 * * *`) | PostgreSQL table | RustFS Bronze/Silver/Gold + ClickHouse |
-| `etl_excel_to_lakehouse` | Manual / file-upload watcher | Excel files in RustFS `bronze/excel_upload/` | ClickHouse `project_reports`, gold summary tables |
+| `etl_excel_to_lakehouse` | Manual / watcher | Excel files in RustFS `bronze/` (e.g. prefix `Data Mẫu 12 dự án/`) | ClickHouse `project_reports`, gold summary tables |
 | `etl_csv_upload_to_reporting` | Every 5 min | CSV files in RustFS `bronze/csv_upload/` | RustFS Silver + ClickHouse `csv_clean_rows` |
 
 ---
@@ -85,7 +85,7 @@ s3://gold/{table}_{granularity}/dt=YYYY-MM-DD/{run_id}.parquet
 
 **Purpose:** Processes Excel project-management reports uploaded to RustFS and produces ClickHouse tables for Superset dashboards.
 
-**Trigger:** Manual or automatically via `scripts/realtime_watcher.sh` when `.xlsx` files appear in `bronze/excel_upload/`.
+**Trigger:** Manual or automatically via `scripts/realtime_watcher.sh` when `.xlsx` files appear in the `bronze` bucket (e.g. under `Data Mẫu 12 dự án/`).
 
 ### Blocks
 
@@ -95,7 +95,7 @@ s3://gold/{table}_{granularity}/dt=YYYY-MM-DD/{run_id}.parquet
 | 2 | `clean_excel_data` | transformer | `mage/transformers/clean_excel_data.py` |
 | 3 | `load_excel_to_clickhouse` | data_exporter | `mage/data_exporters/load_excel_to_clickhouse.py` |
 
-**`extract_excel_from_rustfs`** — Lists and downloads all Excel files from `bronze/excel_upload/`, concatenates them into a single DataFrame.
+**`extract_excel_from_rustfs`** — Lists and downloads all Excel files from the `bronze` bucket (e.g., prefix `Data Mẫu 12 dự án/`), concatenates them into a single DataFrame.
 
 **`clean_excel_data`** — Strips junk rows (empty IDs), normalises Vietnamese status values, fills missing assignees.
 
@@ -135,9 +135,9 @@ s3://gold/{table}_{granularity}/dt=YYYY-MM-DD/{run_id}.parquet
 ### Via CLI inside the Mage container
 
 ```bash
-docker compose exec dlh-mage magic run etl_postgres_to_lakehouse
-docker compose exec dlh-mage magic run etl_excel_to_lakehouse
-docker compose exec dlh-mage magic run etl_csv_upload_to_reporting
+docker compose exec dlh-mage mage run /home/src etl_postgres_to_lakehouse
+docker compose exec dlh-mage mage run /home/src etl_excel_to_lakehouse
+docker compose exec dlh-mage mage run /home/src etl_csv_upload_to_reporting
 ```
 
 ### Via automation script
@@ -166,7 +166,7 @@ bash scripts/stackctl.sh redeploy --with-etl
 
 ## Realtime File Watcher
 
-`scripts/realtime_watcher.sh` uses `inotifywait` to watch the Docker volume mount path for RustFS and triggers the appropriate pipeline within seconds of a file upload.
+`scripts/realtime_watcher.sh` monitors the RustFS S3 `bronze` bucket recursively by polling the `dlh-rustfs` container every 10 seconds. It detects changes using `docker exec` (via `find` and `stat` for metadata files inside `.xlsx` and `.csv` object paths) and triggers the appropriate pipeline within seconds of a file upload.
 
 **Important:** The watcher now includes **lock file protection** to prevent
 race conditions and duplicate pipeline triggers if multiple files are uploaded
@@ -194,7 +194,7 @@ nohup bash scripts/realtime_watcher.sh >> /var/log/dlh-watcher.log 2>&1 &
 1. Open the RustFS Console at http://localhost:29101.
 2. Log in with your `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`.
 3. Navigate to the target bucket and prefix:
-   - Excel files → `bronze` bucket → `excel_upload/` prefix
+   - Excel files → `bronze` bucket → `Data Mẫu 12 dự án/` prefix
    - CSV files → `bronze` bucket → `csv_upload/` prefix
 4. Upload the file. The watcher (if running) will trigger the pipeline automatically.
 

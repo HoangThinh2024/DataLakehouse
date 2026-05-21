@@ -6,6 +6,11 @@ import time
 from clickhouse_driver import Client
 import boto3
 from botocore.client import Config as BotoConfig
+from dotenv import load_dotenv
+
+# Setup paths
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(REPO_ROOT, ".env"))
 
 # Configure logging
 logging.basicConfig(
@@ -69,7 +74,7 @@ def check_sync_status():
         ch = get_ch_client()
         # Get total expected rows from successful events, only considering the latest event per file
         query = """
-            SELECT sum(row_count) FROM (
+            SELECT max(row_count) FROM (
                 SELECT source_key, argMax(row_count, processed_at) as row_count, argMax(status, processed_at) as latest_status
                 FROM excel_upload_events 
                 GROUP BY source_key
