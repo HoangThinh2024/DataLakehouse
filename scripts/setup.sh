@@ -219,7 +219,6 @@ SUPERSET_ADMIN_PASSWORD=$(ask_input "Superset admin password" "${SUPERSET_ADMIN_
 GRAFANA_DB_PASSWORD=$(ask_input "Grafana DB password" "${GRAFANA_DB_PASSWORD:-change-this-grafana-db-password}")
 GRAFANA_ADMIN_USER=$(ask_input "Grafana admin user" "${GRAFANA_ADMIN_USER:-admin}")
 GRAFANA_ADMIN_PASSWORD=$(ask_input "Grafana admin password" "${GRAFANA_ADMIN_PASSWORD:-admin}")
-GUACAMOLE_DB_PASSWORD=$(ask_input "Guacamole DB password" "${GUACAMOLE_DB_PASSWORD:-change-this-guacamole-db-password}")
 
 # =============================================================
 header "8 / 8 - Port Assignments"
@@ -230,8 +229,6 @@ SUGGESTED_SUPERSET_PORT=$(suggest_port "${DLH_SUPERSET_PORT:-28088}")
 DLH_SUPERSET_PORT=$(ask_input "Host port - Superset" "$SUGGESTED_SUPERSET_PORT")
 SUGGESTED_GRAFANA_PORT=$(suggest_port "${DLH_GRAFANA_PORT:-23001}")
 DLH_GRAFANA_PORT=$(ask_input "Host port - Grafana" "$SUGGESTED_GRAFANA_PORT")
-SUGGESTED_GUACAMOLE_PORT=$(suggest_port "${DLH_GUACAMOLE_PORT:-28090}")
-DLH_GUACAMOLE_PORT=$(ask_input "Host port - Guacamole" "$SUGGESTED_GUACAMOLE_PORT")
 
 
 
@@ -278,7 +275,6 @@ MAGE_IMAGE_VERSION=${MAGE_IMAGE_VERSION}
 SUPERSET_IMAGE_VERSION=${SUPERSET_IMAGE_VERSION}
 GRAFANA_IMAGE_VERSION=${GRAFANA_IMAGE_VERSION}
 REDIS_STACK_IMAGE_VERSION=${REDIS_STACK_IMAGE_VERSION:-latest}
-AUTHENTIK_IMAGE_VERSION=${AUTHENTIK_IMAGE_VERSION:-2026.2.1}
 
 # - Core PostgreSQL (System Admin) -
 POSTGRES_DB=${POSTGRES_DB}
@@ -330,7 +326,6 @@ REDIS_MAXMEMORY_POLICY=${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
 REDIS_VM_OVERCOMMIT_MEMORY=${REDIS_VM_OVERCOMMIT_MEMORY:-1}
 REDIS_STACK_IMAGE_VERSION=${REDIS_STACK_IMAGE_VERSION:-latest}
 DLH_REDIS_GUI_PORT=${DLH_REDIS_GUI_PORT:-25540}
-REDIS_AUTHENTIK_DB=${REDIS_AUTHENTIK_DB:-1}
 SUPERSET_REDIS_CACHE_DB=${SUPERSET_REDIS_CACHE_DB:-2}
 SUPERSET_REDIS_RESULTS_DB=${SUPERSET_REDIS_RESULTS_DB:-3}
 
@@ -368,16 +363,6 @@ SUPERSET_ADMIN_EMAIL=admin@superset.local
 SUPERSET_PREFERRED_URL_SCHEME=http
 SUPERSET_PIP_REQUIREMENTS=${SUPERSET_PIP_REQUIREMENTS:-psycopg2-binary==2.9.9 clickhouse-connect==0.8.3}
 
-# - Authentik (Identity Provider) -
-DLH_AUTHENTIK_PORT=${DLH_AUTHENTIK_PORT:-29090}
-AUTHENTIK_SECRET_KEY=${AUTHENTIK_SECRET_KEY:-replace-this-with-a-long-random-secret}
-AUTHENTIK_DB_NAME=${AUTHENTIK_DB_NAME:-dlh_authentik}
-AUTHENTIK_DB_USER=${AUTHENTIK_DB_USER:-dlh_authentik_user}
-AUTHENTIK_DB_PASSWORD=${AUTHENTIK_DB_PASSWORD:-change-this-authentik-db-password}
-AUTHENTIK_BOOTSTRAP_EMAIL=${AUTHENTIK_BOOTSTRAP_EMAIL:-admin@authentik.local}
-AUTHENTIK_BOOTSTRAP_PASSWORD=${AUTHENTIK_BOOTSTRAP_PASSWORD:-admin}
-AUTHENTIK_BOOTSTRAP_TOKEN=${AUTHENTIK_BOOTSTRAP_TOKEN:-}
-
 # - Grafana (Monitoring & Dashboards) -
 DLH_GRAFANA_PORT=${DLH_GRAFANA_PORT}
 GRAFANA_DB_NAME=dlh_grafana
@@ -385,13 +370,6 @@ GRAFANA_DB_USER=dlh_grafana_user
 GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD}
 GRAFANA_ADMIN_USER=${GRAFANA_ADMIN_USER}
 GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
-
-# - Apache Guacamole (Browser-based Remote Desktop Gateway) -
-GUACAMOLE_IMAGE_VERSION=${GUACAMOLE_IMAGE_VERSION:-latest}
-DLH_GUACAMOLE_PORT=${DLH_GUACAMOLE_PORT}
-GUACAMOLE_DB_NAME=dlh_guacamole
-GUACAMOLE_DB_USER=dlh_guacamole_user
-GUACAMOLE_DB_PASSWORD=${GUACAMOLE_DB_PASSWORD}
 EOF
 
 info ".env written to $ENV_FILE"
@@ -427,7 +405,6 @@ echo "    RustFS     : http://localhost:${DLH_RUSTFS_CONSOLE_PORT}"
 echo "    ClickHouse : http://localhost:${DLH_CLICKHOUSE_HTTP_PORT}"
 echo "    Mage       : http://localhost:${DLH_MAGE_PORT}"
 echo "    Superset   : http://localhost:${DLH_SUPERSET_PORT}"
-echo "    Authentik  : http://localhost:${DLH_AUTHENTIK_PORT:-29090}"
 echo "    Grafana    : http://localhost:${DLH_GRAFANA_PORT}"
 echo "    Redis      : localhost:${DLH_REDIS_PORT:-26379}"
 echo "    Redis GUI  : http://localhost:${DLH_REDIS_GUI_PORT:-25540}"

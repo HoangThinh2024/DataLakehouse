@@ -127,7 +127,7 @@ PostgreSQL / Excel / CSV
 
 The system enforces a **strict Medallion architecture** where all data must reside in the RustFS object store (the **single source of truth**) before any transformation. intermediate states (Silver/Gold) are persisted as Parquet files, allowing ClickHouse to be fully rebuilt from the lake at any time.
 
-Redis  →  Superset cache/results + Authentik queue/cache
+Redis  →  Superset cache/results
 
 ---
 
@@ -219,7 +219,7 @@ DataLakehouse/
     ├── DEPLOYMENT_GUIDE.md     # Step-by-step deployment and operations guide
     ├── PIPELINE_GUIDE.md       # Detailed ETL pipeline block documentation
     ├── VARIABLES_REFERENCE.md  # All .env variables with descriptions and defaults
-    ├── OPERATIONS.md           # Day-2 ops: health, backup, restore, Redis, Authentik
+    ├── OPERATIONS.md           # Day-2 ops: health, backup, restore, Redis
     ├── RUSTFS_LAYER_READER_GUIDE.md  # Developer guide for reading RustFS lake layers
     ├── TESTING_CHECKLIST.md    # End-to-end deployment verification checklist
     ├── ai_context.py           # Semantic metadata for AI assistants (Gemini, Copilot)
@@ -237,7 +237,7 @@ DataLakehouse/
 | [DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) | Prerequisites, bootstrap flow, day-2 operations, firewall setup, production notes |
 | [PIPELINE_GUIDE.md](docs/PIPELINE_GUIDE.md) | Every ETL block explained: variables used, logic, customisation guide |
 | [VARIABLES_REFERENCE.md](docs/VARIABLES_REFERENCE.md) | Complete `.env` variable reference with descriptions and example values |
-| [OPERATIONS.md](docs/OPERATIONS.md) | Lifecycle commands, health monitoring, backup/restore, Redis/Authentik ops |
+| [OPERATIONS.md](docs/OPERATIONS.md) | Lifecycle commands, health monitoring, backup/restore, Redis ops |
 | [RUSTFS_LAYER_READER_GUIDE.md](docs/RUSTFS_LAYER_READER_GUIDE.md) | Developer API for reading Bronze/Silver/Gold layers from Python |
 | [TESTING_CHECKLIST.md](docs/TESTING_CHECKLIST.md) | Step-by-step verification checklist after deployment or changes |
 

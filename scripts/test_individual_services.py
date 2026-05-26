@@ -33,7 +33,6 @@ REDIS_GUI_PORT = os.getenv("DLH_REDIS_GUI_PORT", "25540")
 MAGE_PORT = os.getenv("DLH_MAGE_PORT", "26789")
 SUPERSET_PORT = os.getenv("DLH_SUPERSET_PORT", "28088")
 GRAFANA_PORT = os.getenv("DLH_GRAFANA_PORT", "23001")
-AUTHENTIK_PORT = os.getenv("DLH_AUTHENTIK_PORT", "29090")
 REDPANDA_CONSOLE_PORT = os.getenv("DLH_REDPANDA_CONSOLE_PORT", "29080")
 CLOUDBEAVER_PORT = os.getenv("DLH_CLOUDBEAVER_PORT", "28978")
 DOCKHAND_PORT = os.getenv("DLH_DOCKHAND_PORT", "23000")
@@ -171,9 +170,9 @@ def main():
     containers = [
         "dlh-postgres", "dlh-clickhouse", "dlh-rustfs", "dlh-redis", 
         "dlh-redpanda", "dlh-redpanda-console", "dlh-ingest-cdc", 
-        "dlh-mage", "dlh-superset", "dlh-grafana", "dlh-authentik-server", 
-        "dlh-authentik-worker", "dlh-redis-insight", "dlh-prometheus", 
-        "dlh-node-exporter", "dlh-dockhand", "dlh-cloudbeaver", "zoraxy"
+        "dlh-mage", "dlh-superset", "dlh-grafana", "dlh-redis-insight", 
+        "dlh-prometheus", "dlh-node-exporter", "dlh-dockhand", 
+        "dlh-cloudbeaver", "zoraxy"
     ]
     
     all_ok = True
@@ -218,7 +217,6 @@ def main():
         ("RustFS Web Console", f"http://127.0.0.1:{RUSTFS_CONSOLE_PORT}/rustfs/console/health"),
         ("Superset Health", f"http://127.0.0.1:{SUPERSET_PORT}/health"),
         ("Grafana Health", f"http://127.0.0.1:{GRAFANA_PORT}/api/health"),
-        ("Authentik Ready", f"http://127.0.0.1:{AUTHENTIK_PORT}/-/health/ready/"),
         ("Redpanda Console UI", f"http://127.0.0.1:{REDPANDA_CONSOLE_PORT}/"),
         ("CloudBeaver Database", f"http://127.0.0.1:{CLOUDBEAVER_PORT}/"),
         ("Dockhand Docker GUI", f"http://127.0.0.1:{DOCKHAND_PORT}/"),
