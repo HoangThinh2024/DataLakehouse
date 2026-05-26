@@ -130,7 +130,6 @@ check_env() {
     DLH_REDPANDA_KAFKA_PORT DLH_REDPANDA_CONSOLE_PORT DLH_REDPANDA_REGISTRY_PORT DLH_REDPANDA_PROXY_PORT \
     DLH_RUSTFS_API_PORT DLH_RUSTFS_CONSOLE_PORT DLH_MAGE_PORT DLH_SUPERSET_PORT DLH_GRAFANA_PORT \
     DLH_REDIS_PORT DLH_REDIS_GUI_PORT \
-    DLH_NPM_HTTP_PORT DLH_NPM_HTTPS_PORT DLH_NPM_ADMIN_PORT \
     SUPERSET_ADMIN_USER SUPERSET_PREFERRED_URL_SCHEME
   do
     print_env_value "$key"
@@ -161,7 +160,7 @@ sync_env() {
   load_env_file
   echo "Update mutable environment values. Leave blank to keep the current value."
 
-  local bind_ip app_bind_ip data_bind_ip lan_cidr allow_data_ports postgres_port redpanda_kafka_port redpanda_console_port rustfs_api_port rustfs_console_port clickhouse_http_port clickhouse_tcp_port redis_port redis_gui_port mage_port superset_port grafana_port npm_http_port npm_https_port npm_admin_port superset_scheme mage_owner_email mage_owner_username mage_owner_password
+  local bind_ip app_bind_ip data_bind_ip lan_cidr allow_data_ports postgres_port redpanda_kafka_port redpanda_console_port rustfs_api_port rustfs_console_port clickhouse_http_port clickhouse_tcp_port redis_port redis_gui_port mage_port superset_port grafana_port superset_scheme mage_owner_email mage_owner_username mage_owner_password
   bind_ip="$(ask_input "Bind IP" "${DLH_BIND_IP:-127.0.0.1}")"
   app_bind_ip="$(ask_input "App/UI bind IP" "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}")"
   data_bind_ip="$(ask_input "Data/DB bind IP" "${DLH_DATA_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}")"
@@ -182,9 +181,6 @@ sync_env() {
   mage_owner_password="$(ask_input "Mage default owner password" "${MAGE_DEFAULT_OWNER_PASSWORD:-admin}")"
   superset_port="$(ask_input "Superset port" "${DLH_SUPERSET_PORT:-28088}")"
   grafana_port="$(ask_input "Grafana port" "${DLH_GRAFANA_PORT:-23001}")"
-  npm_http_port="$(ask_input "NPM HTTP port" "${DLH_NPM_HTTP_PORT:-28080}")"
-  npm_https_port="$(ask_input "NPM HTTPS port" "${DLH_NPM_HTTPS_PORT:-28443}")"
-  npm_admin_port="$(ask_input "NPM Admin port" "${DLH_NPM_ADMIN_PORT:-28081}")"
   superset_scheme="$(ask_input "Superset URL scheme" "${SUPERSET_PREFERRED_URL_SCHEME:-http}")"
 
   upsert_env_var "DLH_BIND_IP" "$bind_ip"
@@ -207,9 +203,6 @@ sync_env() {
   upsert_env_var "MAGE_DEFAULT_OWNER_PASSWORD" "$mage_owner_password"
   upsert_env_var "DLH_SUPERSET_PORT" "$superset_port"
   upsert_env_var "DLH_GRAFANA_PORT" "$grafana_port"
-  upsert_env_var "DLH_NPM_HTTP_PORT" "$npm_http_port"
-  upsert_env_var "DLH_NPM_HTTPS_PORT" "$npm_https_port"
-  upsert_env_var "DLH_NPM_ADMIN_PORT" "$npm_admin_port"
   upsert_env_var "SUPERSET_PREFERRED_URL_SCHEME" "$superset_scheme"
 
   info ".env updated."

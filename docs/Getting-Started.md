@@ -121,7 +121,6 @@ Once the stack is up, open these URLs in your browser:
 | Superset (Dashboards) | http://localhost:28088 |
 | Grafana (Monitoring) | http://localhost:23001 |
 | RustFS Console (Object store) | http://localhost:29101 |
-| Authentik (Identity) | http://localhost:29090 |
 | CloudBeaver (SQL IDE) | http://localhost:28978 |
 | Dockhand (Docker UI) | http://localhost:23000 |
 | Redis Insight | http://localhost:25540 |

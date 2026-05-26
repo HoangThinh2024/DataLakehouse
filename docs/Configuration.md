@@ -105,7 +105,6 @@ bash scripts/stackctl.sh redeploy
 | `REDIS_PASSWORD` | Redis AUTH password |
 | `REDIS_HOST` | Service hostname (`dlh-redis`) |
 | `REDIS_PORT` | Redis port (default: `6379`) |
-| `REDIS_AUTHENTIK_DB` | Redis DB index for Authentik (default: `1`) |
 | `SUPERSET_REDIS_CACHE_DB` | Redis DB index for Superset cache (default: `2`) |
 | `SUPERSET_REDIS_RESULTS_DB` | Redis DB index for Superset results (default: `3`) |
 
@@ -132,14 +131,6 @@ bash scripts/stackctl.sh redeploy
 | `GRAFANA_ADMIN_USER` | Grafana admin username |
 | `GRAFANA_ADMIN_PASSWORD` | Grafana admin password |
 
-### Authentik
-
-| Variable | Description |
-|----------|-------------|
-| `AUTHENTIK_BOOTSTRAP_EMAIL` | Initial admin email |
-| `AUTHENTIK_BOOTSTRAP_PASSWORD` | Initial admin password |
-| `AUTHENTIK_SECRET_KEY` | Authentik signing secret (set a long random string) |
-
 ### Image versions
 
 Pin all images to specific tags for reproducible deployments:
@@ -152,7 +143,6 @@ Pin all images to specific tags for reproducible deployments:
 | `SUPERSET_IMAGE_VERSION` | `4.1.2` |
 | `GRAFANA_IMAGE_VERSION` | `12.0.0` |
 | `REDIS_STACK_IMAGE_VERSION` | `7.4.2-v3` |
-| `AUTHENTIK_IMAGE_VERSION` | `2026.2.1` |
 | `MINIO_MC_IMAGE_VERSION` | `RELEASE.2025-04-16T18-13-26Z` |
 
 ### Service ports (default)
@@ -169,12 +159,10 @@ All ports are in the `2xxxx` range to avoid conflicts with common system service
 | `DLH_MAGE_PORT` | `26789` | Mage |
 | `DLH_SUPERSET_PORT` | `28088` | Superset |
 | `DLH_GRAFANA_PORT` | `23001` | Grafana |
-| `DLH_AUTHENTIK_PORT` | `29090` | Authentik |
 | `DLH_CLOUDBEAVER_PORT` | `28978` | CloudBeaver |
 | `DLH_REDIS_PORT` | `26379` | Redis |
 | `DLH_REDIS_GUI_PORT` | `25540` | Redis Insight |
 | `DLH_DOCKHAND_PORT` | `23000` | Dockhand |
-| `DLH_NPM_ADMIN_PORT` | `28081` | Nginx Proxy Manager admin |
 
 ### Firewall
 
@@ -189,7 +177,7 @@ All ports are in the `2xxxx` range to avoid conflicts with common system service
 For a typical server where UIs are behind a reverse proxy but databases are accessible from your LAN:
 
 ```ini
-# UI ports — local only, exposed via Nginx Proxy Manager
+# UI ports — local only, exposed via Zoraxy
 DLH_APP_BIND_IP=127.0.0.1
 
 # Data/DB ports — accessible from LAN for direct client tools

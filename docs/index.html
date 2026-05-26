@@ -534,7 +534,7 @@
       </div>
       <div class="feature-card">
         <h3>🔒 Identity & Security</h3>
-        <p>Authentik provides centralized SSO, RBAC, and user management. Optional TLS reverse proxy with Nginx Proxy Manager.</p>
+        <p>Applications use built-in authentication systems. Optional TLS reverse proxy with Zoraxy.</p>
       </div>
       <div class="feature-card">
         <h3>📈 Monitoring & Logging</h3>
@@ -605,9 +605,7 @@ PostgreSQL / Excel / CSV
 
       <div class="stack-item">
         <h4>🔐 Infrastructure Layer</h4>
-        <span class="component">Authentik</span>
-        <span class="role">Centralized SSO & RBAC</span>
-        <span class="component">Nginx Proxy Manager</span>
+        <span class="component">Zoraxy</span>
         <span class="role">TLS reverse proxy (optional)</span>
         <span class="component">Dockhand</span>
         <span class="role">Docker management UI</span>
@@ -660,19 +658,9 @@ PostgreSQL / Excel / CSV
           <td><span class="credential">GRAFANA_ADMIN_USER</span> / <span class="credential">GRAFANA_ADMIN_PASSWORD</span></td>
         </tr>
         <tr>
-          <td><strong>Authentik</strong></td>
-          <td><a href="http://localhost:29090" target="_blank">http://localhost:29090</a></td>
-          <td><span class="credential">AUTHENTIK_BOOTSTRAP_EMAIL</span> / <span class="credential">AUTHENTIK_BOOTSTRAP_PASSWORD</span></td>
-        </tr>
-        <tr>
           <td><strong>CloudBeaver</strong></td>
           <td><a href="http://localhost:28978" target="_blank">http://localhost:28978</a></td>
           <td>Configured on first login</td>
-        </tr>
-        <tr>
-          <td><strong>Guacamole</strong></td>
-          <td><a href="http://localhost:28090/guacamole/" target="_blank">http://localhost:28090/guacamole/</a></td>
-          <td><span class="credential">guacadmin</span> / <span class="credential">guacadmin</span></td>
         </tr>
         <tr>
           <td><strong>Dockhand</strong></td>
@@ -680,8 +668,8 @@ PostgreSQL / Excel / CSV
           <td>No auth by default</td>
         </tr>
         <tr>
-          <td><strong>Nginx Proxy Manager</strong></td>
-          <td><a href="http://localhost:28081" target="_blank">http://localhost:28081</a></td>
+          <td><strong>Zoraxy</strong></td>
+          <td><a href="http://localhost:8000" target="_blank">http://localhost:8000</a></td>
           <td>Configured on first login</td>
         </tr>
         <tr>

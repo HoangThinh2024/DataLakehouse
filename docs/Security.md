@@ -25,8 +25,6 @@ MAGE_DEFAULT_OWNER_PASSWORD=<strong-random-password>
 SUPERSET_ADMIN_PASSWORD=<strong-random-password>
 SUPERSET_SECRET_KEY=<64-char-random-string>
 GRAFANA_ADMIN_PASSWORD=<strong-random-password>
-AUTHENTIK_BOOTSTRAP_PASSWORD=<strong-random-password>
-AUTHENTIK_SECRET_KEY=<64-char-random-string>
 ```
 
 Generate strong random values:
@@ -101,21 +99,20 @@ bash scripts/setup_ufw_docker.sh --down
 
 For any internet-facing deployment, all traffic should go through TLS.
 
-### Using Nginx Proxy Manager (included in the stack)
+### Using Zoraxy (included in the stack)
 
-1. Access the NPM admin UI at http://localhost:28081.
-2. Create **Proxy Hosts** for each service.
-3. Enable SSL with Let's Encrypt (requires a public domain and ports 80/443 open).
-4. Set `DLH_APP_BIND_IP=127.0.0.1` so services only accept connections through NPM.
+1. Access the Zoraxy admin UI at http://localhost:8000.
+2. Create proxy rules for each service.
+3. Enable SSL (requires a public domain and ports 80/443 open).
+4. Set `DLH_APP_BIND_IP=127.0.0.1` so services only accept connections through Zoraxy.
 
-### Internal service names for NPM upstreams
+### Internal service names for Zoraxy upstreams
 
 | Service | Internal upstream |
 |---------|-------------------|
 | Mage | `dlh-mage:6789` |
 | Superset | `dlh-superset:8088` |
 | Grafana | `dlh-grafana:3000` |
-| Authentik | `dlh-authentik-server:9000` |
 | RustFS Console | `dlh-rustfs:9001` |
 | CloudBeaver | `dlh-cloudbeaver:8978` |
 
@@ -123,16 +120,7 @@ For any internet-facing deployment, all traffic should go through TLS.
 
 ## Identity and Access Control
 
-### Authentik (SSO / RBAC)
-
-Authentik is included as the centralised identity provider. It can protect any UI service via OAuth2/OIDC or a forward-auth proxy flow.
-
-- First-run setup: http://localhost:29090/if/flow/initial-setup/
-- Change the default bootstrap password immediately after first login.
-
-### Guacamole
-
-Guacamole's default credentials are `guacadmin` / `guacadmin`. Change them on first login.
+Each application uses its own default authentication system (e.g. Superset, Grafana, Mage). Make sure to rotate default credentials.
 
 ---
 
@@ -147,7 +135,6 @@ MAGE_IMAGE_VERSION=0.9.76
 SUPERSET_IMAGE_VERSION=4.1.2
 GRAFANA_IMAGE_VERSION=12.0.0
 REDIS_STACK_IMAGE_VERSION=7.4.2-v3
-AUTHENTIK_IMAGE_VERSION=2026.2.1
 MINIO_MC_IMAGE_VERSION=RELEASE.2025-04-16T18-13-26Z
 ```
 
@@ -170,10 +157,8 @@ Before promoting to a production or internet-facing environment, verify every it
 - [ ] **Rotate all default passwords** — every `change-*` and `replace-*` value in `.env`.
 - [ ] **Pin all image tags** — no `latest` in `.env`.
 - [ ] **Restrict bind IPs** — `DLH_APP_BIND_IP=127.0.0.1`; expose only through the reverse proxy.
-- [ ] **Enable TLS** — configure Nginx Proxy Manager with valid certificates.
+- [ ] **Enable TLS** — configure Zoraxy with valid certificates.
 - [ ] **Configure firewall** — run `setup_ufw_docker.sh` with your trusted `DLH_LAN_CIDR`.
-- [ ] **Change Guacamole default password** — `guacadmin` / `guacadmin` must be rotated on first login.
-- [ ] **Complete Authentik first-run setup** — set up SSO flows and change bootstrap password.
 - [ ] **Set up automated backups** — add a cron job for `maintenance_tasks.py`.
 - [ ] **Test restore procedure** — verify backup files in RustFS and practice the RESTORE SQL.
 - [ ] **Monitor with Grafana** — confirm the `pipeline_runs` dashboard shows recent data.
@@ -188,9 +173,9 @@ Before promoting to a production or internet-facing environment, verify every it
 |-------|----------------|
 | Secrets | Rotate all default credentials; store only in `.env` |
 | Network | Use `127.0.0.1` bind for UI ports; restrict DB ports to LAN CIDR |
-| TLS | Terminate TLS at Nginx Proxy Manager for all internet-facing services |
+| TLS | Terminate TLS at Zoraxy for all internet-facing services |
 | Images | Pin all image versions; avoid `latest` |
-| Identity | Use Authentik SSO + RBAC for all UI services |
+| Identity | Use built-in application authentication |
 | Databases | Each service uses an isolated PostgreSQL role — no shared admin accounts |
 | Redis | Always password-protect Redis; never expose to the internet |
 | Backups | Schedule daily ClickHouse backups; replicate RustFS data offsite |

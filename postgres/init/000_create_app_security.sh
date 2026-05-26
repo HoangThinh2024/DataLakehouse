@@ -10,12 +10,24 @@ APP_CONFIGS=(
 )
 
 check_admin_access() {
-  if psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -Atqc 'SELECT 1' >/dev/null 2>&1; then
-    return 0
-  fi
+  local max_attempts=15
+  local attempt=1
+  local psql_err=""
+  
+  echo "postgres-bootstrap: waiting for database connection to be ready..."
+  while [ $attempt -le $max_attempts ]; do
+    if psql_err=$(psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -Atqc 'SELECT 1' 2>&1); then
+      echo "postgres-bootstrap: database connection successful."
+      return 0
+    fi
+    echo "postgres-bootstrap: connection attempt $attempt/$max_attempts failed: $psql_err. Retrying in 2 seconds..."
+    sleep 2
+    attempt=$((attempt + 1))
+  done
 
   cat >&2 <<EOF
 postgres-bootstrap: cannot authenticate to PostgreSQL with POSTGRES_USER="${POSTGRES_USER}".
+Last connection error: $psql_err
 The most likely cause is a stale postgres_data volume that was initialized with a different POSTGRES_PASSWORD.
 If you changed the admin password, reset the volume with: docker compose down -v && docker compose up -d
 EOF

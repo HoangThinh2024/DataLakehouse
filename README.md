@@ -20,13 +20,11 @@ OLAP analytics, and business intelligence dashboards — all on a single host.
 | **Warehouse** | ClickHouse | Columnar OLAP engine for serving and real-time ingestion |
 | **Dashboards** | Apache Superset | Business intelligence dashboards |
 | **Monitoring** | Grafana | Pipeline operational monitoring |
-| **Identity** | Authentik | Centralised SSO and RBAC |
 | **Cache** | Redis 8 | Shared high-performance cache and queue |
 | **GUI (Redis)** | Redis Insight | Web-based management for Redis (Port 25540) |
 | **SQL IDE** | CloudBeaver | Web-based SQL client |
-| **Remote Desktop** | Apache Guacamole | Browser-based VNC / RDP / SSH gateway |
 | **Docker Mgmt** | Dockhand | Web-based Docker management UI |
-| **Proxy** | Nginx Proxy Manager | Optional TLS reverse proxy |
+| **Proxy** | Zoraxy | Reverse proxy |
 
 ---
 
@@ -39,10 +37,8 @@ OLAP analytics, and business intelligence dashboards — all on a single host.
 | Mage | http://localhost:26789 | `MAGE_DEFAULT_OWNER_USERNAME` / `MAGE_DEFAULT_OWNER_PASSWORD` |
 | Superset | http://localhost:28088 | `SUPERSET_ADMIN_USER` / `SUPERSET_ADMIN_PASSWORD` |
 | Grafana | http://localhost:23001 | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` |
-| Authentik | http://localhost:29090 | `AUTHENTIK_BOOTSTRAP_EMAIL` / `AUTHENTIK_BOOTSTRAP_PASSWORD` |
 | Redis Insight | http://localhost:25540 | (configured on first login) |
 | CloudBeaver | http://localhost:28978 | (configured on first login) |
-| Guacamole | http://localhost:28090/guacamole/ | `guacadmin` / `guacadmin` |
 | Dockhand | http://localhost:23000 | (no auth by default) |
 | PostgreSQL | localhost:25432 | `POSTGRES_USER` / `POSTGRES_PASSWORD` |
 | ClickHouse HTTP | http://localhost:28123 | `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` |
@@ -267,9 +263,9 @@ UFW_ALLOW_DATA_PORTS=true
 DLH_LAN_CIDR=192.168.1.0/24
 ```
 
-If using an external Nginx Proxy Manager:
-1. Attach the NPM container to `web_network`.
-2. Use service names as upstream: `dlh-mage:6789`, `dlh-superset:8088`, `dlh-grafana:3000`, etc.
+If using Zoraxy reverse proxy:
+1. Attach the Zoraxy container to the `web_network` Docker network.
+2. Configure proxy hosts in the Zoraxy WebUI using the DataLakehouse service names as upstream targets: `dlh-mage:6789`, `dlh-superset:8088`, `dlh-grafana:3000`, etc.
 
 ---
 
@@ -365,7 +361,7 @@ See [docs/OPERATIONS.md](docs/OPERATIONS.md) for the full recovery procedures re
 
 - Rotate **all** `change-*` and `replace-*` passwords in `.env` before production.
 - Pin image versions to specific tags (avoid `latest`) in `.env`.
-- Use TLS via Nginx Proxy Manager for internet-exposed deployments.
+- Use TLS via Zoraxy for internet-exposed deployments.
 - Restrict `DLH_BIND_IP` and `DLH_LAN_CIDR` to trusted addresses.
 - Back up PostgreSQL, ClickHouse, RustFS, and Redis volumes regularly.
 
