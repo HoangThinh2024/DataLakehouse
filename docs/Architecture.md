@@ -40,7 +40,6 @@ This page describes the system layers, component roles, data flow, and deploymen
 Supporting infrastructure (cuts across all layers):
 - **Redis 8** – shared cache and queue.
 - **Redis Insight** – Web UI for Redis management (Port 25540).
-- **Authentik** – centralised identity provider (SSO, RBAC).
 - **Redpanda Console** – Web UI for managing topics and events.
 - **Data Healer** – autonomous lake-to-warehouse consistency engine.
 
@@ -192,7 +191,6 @@ Each service has its own isolated PostgreSQL database. The `postgres-bootstrap` 
 | `dlh_mage` | `dlh_mage_user` | Mage pipeline metadata |
 | `dlh_superset` | `dlh_superset_user` | Superset dashboard metadata |
 | `dlh_grafana` | `dlh_grafana_user` | Grafana settings |
-| `dlh_authentik` | `dlh_authentik_user` | Authentik identity data |
 | `dlh_custom` | `dlh_custom_user` | Optional business workspace DB |
 
 ---
@@ -202,7 +200,7 @@ Each service has its own isolated PostgreSQL database. The `postgres-bootstrap` 
 | DB Index | Used by |
 |----------|---------|
 | 0 | Default (unused) |
-| 1 | Authentik queue + cache |
+| 1 | Default (unused) |
 | 2 | Superset dashboard/query cache |
 | 3 | Superset SQL Lab results backend |
 
@@ -220,13 +218,12 @@ All services are deployed via `docker-compose.yaml` on a shared Docker bridge ne
 Internet
    │
    ▼
-[Nginx Proxy Manager]  ──  TLS termination
+[Zoraxy]  ──  TLS termination
    │
    ├──▶ dlh-mage:6789        (pipeline UI)
    ├──▶ dlh-superset:8088    (dashboards)
    ├──▶ dlh-grafana:3000     (monitoring)
-   ├──▶ dlh-rustfs:9001      (object store console)
-   └──▶ dlh-authentik:9000   (identity provider)
+   └──▶ dlh-rustfs:9001      (object store console)
 
 LAN clients
    │
@@ -243,7 +240,6 @@ LAN clients
 - Host port binding is controlled by `DLH_BIND_IP` / `DLH_APP_BIND_IP` / `DLH_DATA_BIND_IP`.
 - LAN exposure is gated by `DLH_LAN_CIDR` and enforced via `setup_ufw_docker.sh`.
 - Redis requires password authentication.
-- Authentik provides SSO and RBAC for UI services.
 - Each stack service has an isolated PostgreSQL database and role — no service shares the admin account.
 
 ---

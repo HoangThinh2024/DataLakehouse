@@ -11,10 +11,10 @@ renamed as (
         "Tên công việc" as task_name,
         "Người thực hiện" as assignee,
         "Người giao việc" as assigner,
-        "Khẩn cấp" as is_urgent,
+        case when "Khẩn cấp" in ('Có', 'Yes', 'True', '1', 'true', 'Y') then true else false end as is_urgent,
         "Trạng thái" as status,
-        "Số tiền" as amount,
-        "Diện tích (ha)" as area_ha,
+        toFloat64OrNull("Số tiền") as amount,
+        toFloat64OrNull("Diện tích (ha)") as area_ha,
         "_source_file_key" as source_file,
         "_extracted_at" as extracted_at,
         "_silver_processed_at" as silver_processed_at

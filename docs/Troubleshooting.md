@@ -208,26 +208,7 @@ Update the SQLAlchemy URI in **Settings → Database Connections**:
 
 ---
 
-## Authentik Background Tasks Not Processing
 
-### Symptoms
-- Authentik emails not sent
-- SSO flows timing out
-
-### Steps
-
-```bash
-docker compose ps dlh-authentik-server dlh-authentik-worker
-docker compose logs dlh-authentik-worker --tail 100
-```
-
-Ensure `REDIS_AUTHENTIK_DB` and `REDIS_PASSWORD` are consistent in `.env`. Restart the worker:
-
-```bash
-docker compose up -d dlh-authentik-worker
-```
-
----
 
 ## Redis WARNING: Memory Overcommit
 

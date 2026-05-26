@@ -232,12 +232,8 @@ SUGGESTED_GRAFANA_PORT=$(suggest_port "${DLH_GRAFANA_PORT:-23001}")
 DLH_GRAFANA_PORT=$(ask_input "Host port - Grafana" "$SUGGESTED_GRAFANA_PORT")
 SUGGESTED_GUACAMOLE_PORT=$(suggest_port "${DLH_GUACAMOLE_PORT:-28090}")
 DLH_GUACAMOLE_PORT=$(ask_input "Host port - Guacamole" "$SUGGESTED_GUACAMOLE_PORT")
-SUGGESTED_NPM_HTTP_PORT=$(suggest_port "${DLH_NPM_HTTP_PORT:-28080}")
-DLH_NPM_HTTP_PORT=$(ask_input "Host port - NPM HTTP" "$SUGGESTED_NPM_HTTP_PORT")
-SUGGESTED_NPM_HTTPS_PORT=$(suggest_port "${DLH_NPM_HTTPS_PORT:-28443}")
-DLH_NPM_HTTPS_PORT=$(ask_input "Host port - NPM HTTPS" "$SUGGESTED_NPM_HTTPS_PORT")
-SUGGESTED_NPM_ADMIN_PORT=$(suggest_port "${DLH_NPM_ADMIN_PORT:-28081}")
-DLH_NPM_ADMIN_PORT=$(ask_input "Host port - NPM Admin" "$SUGGESTED_NPM_ADMIN_PORT")
+
+
 
 
 # =============================================================
@@ -396,11 +392,6 @@ DLH_GUACAMOLE_PORT=${DLH_GUACAMOLE_PORT}
 GUACAMOLE_DB_NAME=dlh_guacamole
 GUACAMOLE_DB_USER=dlh_guacamole_user
 GUACAMOLE_DB_PASSWORD=${GUACAMOLE_DB_PASSWORD}
-
-# - Nginx Proxy Manager (optional, for reverse proxy) -
-DLH_NPM_HTTP_PORT=${DLH_NPM_HTTP_PORT}
-DLH_NPM_HTTPS_PORT=${DLH_NPM_HTTPS_PORT}
-DLH_NPM_ADMIN_PORT=${DLH_NPM_ADMIN_PORT}
 EOF
 
 info ".env written to $ENV_FILE"

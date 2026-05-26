@@ -40,7 +40,6 @@ bash scripts/stackctl.sh validate-env
 | `SUPERSET_IMAGE_VERSION` | Superset image tag | `latest` |
 | `GRAFANA_IMAGE_VERSION` | Grafana image tag | `latest` |
 | `REDIS_STACK_IMAGE_VERSION` | Redis Stack image tag | `7.4.2-v3` |
-| `AUTHENTIK_IMAGE_VERSION` | Authentik image tag | `2026.2.1` |
 
 ## 2.1 Redpanda (Event Broker)
 
@@ -134,7 +133,6 @@ bash scripts/stackctl.sh validate-env
 | `REDIS_MAXMEMORY_POLICY` | Eviction policy when memory is full | `allkeys-lru` |
 | `REDIS_VM_OVERCOMMIT_MEMORY` | Container sysctl value for `vm.overcommit_memory` | `1` |
 | `DLH_REDIS_GUI_PORT` | Host port for Redis Insight UI | `25540` |
-| `REDIS_AUTHENTIK_DB` | Redis logical DB index used by Authentik | `1` |
 | `SUPERSET_REDIS_CACHE_DB` | Redis logical DB index used by Superset cache | `2` |
 | `SUPERSET_REDIS_RESULTS_DB` | Redis logical DB index used by Superset SQL Lab results | `3` |
 
@@ -165,30 +163,7 @@ bash scripts/stackctl.sh validate-env
 | `SUPERSET_PREFERRED_URL_SCHEME` | URL scheme behind proxy or direct | `http` |
 | `SUPERSET_PIP_REQUIREMENTS` | Extra Python packages installed at Superset startup (must be quoted if multiple packages are listed) | `"psycopg2-binary==2.9.9 clickhouse-connect==0.8.3"` |
 
-## 11. Authentik
-
-| Variable | Description | Example |
-|---|---|---|
-| `DLH_AUTHENTIK_PORT` | Host port for Authentik web UI/API | `29090` |
-| `AUTHENTIK_SECRET_KEY` | Authentik cryptographic secret key | `replace-this-with-a-long-random-secret` |
-| `AUTHENTIK_DB_NAME` | Authentik metadata DB name | `dlh_authentik` |
-| `AUTHENTIK_DB_USER` | Authentik metadata DB user | `dlh_authentik_user` |
-| `AUTHENTIK_DB_PASSWORD` | Authentik metadata DB password | `change-this-authentik-db-password` |
-| `AUTHENTIK_BOOTSTRAP_EMAIL` | Initial admin email for first bootstrap | `admin@authentik.local` |
-| `AUTHENTIK_BOOTSTRAP_PASSWORD` | Initial admin password for first bootstrap | `admin` |
-| `AUTHENTIK_BOOTSTRAP_TOKEN` | Optional first-run bootstrap token | `` |
-
-## 12. Apache Guacamole
-
-| Variable | Description | Example |
-|---|---|---|
-| `GUACAMOLE_IMAGE_VERSION` | Apache Guacamole and guacd image tag | `latest` |
-| `DLH_GUACAMOLE_PORT` | Host port for Guacamole web UI | `28090` |
-| `GUACAMOLE_DB_NAME` | Guacamole metadata database name | `dlh_guacamole` |
-| `GUACAMOLE_DB_USER` | Guacamole metadata DB user | `dlh_guacamole_user` |
-| `GUACAMOLE_DB_PASSWORD` | Guacamole metadata DB password | `change-me` |
-
-## 13. Grafana
+## 12. Grafana
 
 | Variable | Description | Example |
 |---|---|---|
@@ -199,15 +174,8 @@ bash scripts/stackctl.sh validate-env
 | `GRAFANA_ADMIN_USER` | Grafana admin username | `admin` |
 | `GRAFANA_ADMIN_PASSWORD` | Grafana admin password | `admin` |
 
-## 13. Optional Reverse Proxy
 
-| Variable | Description | Example |
-|---|---|---|
-| `DLH_NPM_HTTP_PORT` | Nginx Proxy Manager HTTP port | `28080` |
-| `DLH_NPM_HTTPS_PORT` | Nginx Proxy Manager HTTPS port | `28443` |
-| `DLH_NPM_ADMIN_PORT` | Nginx Proxy Manager admin UI port | `28081` |
-
-## 14. Validation Checklist
+## 13. Validation Checklist
 
 Before deploying, verify:
 

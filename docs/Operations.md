@@ -314,29 +314,7 @@ echo 'vm.overcommit_memory = 1' | sudo tee -a /etc/sysctl.conf
 
 ---
 
-## Authentik Operations
 
-### Health check
-
-```bash
-docker compose ps dlh-authentik-server dlh-authentik-worker
-docker compose exec dlh-authentik-worker ak healthcheck
-```
-
-### First-run setup
-
-Access the setup wizard at http://localhost:29090/if/flow/initial-setup/ using the credentials in `AUTHENTIK_BOOTSTRAP_EMAIL` / `AUTHENTIK_BOOTSTRAP_PASSWORD`.
-
-The SSO objects for Superset, Grafana, Mage, and Redpanda Console are imported from [authentik/blueprints/datalakehouse-sso.yaml](../authentik/blueprints/datalakehouse-sso.yaml) by the `authentik-blueprint-apply` service during stack startup.
-If you change that blueprint, run the service again or redeploy Authentik so the OIDC applications and providers are recreated.
-
-### Restart the worker
-
-```bash
-docker compose up -d dlh-authentik-worker
-```
-
----
 
 ## Maintenance
 

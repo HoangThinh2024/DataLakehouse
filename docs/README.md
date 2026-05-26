@@ -33,13 +33,11 @@ and business intelligence dashboards — all on a single host.
 | **Warehouse** | ClickHouse | Columnar OLAP engine — serves analytics queries |
 | **Dashboards** | Apache Superset | Business intelligence dashboards |
 | **Monitoring** | Grafana | Pipeline operational monitoring |
-| **Identity** | Authentik | Centralised SSO and RBAC |
 | **Cache** | Redis 8 | Shared high-performance cache and queue |
 | **GUI (Redis)** | Redis Insight | Web-based management for Redis |
 | **SQL IDE** | CloudBeaver | Web-based SQL client for PostgreSQL and ClickHouse |
-| **Remote Desktop** | Apache Guacamole | Browser-based VNC/RDP/SSH remote desktop gateway |
 | **Docker Mgmt** | Dockhand | Lightweight web-based Docker management UI |
-| **Proxy** | Nginx Proxy Manager | Optional TLS reverse proxy |
+| **Proxy** | Zoraxy | Reverse proxy |
 
 ---
 
@@ -51,11 +49,9 @@ and business intelligence dashboards — all on a single host.
 | Mage | http://localhost:26789 | `MAGE_DEFAULT_OWNER_USERNAME` / `MAGE_DEFAULT_OWNER_PASSWORD` |
 | Superset | http://localhost:28088 | `SUPERSET_ADMIN_USER` / `SUPERSET_ADMIN_PASSWORD` |
 | Grafana | http://localhost:23001 | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` |
-| Authentik | http://localhost:29090 | `AUTHENTIK_BOOTSTRAP_EMAIL` / `AUTHENTIK_BOOTSTRAP_PASSWORD` |
 | CloudBeaver | http://localhost:28978 | Configured on first login |
-| Guacamole | http://localhost:28090/guacamole/ | `guacadmin` / `guacadmin` |
 | Dockhand | http://localhost:23000 | No auth by default |
-| Nginx Proxy Manager | http://localhost:28081 | Configured on first login |
+| Zoraxy | http://localhost:8000 | Configured on first login |
 | PostgreSQL | localhost:25432 | `POSTGRES_USER` / `POSTGRES_PASSWORD` |
 | ClickHouse HTTP | http://localhost:28123 | `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` |
 | Redis | localhost:26379 | `REDIS_PASSWORD` |

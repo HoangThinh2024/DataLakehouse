@@ -246,3 +246,7 @@ terraform.tfstate*
 # Local user runtime files
 .local/
 docker-compose.yaml.bak
+
+# Antigravity CLI state
+.antigravitycli/
+

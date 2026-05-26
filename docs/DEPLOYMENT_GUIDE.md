@@ -211,38 +211,19 @@ DLH_LAN_CIDR=192.168.1.0/24
 
 ## 6. Reverse Proxy Setup
 
-The optional Nginx Proxy Manager (NPM) service is included in `docker-compose.yaml`.
-It is already defined — simply ensure it is uncommented and configure proxy hosts via
-the NPM admin UI at `http://localhost:28081`.
+Zoraxy is used as the reverse proxy. It runs in a separate Docker container on the same host and binds to ports 80/443.
 
-### Connecting NPM to the stack
-
-If NPM is deployed in a **separate Docker project on the same host**:
-
-1. Attach the NPM container to `web_network`.
-2. Use DataLakehouse service names as upstream targets:
+To configure Zoraxy to proxy requests to DataLakehouse services:
+1. Attach the Zoraxy container to the `web_network` Docker network.
+2. Configure proxy hosts in the Zoraxy WebUI (`http://localhost:8000`) using the DataLakehouse service names as upstream targets:
 
 | Service | Internal upstream |
 |---------|-------------------|
 | Mage | `dlh-mage:6789` |
 | Superset | `dlh-superset:8088` |
 | Grafana | `dlh-grafana:3000` |
-| Authentik | `dlh-authentik-server:9000` |
 | RustFS Console | `dlh-rustfs:9001` |
 | CloudBeaver | `dlh-cloudbeaver:8978` |
-
-### Redis backend setup for Authentik
-
-Authentik uses Redis for worker queue and session cache. Ensure:
-
-```ini
-# .env
-REDIS_HOST=dlh-redis
-REDIS_PASSWORD=<your-password>
-REDIS_AUTHENTIK_DB=1
-```
-
-These values are automatically picked up by `docker-compose.yaml`.
 
 ---
 
@@ -362,7 +343,7 @@ Before exposing to production traffic:
 
 - [ ] **Pin all image tags** in `.env` (no `latest`).
 - [ ] **Rotate all default passwords** — every `change-*` and `replace-*` value.
-- [ ] **Enable TLS** via Nginx Proxy Manager with valid certificates.
+- [ ] **Enable TLS** via Zoraxy with valid certificates.
 - [ ] **Restrict bind IPs** — `DLH_APP_BIND_IP=127.0.0.1` (expose only via proxy).
 - [ ] **Configure firewall** — run `setup_ufw_docker.sh` with your trusted CIDR.
 - [ ] **Set up automated backups** — cron job for `maintenance_tasks.py`.
@@ -379,6 +360,5 @@ MAGE_IMAGE_VERSION=0.9.76
 SUPERSET_IMAGE_VERSION=4.1.2
 GRAFANA_IMAGE_VERSION=12.0.0
 REDIS_STACK_IMAGE_VERSION=7.4.2-v3
-AUTHENTIK_IMAGE_VERSION=2026.2.1
 MINIO_MC_IMAGE_VERSION=RELEASE.2025-04-16T18-13-26Z
 ```

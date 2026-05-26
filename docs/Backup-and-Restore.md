@@ -33,7 +33,7 @@ bash scripts/restore.sh /path/to/DataLakehouse_backup_YYYYMMDD_HHMM.tar.gz [targ
 docker compose up -d
 ```
 
-`restore.sh` tu dong sua quyen thu muc du lieu pho bien (PostgreSQL, Grafana, Superset, Authentik, ...).
+`restore.sh` tu dong sua quyen thu muc du lieu pho bien (PostgreSQL, Grafana, Superset, ...).
 Neu image/user khac, ban co the dieu chinh lai quyen sau khi khoi phuc.
 
 ---
