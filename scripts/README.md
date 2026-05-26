@@ -173,12 +173,12 @@ uv run python scripts/test_individual_services.py
 ```
 
 What it checks:
-1. **Container States:** Verifies all 18 Docker containers are running.
+1. **Container States:** Verifies all 16 Docker containers are running.
 2. **PostgreSQL:** Checks readiness and runs test queries.
 3. **ClickHouse:** Validates OLAP engine queries.
 4. **Redis:** Validates memory store via PING commands.
 5. **Redpanda:** Performs Kafka cluster health analysis.
-6. **HTTP Ports:** Validates all web consoles and APIs (Mage, Superset, Grafana, Authentik, Redpanda Console, CloudBeaver, Dockhand).
+6. **HTTP Ports:** Validates all web consoles and APIs (Mage, Superset, Grafana, Redpanda Console, CloudBeaver, Dockhand).
 
 ---
 
