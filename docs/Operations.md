@@ -59,7 +59,7 @@ bash scripts/setup.sh
 
 ## Sao luu va khoi phuc nhanh (toan bo stack)
 
-Khi can di chuyen host hoac snapshot nhanh, dung [scripts/backup.sh](scripts/backup.sh) va [scripts/restore.sh](scripts/restore.sh).
+Khi can di chuyen host hoac snapshot nhanh, dung [scripts/backup.sh](../scripts/backup.sh) va [scripts/restore.sh](../scripts/restore.sh).
 
 ```bash
 # Tao ban sao luu (tu dong stop stack)
@@ -80,7 +80,7 @@ bash scripts/restore.sh /path/to/DataLakehouse_backup_YYYYMMDD_HHMM.tar.gz [targ
 docker compose up -d
 ```
 
-Huong dan day du xem tai [docs/Backup-and-Restore.md](docs/Backup-and-Restore.md).
+Huong dan day du xem tai [Backup-and-Restore.md](Backup-and-Restore.md).
 
 ---
 
@@ -379,4 +379,4 @@ bash scripts/setup_ufw_docker.sh --down
 
 ---
 
-> See [docs/OPERATIONS.md](../docs/OPERATIONS.md) for the full operations reference.
+> See [Troubleshooting Guide](Troubleshooting.md) for recovering from common system errors.

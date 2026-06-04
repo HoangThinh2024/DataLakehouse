@@ -40,7 +40,7 @@ output:
     output:
       sql_insert:
         driver: "clickhouse"
-        dsn: "clickhouse://doe:Do12345678910..@dlh-clickhouse:9000/analytics"
+        dsn: "clickhouse://${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}@${CLICKHOUSE_HOST:-dlh-clickhouse}:9000/${CLICKHOUSE_DB:-analytics}"
         table: "analytics.silver_demo"
         columns: [id, name, category, value, quantity, order_date, region, status, customer_email, notes, created_at, _pipeline_run_id, _source_table]
         args_mapping: |

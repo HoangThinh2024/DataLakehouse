@@ -10,7 +10,7 @@ This page covers how to back up and restore data in the DataLakehouse stack.
 
 ## Sao luu va khoi phuc toan bo stack
 
-Neu ban muon snapshot toan bo he thong (ma nguon + du lieu Docker volumes), hay dung [scripts/backup.sh](scripts/backup.sh) va [scripts/restore.sh](scripts/restore.sh).
+Neu ban muon snapshot toan bo he thong (ma nguon + du lieu Docker volumes), hay dung [scripts/backup.sh](../scripts/backup.sh) va [scripts/restore.sh](../scripts/restore.sh).
 
 ```bash
 # Tao ban sao luu (tu dong stop stack truoc khi dong goi)
@@ -227,4 +227,4 @@ If everything is lost but you have a PostgreSQL dump and a RustFS volume backup:
 
 ---
 
-> See [docs/OPERATIONS.md § Backup and Restore](../docs/OPERATIONS.md#8-backup-and-restore) for additional details.
+> See [Operations Guide](Operations.md#sao-luu-va-khoi-phuc-nhanh-toan-bo-stack) for additional details.

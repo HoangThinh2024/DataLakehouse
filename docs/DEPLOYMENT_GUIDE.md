@@ -298,7 +298,7 @@ docker compose exec dlh-redis redis-cli -a "$REDIS_PASSWORD" ping   # Redis → 
 
 ## 9. Common Recovery Procedures
 
-See [OPERATIONS.md – Common Recovery Procedures](OPERATIONS.md#11-common-recovery-procedures)
+See [Troubleshooting.md](Troubleshooting.md)
 for the full list. Quick reference below.
 
 ### Service unhealthy

@@ -13,15 +13,15 @@ and business intelligence dashboards — all on a single host.
 
 | Page | Description |
 |------|-------------|
-| [Architecture](Architecture) | System layers, components, and data flow |
-| [Getting Started](Getting-Started) | Prerequisites, installation, first run |
-| [ETL Pipelines](ETL-Pipelines) | Pipeline blocks, schedules, and trigger methods |
-| [Configuration](Configuration) | `.env` reference and key variables |
-| [Operations](Operations) | Lifecycle, health checks, logs, and environment management |
-| [Backup and Restore](Backup-and-Restore) | ClickHouse and PostgreSQL data protection |
-| [Troubleshooting](Troubleshooting) | Common issues and fixes |
-| [Developer Guide](Developer-Guide) | Adding new pipelines and developing pipeline blocks |
-| [Security](Security) | Hardening guide and production checklist |
+| [Architecture](Architecture.md) | System layers, components, and data flow |
+| [Getting Started](Getting-Started.md) | Prerequisites, installation, first run |
+| [ETL Pipelines](ETL-Pipelines.md) | Pipeline blocks, schedules, and trigger methods |
+| [Configuration](Configuration.md) | `.env` reference and key variables |
+| [Operations](Operations.md) | Lifecycle, health checks, logs, and environment management |
+| [Backup and Restore](Backup-and-Restore.md) | ClickHouse and PostgreSQL data protection |
+| [Troubleshooting](Troubleshooting.md) | Common issues and fixes |
+| [Developer Guide](Developer-Guide.md) | Adding new pipelines and developing pipeline blocks |
+| [Security](Security.md) | Hardening guide and production checklist |
 
 ---
 
@@ -76,7 +76,7 @@ and business intelligence dashboards — all on a single host.
 
 ## Sao luu va khoi phuc nhanh
 
-Dung [scripts/backup.sh](scripts/backup.sh) de tao snapshot toan bo stack va [scripts/restore.sh](scripts/restore.sh) de khoi phuc. Chi tiet xem [docs/Backup-and-Restore.md](docs/Backup-and-Restore.md).
+Dung [scripts/backup.sh](../scripts/backup.sh) de tao snapshot toan bo stack va [scripts/restore.sh](../scripts/restore.sh) de khoi phuc. Chi tiet xem [Backup-and-Restore.md](Backup-and-Restore.md).
 
 ---
 
@@ -86,10 +86,10 @@ The `docs/` directory in the repository contains detailed reference documents:
 
 | File | Description |
 |------|-------------|
-| [ARCHITECTURE.md](../docs/ARCHITECTURE.md) | Full system architecture reference |
-| [DEPLOYMENT_GUIDE.md](../docs/DEPLOYMENT_GUIDE.md) | Step-by-step deployment guide |
-| [PIPELINE_GUIDE.md](../docs/PIPELINE_GUIDE.md) | Every ETL block explained |
-| [VARIABLES_REFERENCE.md](../docs/VARIABLES_REFERENCE.md) | Complete `.env` variable reference |
-| [OPERATIONS.md](../docs/OPERATIONS.md) | Day-2 operations: health, backup, restore |
-| [RUSTFS_LAYER_READER_GUIDE.md](../docs/RUSTFS_LAYER_READER_GUIDE.md) | Python API for reading Bronze/Silver/Gold layers |
-| [TESTING_CHECKLIST.md](../docs/TESTING_CHECKLIST.md) | End-to-end verification checklist |
+| [ARCHITECTURE.md](Architecture.md) | Full system architecture reference |
+| [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) | Step-by-step deployment guide |
+| [PIPELINE_GUIDE.md](PIPELINE_GUIDE.md) | Every ETL block explained |
+| [VARIABLES_REFERENCE.md](VARIABLES_REFERENCE.md) | Complete `.env` variable reference |
+| [OPERATIONS.md](Operations.md) | Day-2 operations: health, backup, restore |
+| [RUSTFS_LAYER_READER_GUIDE.md](RUSTFS_LAYER_READER_GUIDE.md) | Python API for reading Bronze/Silver/Gold layers |
+| [TESTING_CHECKLIST.md](TESTING_CHECKLIST.md) | End-to-end verification checklist |

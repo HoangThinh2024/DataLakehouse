@@ -324,4 +324,4 @@ botocore.exceptions.ClientError: An error occurred (SignatureDoesNotMatch)
 
 - [`load_to_clickhouse.py`](../mage/data_exporters/load_to_clickhouse.py) – Real-world example using `read_latest_silver` and `read_all_gold`
 - [`verify_lakehouse_architecture.py`](../scripts/verify_lakehouse_architecture.py) – Validation script
-- [Lakehouse Architecture Docs](../docs/LAKEHOUSE_ARCHITECTURE.md) – Full architecture overview
+- [Lakehouse Architecture Docs](Architecture.md) – Full architecture overview

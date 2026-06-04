@@ -244,4 +244,4 @@ LAN clients
 
 ---
 
-> See [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) for the full architecture reference.
+> See [Deployment Guide](DEPLOYMENT_GUIDE.md) to start deploying the stack.

@@ -233,11 +233,11 @@ DataLakehouse/
 
 | Document | Description |
 |----------|-------------|
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System layers, component catalog, data flow, ETL pipelines, ClickHouse schema |
-| [DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) | Prerequisites, bootstrap flow, day-2 operations, firewall setup, production notes |
+| [ARCHITECTURE.md](docs/Architecture.md) | System layers, component catalog, data flow, ETL pipelines, ClickHouse schema |
+| [DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) | Step-by-step deployment and operations guide |
 | [PIPELINE_GUIDE.md](docs/PIPELINE_GUIDE.md) | Every ETL block explained: variables used, logic, customisation guide |
 | [VARIABLES_REFERENCE.md](docs/VARIABLES_REFERENCE.md) | Complete `.env` variable reference with descriptions and example values |
-| [OPERATIONS.md](docs/OPERATIONS.md) | Lifecycle commands, health monitoring, backup/restore, Redis ops |
+| [OPERATIONS.md](docs/Operations.md) | Lifecycle commands, health monitoring, backup/restore, Redis ops |
 | [RUSTFS_LAYER_READER_GUIDE.md](docs/RUSTFS_LAYER_READER_GUIDE.md) | Developer API for reading Bronze/Silver/Gold layers from Python |
 | [TESTING_CHECKLIST.md](docs/TESTING_CHECKLIST.md) | Step-by-step verification checklist after deployment or changes |
 
@@ -353,7 +353,7 @@ ClickHouse schema init only runs once (on first volume creation). To re-apply:
 bash scripts/stackctl.sh reset --hard && bash scripts/setup.sh
 ```
 
-See [docs/OPERATIONS.md](docs/OPERATIONS.md) for the full recovery procedures reference.
+See [docs/Operations.md](docs/Operations.md) for the full recovery procedures reference.
 
 ---
 
