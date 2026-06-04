@@ -125,7 +125,7 @@ Once the stack is up, open these URLs in your browser:
 | Dockhand (Docker UI) | http://localhost:23000 |
 | Redis Insight | http://localhost:25540 |
 
-Default credentials for each service are set in `.env`. See the [Configuration](Configuration) page.
+Default credentials for each service are set in `.env`. See the [Configuration](Configuration.md) page.
 
 ---
 
@@ -198,11 +198,11 @@ docker compose exec dlh-redis redis-cli -a "$REDIS_PASSWORD" ping  # Redis → P
 
 ## Next Steps
 
-- Understand the full stack: [Architecture](Architecture)
-- Manage day-to-day operations: [Operations](Operations)
-- Add your own data sources: [Developer Guide](Developer-Guide)
-- Prepare for production: [Security](Security)
+- Understand the full stack: [Architecture](Architecture.md)
+- Manage day-to-day operations: [Operations](Operations.md)
+- Add your own data sources: [Developer Guide](Developer-Guide.md)
+- Prepare for production: [Security](Security.md)
 
 ---
 
-> See [docs/DEPLOYMENT_GUIDE.md](../docs/DEPLOYMENT_GUIDE.md) for the complete deployment reference.
+> See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for the complete deployment reference.

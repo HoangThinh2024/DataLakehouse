@@ -244,5 +244,5 @@ Use this matrix after code changes to verify robustness across common failure mo
 ---
 
 *Reference:*
-*[ARCHITECTURE.md](ARCHITECTURE.md) – full data flow and schema reference.*
+*[Architecture.md](Architecture.md) – full data flow and schema reference.*
 *[PIPELINE_GUIDE.md](PIPELINE_GUIDE.md) – detailed pipeline block documentation.*

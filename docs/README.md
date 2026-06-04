@@ -13,13 +13,13 @@ and business intelligence dashboards — all on a single host.
 
 | Page | Description |
 |------|-------------|
-| [Architecture](ARCHITECTURE) | System layers, components, and data flow |
-| [Deployment Guide](DEPLOYMENT_GUIDE) | Prerequisites, installation, first run |
-| [ETL Pipelines](PIPELINE_GUIDE) | Pipeline blocks, schedules, and trigger methods |
-| [Environment Variables](VARIABLES_REFERENCE) | All `.env` variables with descriptions |
-| [Operations](OPERATIONS) | Lifecycle, health checks, logs, and environment management |
-| [RustFS Layer Reader](RUSTFS_LAYER_READER_GUIDE) | Python API for reading Bronze/Silver/Gold layers |
-| [Testing Checklist](TESTING_CHECKLIST) | End-to-end deployment verification checklist |
+| [Architecture](Architecture.md) | System layers, components, and data flow |
+| [Deployment Guide](DEPLOYMENT_GUIDE.md) | Prerequisites, installation, first run |
+| [ETL Pipelines](PIPELINE_GUIDE.md) | Pipeline blocks, schedules, and trigger methods |
+| [Environment Variables](VARIABLES_REFERENCE.md) | All `.env` variables with descriptions |
+| [Operations](Operations.md) | Lifecycle, health checks, logs, and environment management |
+| [RustFS Layer Reader](RUSTFS_LAYER_READER_GUIDE.md) | Python API for reading Bronze/Silver/Gold layers |
+| [Testing Checklist](TESTING_CHECKLIST.md) | End-to-end deployment verification checklist |
 
 ---
 
@@ -88,8 +88,8 @@ bash scripts/setup.sh
 bash scripts/stackctl.sh health
 ```
 
-See [Deployment Guide](DEPLOYMENT_GUIDE) for the full step-by-step instructions.
+See [Deployment Guide](DEPLOYMENT_GUIDE.md) for the full step-by-step instructions.
 
 ### Sao luu va khoi phuc nhanh
 
-Dung [scripts/backup.sh](scripts/backup.sh) de tao snapshot toan bo stack va [scripts/restore.sh](scripts/restore.sh) de khoi phuc. Chi tiet xem [docs/Backup-and-Restore.md](docs/Backup-and-Restore.md).
+Dung [scripts/backup.sh](../scripts/backup.sh) de tao snapshot toan bo stack va [scripts/restore.sh](../scripts/restore.sh) de khoi phuc. Chi tiet xem [Backup-and-Restore.md](Backup-and-Restore.md).

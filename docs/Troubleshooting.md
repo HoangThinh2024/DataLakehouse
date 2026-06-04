@@ -300,4 +300,4 @@ uv run python scripts/verify_lakehouse_architecture.py --json
 
 ---
 
-> See [docs/OPERATIONS.md § Common Recovery Procedures](../docs/OPERATIONS.md#11-common-recovery-procedures) for additional recovery steps.
+> See [Operations Guide](Operations.md) for additional operational procedures.

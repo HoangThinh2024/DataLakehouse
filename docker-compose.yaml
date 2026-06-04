@@ -136,6 +136,11 @@ services:
     image: redpandadata/connect:latest
     container_name: dlh-ingest-cdc
     restart: always
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_HOST: ${CLICKHOUSE_HOST:-dlh-clickhouse}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-analytics}
     volumes:
       - ./connect/redpanda-connect.yaml:/connect.yaml
     command: ["-c", "/connect.yaml"]

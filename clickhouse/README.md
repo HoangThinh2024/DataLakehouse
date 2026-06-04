@@ -121,5 +121,5 @@ FROM analytics.silver_demo;
 
 ## Backup and Restore
 
-See [docs/OPERATIONS.md – Backup and Restore section](../docs/OPERATIONS.md#8-backup-and-restore)
+See [docs/Backup-and-Restore.md](../docs/Backup-and-Restore.md)
 for instructions on using the native ClickHouse `BACKUP` / `RESTORE` commands via RustFS.
