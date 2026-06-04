@@ -245,8 +245,19 @@ terraform.tfstate*
 
 # Local user runtime files
 .local/
-docker-compose.yaml.bak
+*.bak
+*.tar.gz
+
+# Diagnostic reports and disk usage maps
+ncdu_report.json
+
+# Local backups directory
+backups/
 
 # Antigravity CLI state
 .antigravitycli/
+
+# Maestro workspace root state (contains machine-specific paths)
+docs/maestro/.workspace-root
+
 
