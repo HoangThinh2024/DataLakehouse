@@ -28,35 +28,40 @@ sys.path.insert(0, REPO_ROOT)
 load_dotenv(os.path.join(REPO_ROOT, ".env"))
 
 # Sample source files
-SOURCE_EXCEL = os.path.join(REPO_ROOT, "scripts/test_data/noxh-hoan-cau.report.10.58.10.04.26.xlsx")
+SOURCE_EXCEL = os.path.join(
+    REPO_ROOT, "scripts/test_data/noxh-hoan-cau.report.10.58.10.04.26.xlsx"
+)
 SOURCE_CSV = os.path.join(REPO_ROOT, "scripts/test_data/test.csv")
 WATCHER_LOG = os.path.join(REPO_ROOT, "watcher_test.log")
 
 
 def get_ch_client():
-    ch_host = os.getenv('CLICKHOUSE_HOST', 'localhost')
-    if ch_host == 'dlh-clickhouse':
-        ch_host = 'localhost'
+    ch_host = os.getenv("CLICKHOUSE_HOST", "localhost")
+    if ch_host == "dlh-clickhouse":
+        ch_host = "localhost"
     return Client(
         host=ch_host,
-        port=int(os.getenv('CLICKHOUSE_TCP_PORT', '29000')),
-        database=os.getenv('CLICKHOUSE_DB', 'analytics'),
-        user=os.getenv('CLICKHOUSE_USER', 'default'),
-        password=os.getenv('CLICKHOUSE_PASSWORD', '') or '',
-        connect_timeout=10
+        port=int(os.getenv("CLICKHOUSE_TCP_PORT", "29000")),
+        database=os.getenv("CLICKHOUSE_DB", "analytics"),
+        user=os.getenv("CLICKHOUSE_USER", "default"),
+        password=os.getenv("CLICKHOUSE_PASSWORD", "") or "",
+        connect_timeout=10,
     )
 
 
 def get_s3_client():
-    rustfs_endpoint = os.getenv('RUSTFS_EXTERNAL_ENDPOINT', os.getenv('RUSTFS_ENDPOINT_URL', 'http://localhost:29100'))
+    rustfs_endpoint = os.getenv(
+        "RUSTFS_EXTERNAL_ENDPOINT",
+        os.getenv("RUSTFS_ENDPOINT_URL", "http://localhost:29100"),
+    )
     if "dlh-rustfs" in rustfs_endpoint:
         rustfs_endpoint = rustfs_endpoint.replace("dlh-rustfs:9000", "localhost:29100")
     return boto3.client(
-        's3',
+        "s3",
         endpoint_url=rustfs_endpoint,
-        aws_access_key_id=os.getenv('RUSTFS_ACCESS_KEY', 'doe'),
-        aws_secret_access_key=os.getenv('RUSTFS_SECRET_KEY', 'change-me-in-production'),
-        config=BotoConfig(signature_version='s3v4', s3={'addressing_style': 'path'})
+        aws_access_key_id=os.getenv("RUSTFS_ACCESS_KEY", "doe"),
+        aws_secret_access_key=os.getenv("RUSTFS_SECRET_KEY", "change-me-in-production"),
+        config=BotoConfig(signature_version="s3v4", s3={"addressing_style": "path"}),
     )
 
 
@@ -83,7 +88,7 @@ def main():
 
     ch_client = get_ch_client()
     s3_client = get_s3_client()
-    bucket = os.getenv('RUSTFS_BRONZE_BUCKET', 'bronze')
+    bucket = os.getenv("RUSTFS_BRONZE_BUCKET", "bronze")
 
     reports_before, summary_before = get_row_counts(ch_client)
     print(f"Baseline ClickHouse Counts:")
@@ -124,7 +129,9 @@ def main():
         print(f"  [+] Uploaded CSV to S3: {object_key}")
         time.sleep(15)
 
-    print("\nWaiting for S3 watcher and Mage pipelines to complete execution (40 seconds)...")
+    print(
+        "\nWaiting for S3 watcher and Mage pipelines to complete execution (40 seconds)..."
+    )
     for sec in range(4):
         time.sleep(10)
         print(f"  ... {10 * (sec + 1)} seconds elapsed")
@@ -144,8 +151,12 @@ def main():
     with open(WATCHER_LOG, "r") as f:
         log_content = f.read()
 
-    excel_triggers = log_content.count("Triggering Mage Pipeline: etl_excel_to_lakehouse")
-    csv_triggers = log_content.count("Triggering Mage Pipeline: etl_csv_upload_to_reporting")
+    excel_triggers = log_content.count(
+        "Triggering Mage Pipeline: etl_excel_to_lakehouse"
+    )
+    csv_triggers = log_content.count(
+        "Triggering Mage Pipeline: etl_csv_upload_to_reporting"
+    )
     errors = log_content.count("failed!")
     dbt_runs = log_content.count("dbt run completed successfully")
 

@@ -22,27 +22,30 @@ import boto3
 from botocore.client import Config as BotoConfig
 from botocore.exceptions import ClientError
 
-if 'data_exporter' not in dir():
+if "data_exporter" not in dir():
     from mage_ai.data_preparation.decorators import data_exporter
-if 'test' not in dir():
+if "test" not in dir():
     from mage_ai.data_preparation.decorators import test
 
 # Columns that differ between runs but do not represent content changes.
 _RUN_META_COLS = {
-    '_pipeline_run_id', '_source_table', '_extracted_at', '_silver_processed_at',
+    "_pipeline_run_id",
+    "_source_table",
+    "_extracted_at",
+    "_silver_processed_at",
 }
 
 
 def _s3_client():
     return boto3.client(
-        's3',
-        endpoint_url=os.getenv('RUSTFS_ENDPOINT_URL', 'http://dlh-rustfs:9000'),
-        aws_access_key_id=os.getenv('RUSTFS_ACCESS_KEY', 'rustfsadmin'),
-        aws_secret_access_key=os.getenv('RUSTFS_SECRET_KEY', 'rustfsadmin'),
-        region_name=os.getenv('RUSTFS_REGION', 'us-east-1'),
+        "s3",
+        endpoint_url=os.getenv("RUSTFS_ENDPOINT_URL", "http://dlh-rustfs:9000"),
+        aws_access_key_id=os.getenv("RUSTFS_ACCESS_KEY", "rustfsadmin"),
+        aws_secret_access_key=os.getenv("RUSTFS_SECRET_KEY", "rustfsadmin"),
+        region_name=os.getenv("RUSTFS_REGION", "us-east-1"),
         config=BotoConfig(
-            signature_version='s3v4',
-            s3={'addressing_style': 'path'},
+            signature_version="s3v4",
+            s3={"addressing_style": "path"},
         ),
     )
 
@@ -51,8 +54,8 @@ def _ensure_bucket(client, bucket: str) -> None:
     try:
         client.head_bucket(Bucket=bucket)
     except ClientError as exc:
-        code = str(exc.response.get('Error', {}).get('Code', ''))
-        if code not in {'404', 'NoSuchBucket', 'NotFound'}:
+        code = str(exc.response.get("Error", {}).get("Code", ""))
+        if code not in {"404", "NoSuchBucket", "NotFound"}:
             raise
         client.create_bucket(Bucket=bucket)
 
@@ -66,29 +69,35 @@ def _compute_content_hash(df: pd.DataFrame) -> str:
     """
     biz_cols = sorted([c for c in df.columns if c not in _RUN_META_COLS])
     if not biz_cols:
-        return ''
+        return ""
     df_biz = df[biz_cols].copy()
-    for col in df_biz.select_dtypes(include=['object']).columns:
+    for col in df_biz.select_dtypes(include=["object"]).columns:
         df_biz[col] = df_biz[col].astype(str)
     # Sort rows by all business columns for a deterministic order, then
     # serialise to JSON so the hash is independent of row insertion order.
-    df_sorted = df_biz.sort_values(biz_cols, na_position='first').reset_index(drop=True)
-    payload = df_sorted.to_json(orient='records', date_format='iso', default_handler=str)
+    df_sorted = df_biz.sort_values(biz_cols, na_position="first").reset_index(drop=True)
+    payload = df_sorted.to_json(
+        orient="records", date_format="iso", default_handler=str
+    )
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
-def _existing_hash_for_partition(client, bucket: str, prefix: str, date_str: str) -> Optional[str]:
+def _existing_hash_for_partition(
+    client, bucket: str, prefix: str, date_str: str
+) -> Optional[str]:
     """Return the content-sha256 stored on the latest object in today's partition, or None."""
     try:
         latest_obj = None
         latest_sort_key = None
-        paginator = client.get_paginator('list_objects_v2')
-        for page in paginator.paginate(Bucket=bucket, Prefix=f'{prefix}/dt={date_str}/'):
-            for obj in page.get('Contents', []):
-                key = obj.get('Key', '')
-                if not key.endswith('.parquet'):
+        paginator = client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(
+            Bucket=bucket, Prefix=f"{prefix}/dt={date_str}/"
+        ):
+            for obj in page.get("Contents", []):
+                key = obj.get("Key", "")
+                if not key.endswith(".parquet"):
                     continue
-                last_modified = obj.get('LastModified')
+                last_modified = obj.get("LastModified")
                 if last_modified is None:
                     raise RuntimeError(
                         f"[silver_to_rustfs] Unexpected S3 response: missing LastModified "
@@ -101,8 +110,8 @@ def _existing_hash_for_partition(client, bucket: str, prefix: str, date_str: str
 
         if not latest_obj:
             return None
-        head = client.head_object(Bucket=bucket, Key=latest_obj['Key'])
-        return head.get('Metadata', {}).get('content-sha256')
+        head = client.head_object(Bucket=bucket, Key=latest_obj["Key"])
+        return head.get("Metadata", {}).get("content-sha256")
     except ClientError:
         return None
 
@@ -111,30 +120,34 @@ def _existing_hash_for_partition(client, bucket: str, prefix: str, date_str: str
 def export_silver(df, *args, **kwargs):
     if df is None:
         return df
-    if isinstance(df, dict) and df.get('skip'):
+    if isinstance(df, dict) and df.get("skip"):
         return df
     if len(df) == 0:
         return df
 
-    bucket = os.getenv('RUSTFS_SILVER_BUCKET', 'silver')
-    prefix = os.getenv('RUSTFS_SILVER_PREFIX', 'demo')
+    bucket = os.getenv("RUSTFS_SILVER_BUCKET", "silver")
+    prefix = os.getenv("RUSTFS_SILVER_PREFIX", "demo")
 
     # Ensure it's a DataFrame before accessing columns
     if not isinstance(df, pd.DataFrame):
         print(f"[silver_to_rustfs] Warning: Expected DataFrame, got {type(df)}")
         return df
 
-    run_id = df['_pipeline_run_id'].iloc[0] if '_pipeline_run_id' in df.columns else 'unknown'
+    run_id = (
+        df["_pipeline_run_id"].iloc[0]
+        if "_pipeline_run_id" in df.columns
+        else "unknown"
+    )
     date_str = dt.date.today().isoformat()
-    key = f'{prefix}/dt={date_str}/{run_id}.parquet'
+    key = f"{prefix}/dt={date_str}/{run_id}.parquet"
 
     # Serialise object columns that Parquet can't handle natively
     df_export = df.copy()
-    for col in df_export.select_dtypes(include=['object']).columns:
-        df_export[col] = df_export[col].astype(str).replace({'None': None, 'nan': None})
+    for col in df_export.select_dtypes(include=["object"]).columns:
+        df_export[col] = df_export[col].astype(str).replace({"None": None, "nan": None})
 
     buffer = io.BytesIO()
-    df_export.to_parquet(buffer, index=False, engine='pyarrow')
+    df_export.to_parquet(buffer, index=False, engine="pyarrow")
     buffer.seek(0)
     content = buffer.getvalue()
 
@@ -147,8 +160,8 @@ def export_silver(df, *args, **kwargs):
     existing_hash = _existing_hash_for_partition(client, bucket, prefix, date_str)
     if content_hash and existing_hash == content_hash:
         print(
-            f'[silver_to_rustfs] Skipping upload – data unchanged for {date_str} '
-            f'(hash={content_hash[:12]})'
+            f"[silver_to_rustfs] Skipping upload – data unchanged for {date_str} "
+            f"(hash={content_hash[:12]})"
         )
         return df
 
@@ -156,8 +169,8 @@ def export_silver(df, *args, **kwargs):
         Bucket=bucket,
         Key=key,
         Body=content,
-        ContentType='application/octet-stream',
-        Metadata={'content-sha256': content_hash},
+        ContentType="application/octet-stream",
+        Metadata={"content-sha256": content_hash},
     )
 
     print(f"[silver_to_rustfs] Uploaded {len(df)} rows → s3://{bucket}/{key}")
@@ -166,8 +179,8 @@ def export_silver(df, *args, **kwargs):
 
 @test
 def test_output(output, *args):
-    assert output is not None, 'Output is None after silver export'
+    assert output is not None, "Output is None after silver export"
     if isinstance(output, pd.DataFrame):
         assert len(output) >= 0
-    elif isinstance(output, dict) and not output.get('skip'):
-        assert 'dataframe' in output, 'Missing dataframe in output'
+    elif isinstance(output, dict) and not output.get("skip"):
+        assert "dataframe" in output, "Missing dataframe in output"

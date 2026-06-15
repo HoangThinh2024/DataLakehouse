@@ -14,9 +14,9 @@ import pandas as pd
 import psycopg2
 from psycopg2 import sql
 
-if 'data_loader' not in dir():
+if "data_loader" not in dir():
     from mage_ai.data_preparation.decorators import data_loader
-if 'test' not in dir():
+if "test" not in dir():
     from mage_ai.data_preparation.decorators import test
 
 
@@ -29,30 +29,31 @@ def _get_created_at_watermark() -> Optional[dt.datetime]:
     Returns None if ClickHouse is unavailable, the table doesn't exist yet,
     or incremental mode is disabled via INCREMENTAL_EXTRACT=false.
     """
-    if os.getenv('INCREMENTAL_EXTRACT', 'true').lower() in {'0', 'false', 'no', 'n'}:
+    if os.getenv("INCREMENTAL_EXTRACT", "true").lower() in {"0", "false", "no", "n"}:
         return None
     try:
         from clickhouse_driver import Client as CHClient
+
         ch = CHClient(
-            host=os.getenv('CLICKHOUSE_HOST', 'dlh-clickhouse'),
-            port=int(os.getenv('CLICKHOUSE_TCP_PORT', '9000')),
-            database=os.getenv('CLICKHOUSE_DB', 'analytics'),
-            user=os.getenv('CLICKHOUSE_USER', 'default'),
-            password=os.getenv('CLICKHOUSE_PASSWORD', '') or '',
+            host=os.getenv("CLICKHOUSE_HOST", "dlh-clickhouse"),
+            port=int(os.getenv("CLICKHOUSE_TCP_PORT", "9000")),
+            database=os.getenv("CLICKHOUSE_DB", "analytics"),
+            user=os.getenv("CLICKHOUSE_USER", "default"),
+            password=os.getenv("CLICKHOUSE_PASSWORD", "") or "",
             connect_timeout=5,
             send_receive_timeout=30,
         )
-        db = os.getenv('CLICKHOUSE_DB', 'analytics')
-        rows = ch.execute(f'SELECT max(created_at) FROM {db}.silver_demo FINAL')
+        db = os.getenv("CLICKHOUSE_DB", "analytics")
+        rows = ch.execute(f"SELECT max(created_at) FROM {db}.silver_demo FINAL")
         if rows and rows[0][0] is not None:
             watermark = rows[0][0]
             # ClickHouse returns timezone-aware datetimes; normalize to UTC.
-            if hasattr(watermark, 'tzinfo') and watermark.tzinfo is None:
+            if hasattr(watermark, "tzinfo") and watermark.tzinfo is None:
                 watermark = watermark.replace(tzinfo=dt.timezone.utc)
-            print(f'[extract_postgres] Incremental watermark: {watermark}')
+            print(f"[extract_postgres] Incremental watermark: {watermark}")
             return watermark
     except Exception as exc:
-        print(f'[extract_postgres] Watermark check failed ({exc}) – using full load')
+        print(f"[extract_postgres] Watermark check failed ({exc}) – using full load")
     return None
 
 
@@ -60,15 +61,15 @@ def _get_created_at_watermark() -> Optional[dt.datetime]:
 def load_data(*args, **kwargs):
     """Extract rows from PostgreSQL and attach run metadata."""
     run_id = str(uuid.uuid4())
-    kwargs['pipeline_run_id'] = run_id
+    kwargs["pipeline_run_id"] = run_id
 
-    source_dbname = os.getenv('SOURCE_DB_NAME')
-    source_user = os.getenv('SOURCE_DB_USER')
-    source_password = os.getenv('SOURCE_DB_PASSWORD')
+    source_dbname = os.getenv("SOURCE_DB_NAME")
+    source_user = os.getenv("SOURCE_DB_USER")
+    source_password = os.getenv("SOURCE_DB_PASSWORD")
 
-    custom_dbname = os.getenv('CUSTOM_DB_NAME')
-    custom_user = os.getenv('CUSTOM_DB_USER')
-    custom_password = os.getenv('CUSTOM_DB_PASSWORD')
+    custom_dbname = os.getenv("CUSTOM_DB_NAME")
+    custom_user = os.getenv("CUSTOM_DB_USER")
+    custom_password = os.getenv("CUSTOM_DB_PASSWORD")
 
     if source_dbname and source_user and source_password:
         dbname = source_dbname
@@ -79,24 +80,26 @@ def load_data(*args, **kwargs):
         user = custom_user
         password = custom_password
     else:
-        dbname = os.getenv('POSTGRES_DB', 'datalakehouse')
-        user = os.getenv('POSTGRES_USER', 'dlh_admin')
-        password = os.getenv('POSTGRES_PASSWORD', '')
+        dbname = os.getenv("POSTGRES_DB", "datalakehouse")
+        user = os.getenv("POSTGRES_USER", "dlh_admin")
+        password = os.getenv("POSTGRES_PASSWORD", "")
 
-    host = os.getenv('SOURCE_DB_HOST', os.getenv('POSTGRES_HOST', 'dlh-postgres'))
-    port = int(os.getenv('SOURCE_DB_PORT', '5432'))
-    schema = os.getenv('SOURCE_SCHEMA', os.getenv('CUSTOM_SCHEMA', 'public'))
+    host = os.getenv("SOURCE_DB_HOST", os.getenv("POSTGRES_HOST", "dlh-postgres"))
+    port = int(os.getenv("SOURCE_DB_PORT", "5432"))
+    schema = os.getenv("SOURCE_SCHEMA", os.getenv("CUSTOM_SCHEMA", "public"))
     schema_fallbacks = [
         name.strip()
-        for name in os.getenv('SOURCE_SCHEMA_FALLBACKS', 'public').split(',')
+        for name in os.getenv("SOURCE_SCHEMA_FALLBACKS", "public").split(",")
         if name.strip()
     ]
-    configured_table = os.getenv('SOURCE_TABLE')
+    configured_table = os.getenv("SOURCE_TABLE")
     # If SOURCE_TABLE is not explicitly set, try common demo table names.
     # This helps the pipeline run on varied local databases out of the box.
     candidate_tables = [
         name.strip()
-        for name in os.getenv('SOURCE_TABLE_CANDIDATES', 'Demo,test_projects,sales_orders').split(',')
+        for name in os.getenv(
+            "SOURCE_TABLE_CANDIDATES", "Demo,test_projects,sales_orders"
+        ).split(",")
         if name.strip()
     ]
 
@@ -106,7 +109,7 @@ def load_data(*args, **kwargs):
         dbname=dbname,
         user=user,
         password=password,
-        connect_timeout=int(os.getenv('SOURCE_DB_CONNECT_TIMEOUT', '15')),
+        connect_timeout=int(os.getenv("SOURCE_DB_CONNECT_TIMEOUT", "15")),
     )
 
     # Resolve schema/table name with case-insensitive fallback.
@@ -172,12 +175,12 @@ def load_data(*args, **kwargs):
             public_tables = [row[0] for row in cur.fetchall()]
             requested_label = configured_table if configured_table else requested_names
             raise ValueError(
-                f'Source table not found. Requested: {requested_label}. '
-                f'Searched schemas: {schema_candidates}. '
-                f'Available tables by schema (first 20): {available_by_schema}. '
-                f'public tables (first 20): {public_tables}. '
-                'Set SOURCE_TABLE to an existing table (example: test_projects) '
-                'or update SOURCE_TABLE_CANDIDATES/SOURCE_SCHEMA.'
+                f"Source table not found. Requested: {requested_label}. "
+                f"Searched schemas: {schema_candidates}. "
+                f"Available tables by schema (first 20): {available_by_schema}. "
+                f"public tables (first 20): {public_tables}. "
+                "Set SOURCE_TABLE to an existing table (example: test_projects) "
+                "or update SOURCE_TABLE_CANDIDATES/SOURCE_SCHEMA."
             )
 
     resolved_table = table_match[0]
@@ -190,26 +193,24 @@ def load_data(*args, **kwargs):
 
     if watermark:
         try:
-            incr_query = sql.SQL(
-                'SELECT * FROM {}.{} WHERE created_at > %s'
-            ).format(
+            incr_query = sql.SQL("SELECT * FROM {}.{} WHERE created_at > %s").format(
                 sql.Identifier(resolved_schema),
                 sql.Identifier(resolved_table),
             )
             df = pd.read_sql(incr_query.as_string(conn), conn, params=(watermark,))
             print(
-                f'[extract_postgres] Incremental load: {len(df)} new rows '
-                f'(created_at > {watermark})  table={resolved_schema}.{resolved_table}'
+                f"[extract_postgres] Incremental load: {len(df)} new rows "
+                f"(created_at > {watermark})  table={resolved_schema}.{resolved_table}"
             )
         except Exception as exc:
             print(
-                f'[extract_postgres] Incremental query failed ({exc}) '
-                '– falling back to full load'
+                f"[extract_postgres] Incremental query failed ({exc}) "
+                "– falling back to full load"
             )
             df = None
 
     if df is None:
-        full_query = sql.SQL('SELECT * FROM {}.{}').format(
+        full_query = sql.SQL("SELECT * FROM {}.{}").format(
             sql.Identifier(resolved_schema),
             sql.Identifier(resolved_table),
         )
@@ -218,21 +219,23 @@ def load_data(*args, **kwargs):
     try:
         conn.close()
     except psycopg2.Error as exc:
-        print(f'[extract_postgres] Warning: error closing connection: {exc}')
+        print(f"[extract_postgres] Warning: error closing connection: {exc}")
 
     # Attach pipeline run metadata columns
-    now_utc = dt.datetime.now(dt.timezone.utc).isoformat().replace('+00:00', 'Z')
-    df['_pipeline_run_id'] = run_id
-    df['_source_table'] = f'{resolved_schema}.{resolved_table}'
-    df['_extracted_at'] = now_utc
+    now_utc = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+    df["_pipeline_run_id"] = run_id
+    df["_source_table"] = f"{resolved_schema}.{resolved_table}"
+    df["_extracted_at"] = now_utc
 
-    print(f"[extract_postgres] run_id={run_id}  rows={len(df)}  table={resolved_schema}.{resolved_table}")
+    print(
+        f"[extract_postgres] run_id={run_id}  rows={len(df)}  table={resolved_schema}.{resolved_table}"
+    )
     return df
 
 
 @test
 def test_output(output, *args):
-    assert output is not None, 'Output DataFrame is None'
+    assert output is not None, "Output DataFrame is None"
     # In incremental mode the watermark may return 0 new rows – that is not an error.
-    assert isinstance(output, pd.DataFrame), 'Output is not a DataFrame'
-    assert '_pipeline_run_id' in output.columns, '_pipeline_run_id column missing'
+    assert isinstance(output, pd.DataFrame), "Output is not a DataFrame"
+    assert "_pipeline_run_id" in output.columns, "_pipeline_run_id column missing"

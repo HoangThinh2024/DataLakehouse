@@ -10,51 +10,65 @@ import boto3
 from botocore.client import Config as BotoConfig
 from botocore.exceptions import ClientError
 
-if 'data_exporter' not in dir():
+if "data_exporter" not in dir():
     from mage_ai.data_preparation.decorators import data_exporter
+
 
 def _s3_client():
     return boto3.client(
-        's3',
-        endpoint_url=os.getenv('RUSTFS_ENDPOINT_URL', 'http://dlh-rustfs:9000'),
-        aws_access_key_id=os.getenv('RUSTFS_ACCESS_KEY', 'rustfsadmin'),
-        aws_secret_access_key=os.getenv('RUSTFS_SECRET_KEY', 'rustfsadmin'),
-        region_name=os.getenv('RUSTFS_REGION', 'us-east-1'),
-        config=BotoConfig(signature_version='s3v4', s3={'addressing_style': 'path'}),
+        "s3",
+        endpoint_url=os.getenv("RUSTFS_ENDPOINT_URL", "http://dlh-rustfs:9000"),
+        aws_access_key_id=os.getenv("RUSTFS_ACCESS_KEY", "rustfsadmin"),
+        aws_secret_access_key=os.getenv("RUSTFS_SECRET_KEY", "rustfsadmin"),
+        region_name=os.getenv("RUSTFS_REGION", "us-east-1"),
+        config=BotoConfig(signature_version="s3v4", s3={"addressing_style": "path"}),
     )
+
 
 def _ensure_bucket(client, bucket: str) -> None:
     try:
         client.head_bucket(Bucket=bucket)
     except ClientError as exc:
-        code = str(exc.response.get('Error', {}).get('Code', ''))
-        if code not in {'404', 'NoSuchBucket', 'NotFound'}:
+        code = str(exc.response.get("Error", {}).get("Code", ""))
+        if code not in {"404", "NoSuchBucket", "NotFound"}:
             raise
         client.create_bucket(Bucket=bucket)
+
 
 def _upload_df(client, bucket, key, df):
     if df is None or len(df) == 0:
         return
     buffer = io.BytesIO()
-    df.to_parquet(buffer, index=False, engine='pyarrow')
+    df.to_parquet(buffer, index=False, engine="pyarrow")
     buffer.seek(0)
     client.put_object(Bucket=bucket, Key=key, Body=buffer.getvalue())
     print(f"[gold_to_rustfs] Uploaded {len(df)} rows → s3://{bucket}/{key}")
 
+
 @data_exporter
 def export_gold(data, *args, **kwargs):
-    if not isinstance(data, dict) or data.get('skip'):
+    if not isinstance(data, dict) or data.get("skip"):
         return data
 
-    bucket = os.getenv('RUSTFS_GOLD_BUCKET', 'gold')
-    run_id = data.get('pipeline_run_id', 'unknown')
+    bucket = os.getenv("RUSTFS_GOLD_BUCKET", "gold")
+    run_id = data.get("pipeline_run_id", "unknown")
     date_str = dt.date.today().isoformat()
     client = _s3_client()
     _ensure_bucket(client, bucket)
 
-    if 'gold_projects' in data:
-        _upload_df(client, bucket, f'projects/dt={date_str}/{run_id}.parquet', data.get('gold_projects'))
-    if 'gold_workload' in data:
-        _upload_df(client, bucket, f'workload/dt={date_str}/{run_id}.parquet', data.get('gold_workload'))
+    if "gold_projects" in data:
+        _upload_df(
+            client,
+            bucket,
+            f"projects/dt={date_str}/{run_id}.parquet",
+            data.get("gold_projects"),
+        )
+    if "gold_workload" in data:
+        _upload_df(
+            client,
+            bucket,
+            f"workload/dt={date_str}/{run_id}.parquet",
+            data.get("gold_workload"),
+        )
 
     return data
