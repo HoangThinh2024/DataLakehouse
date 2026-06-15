@@ -6,14 +6,17 @@ SQLALCHEMY_DATABASE_URI = (
     f"{os.getenv('SUPERSET_DB_NAME', 'dlh_superset')}"
 )
 
-SECRET_KEY = os.getenv('SUPERSET_SECRET_KEY', 'replace-this-secret')
+SECRET_KEY = os.getenv("SUPERSET_SECRET_KEY", "replace-this-secret")
 
 SUPERSET_AUTH_TYPE = os.getenv("SUPERSET_AUTH_TYPE", "db").strip().lower()
-SUPERSET_PREFERRED_URL_SCHEME = os.getenv("SUPERSET_PREFERRED_URL_SCHEME", "http").strip().lower()
+SUPERSET_PREFERRED_URL_SCHEME = (
+    os.getenv("SUPERSET_PREFERRED_URL_SCHEME", "http").strip().lower()
+)
 
 # --- Authentication Configuration (OIDC/SSO) ---
 try:
     from flask_appbuilder.security.manager import AUTH_OAUTH
+
     HAS_OIDC = True
 except ImportError:
     AUTH_OAUTH = 1
@@ -45,9 +48,7 @@ if AUTH_TYPE == AUTH_OAUTH:
                 "client_id": OIDC_CLIENT_ID,
                 "client_secret": OIDC_CLIENT_SECRET,
                 "server_metadata_url": OIDC_DISCOVERY_URL,
-                "client_kwargs": {
-                    "scope": "openid email profile"
-                },
+                "client_kwargs": {"scope": "openid email profile"},
             },
         }
     ]
@@ -94,8 +95,12 @@ if REDIS_PASSWORD:
 else:
     REDIS_AUTH = ""
 
-REDIS_CACHE_URI = f"redis://{REDIS_AUTH}{REDIS_HOST}:{REDIS_PORT}/{SUPERSET_REDIS_CACHE_DB}"
-REDIS_RESULTS_URI = f"redis://{REDIS_AUTH}{REDIS_HOST}:{REDIS_PORT}/{SUPERSET_REDIS_RESULTS_DB}"
+REDIS_CACHE_URI = (
+    f"redis://{REDIS_AUTH}{REDIS_HOST}:{REDIS_PORT}/{SUPERSET_REDIS_CACHE_DB}"
+)
+REDIS_RESULTS_URI = (
+    f"redis://{REDIS_AUTH}{REDIS_HOST}:{REDIS_PORT}/{SUPERSET_REDIS_RESULTS_DB}"
+)
 
 # Shared caching layer
 CACHE_CONFIG = {

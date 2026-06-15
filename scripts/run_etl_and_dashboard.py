@@ -84,7 +84,10 @@ def _load_env_file(path: Path) -> None:
             try:
                 text = raw_bytes.decode(encoding)
                 if encoding != "utf-8":
-                    print(f"Warning: loaded {path} using {encoding} encoding", file=sys.stderr)
+                    print(
+                        f"Warning: loaded {path} using {encoding} encoding",
+                        file=sys.stderr,
+                    )
                 break
             except UnicodeDecodeError as exc:
                 decode_errors.append(f"{encoding}: {exc}")
@@ -186,7 +189,9 @@ def _default_source_table() -> str:
 
     candidates = [
         name.strip()
-        for name in _env("SOURCE_TABLE_CANDIDATES", "Demo,test_projects,sales_orders").split(",")
+        for name in _env(
+            "SOURCE_TABLE_CANDIDATES", "Demo,test_projects,sales_orders"
+        ).split(",")
         if name.strip()
     ]
     return candidates[0] if candidates else "sales_orders"
@@ -195,7 +200,9 @@ def _default_source_table() -> str:
 def _source_table_candidates() -> list[str]:
     names = [
         name.strip()
-        for name in _env("SOURCE_TABLE_CANDIDATES", "Demo,test_projects,sales_orders").split(",")
+        for name in _env(
+            "SOURCE_TABLE_CANDIDATES", "Demo,test_projects,sales_orders"
+        ).split(",")
         if name.strip()
     ]
     if not names:
@@ -363,7 +370,9 @@ def run_etl(cfg: dict[str, Any], table_name: str) -> None:
     try:
         rc = subprocess.run(cmd, cwd=REPO_ROOT, check=False).returncode
     except FileNotFoundError:
-        print("❌  docker command not found. Install Docker and Docker Compose to run ETL.")
+        print(
+            "❌  docker command not found. Install Docker and Docker Compose to run ETL."
+        )
         sys.exit(1)
 
     if rc != 0:
@@ -387,7 +396,10 @@ def run_dashboard() -> None:
         sys.exit(1)
 
     import importlib.util
-    spec = importlib.util.spec_from_file_location("create_superset_demo_dashboard", dashboard_script)
+
+    spec = importlib.util.spec_from_file_location(
+        "create_superset_demo_dashboard", dashboard_script
+    )
     if spec is None or spec.loader is None:
         print(f"❌  Could not load dashboard module from {dashboard_script}")
         sys.exit(1)
@@ -455,7 +467,8 @@ def main(argv: list[str] | None = None) -> int:
     schema = src_schema
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT 1 FROM information_schema.schemata WHERE schema_name = %s", (schema,)
+            "SELECT 1 FROM information_schema.schemata WHERE schema_name = %s",
+            (schema,),
         )
         if not cur.fetchone():
             print(f"\n  Schema '{schema}' does not exist yet – it will be created.")
@@ -466,12 +479,16 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.auto:
         desired_table = (args.table or "").strip()
-        auto_candidates = [desired_table] if desired_table else _source_table_candidates()
+        auto_candidates = (
+            [desired_table] if desired_table else _source_table_candidates()
+        )
 
         if args.create_sample_table:
             table_name = desired_table or "sales_orders"
             if _table_exists(conn, schema, table_name):
-                print(f"  ℹ️  Table '{schema}.{table_name}' already exists – skipping creation.")
+                print(
+                    f"  ℹ️  Table '{schema}.{table_name}' already exists – skipping creation."
+                )
             else:
                 print(f"  ✏️  Creating '{schema}.{table_name}' …")
                 n = create_sample_table(conn, schema, table_name)
@@ -494,22 +511,30 @@ def main(argv: list[str] | None = None) -> int:
                 # Auto-bootstrap data to guarantee ETL can run end-to-end.
                 etl_table = desired_table or "sales_orders"
                 print(f"  ⚠️  No tables found in schema '{schema}'.")
-                print(f"  ✏️  Auto mode will create sample table '{schema}.{etl_table}' …")
+                print(
+                    f"  ✏️  Auto mode will create sample table '{schema}.{etl_table}' …"
+                )
                 n = create_sample_table(conn, schema, etl_table)
                 print(f"  ✅  Created table with {n} sample rows.")
     else:
         print()
-        answer = input(
-            f"  ❓ Create a sample 'sales_orders' table in schema '{schema}' of '{src_dbname}'? [y/N]: "
-        ).strip().lower()
+        answer = (
+            input(
+                f"  ❓ Create a sample 'sales_orders' table in schema '{schema}' of '{src_dbname}'? [y/N]: "
+            )
+            .strip()
+            .lower()
+        )
 
         if answer in ("y", "yes"):
-            table_name = input(
-                "     Table name [sales_orders]: "
-            ).strip() or "sales_orders"
+            table_name = (
+                input("     Table name [sales_orders]: ").strip() or "sales_orders"
+            )
 
             if _table_exists(conn, schema, table_name):
-                print(f"  ℹ️  Table '{schema}.{table_name}' already exists – skipping creation.")
+                print(
+                    f"  ℹ️  Table '{schema}.{table_name}' already exists – skipping creation."
+                )
             else:
                 print(f"  ✏️  Creating '{schema}.{table_name}' …")
                 n = create_sample_table(conn, schema, table_name)
@@ -520,10 +545,15 @@ def main(argv: list[str] | None = None) -> int:
             if tables:
                 display_tables = tables[:10]
                 print(f"\n  Available tables in schema '{schema}': {display_tables}")
-                chosen = input(f"  Table for ETL [{display_tables[0]}]: ").strip() or display_tables[0]
+                chosen = (
+                    input(f"  Table for ETL [{display_tables[0]}]: ").strip()
+                    or display_tables[0]
+                )
                 etl_table = chosen
             else:
-                print(f"\n  ⚠️  No tables found in schema '{schema}'. ETL will use default 'Demo' table.")
+                print(
+                    f"\n  ⚠️  No tables found in schema '{schema}'. ETL will use default 'Demo' table."
+                )
 
     conn.close()
 

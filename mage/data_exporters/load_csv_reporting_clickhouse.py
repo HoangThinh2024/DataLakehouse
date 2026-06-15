@@ -17,25 +17,25 @@ from typing import Any
 import pandas as pd
 from clickhouse_driver import Client
 
-project_root = os.getenv('MAGE_PROJECT_PATH', os.getcwd())
+project_root = os.getenv("MAGE_PROJECT_PATH", os.getcwd())
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from utils.rustfs_layer_reader import read_csv_silver_by_run_id
 
-if 'data_exporter' not in dir():
+if "data_exporter" not in dir():
     from mage_ai.data_preparation.decorators import data_exporter
-if 'test' not in dir():
+if "test" not in dir():
     from mage_ai.data_preparation.decorators import test
 
 
 def _ch_client() -> Client:
     return Client(
-        host=os.getenv('CLICKHOUSE_HOST', 'dlh-clickhouse'),
-        port=int(os.getenv('CLICKHOUSE_TCP_PORT', '9000')),
-        database=os.getenv('CLICKHOUSE_DB', 'analytics'),
-        user=os.getenv('CLICKHOUSE_USER', 'default'),
-        password=os.getenv('CLICKHOUSE_PASSWORD', '') or '',
+        host=os.getenv("CLICKHOUSE_HOST", "dlh-clickhouse"),
+        port=int(os.getenv("CLICKHOUSE_TCP_PORT", "9000")),
+        database=os.getenv("CLICKHOUSE_DB", "analytics"),
+        user=os.getenv("CLICKHOUSE_USER", "default"),
+        password=os.getenv("CLICKHOUSE_PASSWORD", "") or "",
         connect_timeout=15,
         send_receive_timeout=120,
     )
@@ -43,8 +43,8 @@ def _ch_client() -> Client:
 
 def _ensure_tables(client: Client, db: str) -> None:
     statements = [
-        f'CREATE DATABASE IF NOT EXISTS {db}',
-        f'''
+        f"CREATE DATABASE IF NOT EXISTS {db}",
+        f"""
         CREATE TABLE IF NOT EXISTS {db}.csv_clean_rows
         (
             pipeline_run_id String,
@@ -58,8 +58,8 @@ def _ensure_tables(client: Client, db: str) -> None:
         ENGINE = MergeTree
         PARTITION BY toYYYYMM(processed_at)
         ORDER BY (processed_at, source_key, row_number)
-        ''',
-        f'''
+        """,
+        f"""
         CREATE TABLE IF NOT EXISTS {db}.csv_quality_metrics
         (
             pipeline_run_id String,
@@ -75,8 +75,8 @@ def _ensure_tables(client: Client, db: str) -> None:
         ENGINE = MergeTree
         PARTITION BY toYYYYMM(processed_at)
         ORDER BY (processed_at, source_key)
-        ''',
-        f'''
+        """,
+        f"""
         CREATE TABLE IF NOT EXISTS {db}.csv_upload_events
         (
             source_key String,
@@ -94,8 +94,8 @@ def _ensure_tables(client: Client, db: str) -> None:
         ENGINE = MergeTree
         PARTITION BY toYYYYMM(processed_at)
         ORDER BY (source_key, etag, processed_at)
-        ''',
-        f'''
+        """,
+        f"""
         CREATE TABLE IF NOT EXISTS {db}.pipeline_runs
         (
             run_id String,
@@ -114,7 +114,7 @@ def _ensure_tables(client: Client, db: str) -> None:
         ENGINE = MergeTree
         PARTITION BY toYYYYMM(started_at)
         ORDER BY started_at
-        ''',
+        """,
     ]
     for stmt in statements:
         client.execute(stmt)
@@ -123,7 +123,7 @@ def _ensure_tables(client: Client, db: str) -> None:
 def _to_iso_datetime(value: Any):
     if value is None:
         return None
-    parsed = pd.to_datetime(value, errors='coerce', utc=True)
+    parsed = pd.to_datetime(value, errors="coerce", utc=True)
     if pd.isna(parsed):
         return None
     return parsed.to_pydatetime()
@@ -131,39 +131,43 @@ def _to_iso_datetime(value: Any):
 
 @data_exporter
 def export_data(data, *args, **kwargs):
-    if not isinstance(data, dict) or data.get('skip'):
-        print('[load_csv_reporting_clickhouse] Skip run - no new CSV file.')
+    if not isinstance(data, dict) or data.get("skip"):
+        print("[load_csv_reporting_clickhouse] Skip run - no new CSV file.")
         return data
 
     client = _ch_client()
-    db = os.getenv('CLICKHOUSE_DB', 'analytics')
+    db = os.getenv("CLICKHOUSE_DB", "analytics")
     _ensure_tables(client, db)
 
     started_at = dt.datetime.now(dt.timezone.utc)
-    run_id = data.get('pipeline_run_id', 'unknown')
-    source_key = data.get('source_key', '')
-    source_etag = data.get('source_etag', '')
-    source_size = int(data.get('source_size', 0))
-    source_last_modified = _to_iso_datetime(data.get('source_last_modified'))
+    run_id = data.get("pipeline_run_id", "unknown")
+    source_key = data.get("source_key", "")
+    source_etag = data.get("source_etag", "")
+    source_size = int(data.get("source_size", 0))
+    source_last_modified = _to_iso_datetime(data.get("source_last_modified"))
 
-    metrics = data.get('quality_metrics', {})
+    metrics = data.get("quality_metrics", {})
     error_msg = None
 
     try:
         cleaned_df = read_csv_silver_by_run_id(run_id)
         if cleaned_df is None or len(cleaned_df) == 0:
-            raise RuntimeError(f'No cleaned CSV Silver data found in RustFS for run_id={run_id}')
+            raise RuntimeError(
+                f"No cleaned CSV Silver data found in RustFS for run_id={run_id}"
+            )
 
         rows_payload = []
         payload_df = cleaned_df.copy()
-        if '_row_number' not in payload_df.columns:
-            payload_df['_row_number'] = range(1, len(payload_df) + 1)
+        if "_row_number" not in payload_df.columns:
+            payload_df["_row_number"] = range(1, len(payload_df) + 1)
 
         columns = list(payload_df.columns)
-        if '_row_number' not in columns:
-            raise RuntimeError('Internal error: _row_number column is missing before payload build.')
-        row_idx = columns.index('_row_number')
-        value_cols = [c for c in columns if c != '_row_number']
+        if "_row_number" not in columns:
+            raise RuntimeError(
+                "Internal error: _row_number column is missing before payload build."
+            )
+        row_idx = columns.index("_row_number")
+        value_cols = [c for c in columns if c != "_row_number"]
         for row in payload_df.itertuples(index=False, name=None):
             row_number = int(row[row_idx] or 0)
             row_map = dict(zip(columns, row))
@@ -172,75 +176,84 @@ def export_data(data, *args, **kwargs):
                 for k, v in row_map.items()
                 if k in value_cols
             }
-            rows_payload.append({
-                'pipeline_run_id': run_id,
-                'source_key': source_key,
-                'source_etag': source_etag,
-                'source_last_modified': source_last_modified,
-                'row_number': row_number,
-                'row_json': json.dumps(row_dict, default=str),
-                'processed_at': started_at,
-            })
+            rows_payload.append(
+                {
+                    "pipeline_run_id": run_id,
+                    "source_key": source_key,
+                    "source_etag": source_etag,
+                    "source_last_modified": source_last_modified,
+                    "row_number": row_number,
+                    "row_json": json.dumps(row_dict, default=str),
+                    "processed_at": started_at,
+                }
+            )
 
         if rows_payload:
             client.execute(
-                f'INSERT INTO {db}.csv_clean_rows '
-                '(pipeline_run_id, source_key, source_etag, source_last_modified, row_number, row_json, processed_at) VALUES',
+                f"INSERT INTO {db}.csv_clean_rows "
+                "(pipeline_run_id, source_key, source_etag, source_last_modified, row_number, row_json, processed_at) VALUES",
                 rows_payload,
             )
 
-        quality_row = [{
-            'pipeline_run_id': run_id,
-            'source_key': source_key,
-            'source_etag': source_etag,
-            'raw_rows': int(metrics.get('raw_rows', 0)),
-            'cleaned_rows': int(metrics.get('cleaned_rows', len(cleaned_df))),
-            'dropped_rows': int(metrics.get('dropped_rows', 0)),
-            'duplicate_rows': int(metrics.get('duplicate_rows', 0)),
-            'null_cells': int(metrics.get('null_cells', 0)),
-            'processed_at': _to_iso_datetime(metrics.get('processed_at')) or started_at,
-        }]
+        quality_row = [
+            {
+                "pipeline_run_id": run_id,
+                "source_key": source_key,
+                "source_etag": source_etag,
+                "raw_rows": int(metrics.get("raw_rows", 0)),
+                "cleaned_rows": int(metrics.get("cleaned_rows", len(cleaned_df))),
+                "dropped_rows": int(metrics.get("dropped_rows", 0)),
+                "duplicate_rows": int(metrics.get("duplicate_rows", 0)),
+                "null_cells": int(metrics.get("null_cells", 0)),
+                "processed_at": _to_iso_datetime(metrics.get("processed_at"))
+                or started_at,
+            }
+        ]
         client.execute(
-            f'INSERT INTO {db}.csv_quality_metrics '
-            '(pipeline_run_id, source_key, source_etag, raw_rows, cleaned_rows, dropped_rows, duplicate_rows, null_cells, processed_at) VALUES',
+            f"INSERT INTO {db}.csv_quality_metrics "
+            "(pipeline_run_id, source_key, source_etag, raw_rows, cleaned_rows, dropped_rows, duplicate_rows, null_cells, processed_at) VALUES",
             quality_row,
         )
 
         client.execute(
-            f'INSERT INTO {db}.csv_upload_events '
-            '(source_key, etag, source_size, source_last_modified, status, row_count, duplicate_rows, dropped_rows, processed_at, pipeline_run_id, error_message) VALUES',
-            [{
-                'source_key': source_key,
-                'etag': source_etag,
-                'source_size': source_size,
-                'source_last_modified': source_last_modified,
-                'status': 'success',
-                'row_count': int(metrics.get('cleaned_rows', len(cleaned_df))),
-                'duplicate_rows': int(metrics.get('duplicate_rows', 0)),
-                'dropped_rows': int(metrics.get('dropped_rows', 0)),
-                'processed_at': started_at,
-                'pipeline_run_id': run_id,
-                'error_message': None,
-            }],
+            f"INSERT INTO {db}.csv_upload_events "
+            "(source_key, etag, source_size, source_last_modified, status, row_count, duplicate_rows, dropped_rows, processed_at, pipeline_run_id, error_message) VALUES",
+            [
+                {
+                    "source_key": source_key,
+                    "etag": source_etag,
+                    "source_size": source_size,
+                    "source_last_modified": source_last_modified,
+                    "status": "success",
+                    "row_count": int(metrics.get("cleaned_rows", len(cleaned_df))),
+                    "duplicate_rows": int(metrics.get("duplicate_rows", 0)),
+                    "dropped_rows": int(metrics.get("dropped_rows", 0)),
+                    "processed_at": started_at,
+                    "pipeline_run_id": run_id,
+                    "error_message": None,
+                }
+            ],
         )
 
         ended_at = dt.datetime.now(dt.timezone.utc)
         client.execute(
-            f'INSERT INTO {db}.pipeline_runs '
-            '(run_id, pipeline_name, status, started_at, ended_at, rows_extracted, rows_silver, rows_gold_daily, rows_gold_region, rows_gold_category, error_message) VALUES',
-            [{
-                'run_id': run_id,
-                'pipeline_name': 'etl_csv_upload_to_reporting',
-                'status': 'success',
-                'started_at': started_at,
-                'ended_at': ended_at,
-                'rows_extracted': int(metrics.get('raw_rows', 0)),
-                'rows_silver': int(metrics.get('cleaned_rows', len(cleaned_df))),
-                'rows_gold_daily': 0,
-                'rows_gold_region': 0,
-                'rows_gold_category': 0,
-                'error_message': None,
-            }],
+            f"INSERT INTO {db}.pipeline_runs "
+            "(run_id, pipeline_name, status, started_at, ended_at, rows_extracted, rows_silver, rows_gold_daily, rows_gold_region, rows_gold_category, error_message) VALUES",
+            [
+                {
+                    "run_id": run_id,
+                    "pipeline_name": "etl_csv_upload_to_reporting",
+                    "status": "success",
+                    "started_at": started_at,
+                    "ended_at": ended_at,
+                    "rows_extracted": int(metrics.get("raw_rows", 0)),
+                    "rows_silver": int(metrics.get("cleaned_rows", len(cleaned_df))),
+                    "rows_gold_daily": 0,
+                    "rows_gold_region": 0,
+                    "rows_gold_category": 0,
+                    "error_message": None,
+                }
+            ],
         )
 
         print(
@@ -251,21 +264,23 @@ def export_data(data, *args, **kwargs):
     except Exception as exc:
         error_msg = str(exc)
         client.execute(
-            f'INSERT INTO {db}.csv_upload_events '
-            '(source_key, etag, source_size, source_last_modified, status, row_count, duplicate_rows, dropped_rows, processed_at, pipeline_run_id, error_message) VALUES',
-            [{
-                'source_key': source_key,
-                'etag': source_etag,
-                'source_size': source_size,
-                'source_last_modified': source_last_modified,
-                'status': 'failed',
-                'row_count': 0,
-                'duplicate_rows': 0,
-                'dropped_rows': 0,
-                'processed_at': dt.datetime.now(dt.timezone.utc),
-                'pipeline_run_id': run_id,
-                'error_message': error_msg,
-            }],
+            f"INSERT INTO {db}.csv_upload_events "
+            "(source_key, etag, source_size, source_last_modified, status, row_count, duplicate_rows, dropped_rows, processed_at, pipeline_run_id, error_message) VALUES",
+            [
+                {
+                    "source_key": source_key,
+                    "etag": source_etag,
+                    "source_size": source_size,
+                    "source_last_modified": source_last_modified,
+                    "status": "failed",
+                    "row_count": 0,
+                    "duplicate_rows": 0,
+                    "dropped_rows": 0,
+                    "processed_at": dt.datetime.now(dt.timezone.utc),
+                    "pipeline_run_id": run_id,
+                    "error_message": error_msg,
+                }
+            ],
         )
         raise
 
@@ -274,4 +289,4 @@ def export_data(data, *args, **kwargs):
 
 @test
 def test_output(output, *args):
-    assert output is not None, 'Output is None'
+    assert output is not None, "Output is None"

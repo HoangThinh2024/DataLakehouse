@@ -77,7 +77,9 @@ DASHBOARD_SLUG = "datalakehouse-analytics"
 DB_NAME = "ClickHouse Analytics"
 # Build URI from env vars so it reflects user-configured ports and credentials
 if CH_PASSWORD:
-    DB_URI = f"clickhousedb+connect://{CH_USER}:{CH_PASSWORD}@{CH_HOST}:{CH_PORT}/{CH_DB}"
+    DB_URI = (
+        f"clickhousedb+connect://{CH_USER}:{CH_PASSWORD}@{CH_HOST}:{CH_PORT}/{CH_DB}"
+    )
 else:
     DB_URI = f"clickhousedb+connect://{CH_USER}@{CH_HOST}:{CH_PORT}/{CH_DB}"
 
@@ -87,6 +89,7 @@ SCHEMA = CH_DB
 # ---------------------------------------------------------------------------
 # Superset API client
 # ---------------------------------------------------------------------------
+
 
 def _query(page: int = 0, page_size: int = 1000) -> str:
     return f"(page:{page},page_size:{page_size})"
@@ -103,7 +106,12 @@ class SupersetClient:
 
         login = self.session.post(
             f"{self.base_url}/api/v1/security/login",
-            json={"username": username, "password": password, "provider": "db", "refresh": True},
+            json={
+                "username": username,
+                "password": password,
+                "provider": "db",
+                "refresh": True,
+            },
             timeout=30,
         )
         login.raise_for_status()
@@ -126,17 +134,23 @@ class SupersetClient:
         }
 
     def get(self, path: str) -> Dict[str, Any]:
-        res = self.session.get(f"{self.base_url}{path}", headers=self.headers, timeout=60)
+        res = self.session.get(
+            f"{self.base_url}{path}", headers=self.headers, timeout=60
+        )
         res.raise_for_status()
         return res.json()
 
     def post(self, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        res = self.session.post(f"{self.base_url}{path}", headers=self.headers, json=payload, timeout=60)
+        res = self.session.post(
+            f"{self.base_url}{path}", headers=self.headers, json=payload, timeout=60
+        )
         res.raise_for_status()
         return res.json()
 
     def put(self, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        res = self.session.put(f"{self.base_url}{path}", headers=self.headers, json=payload, timeout=60)
+        res = self.session.put(
+            f"{self.base_url}{path}", headers=self.headers, json=payload, timeout=60
+        )
         res.raise_for_status()
         return res.json()
 
@@ -144,6 +158,7 @@ class SupersetClient:
 # ---------------------------------------------------------------------------
 # Resource helpers
 # ---------------------------------------------------------------------------
+
 
 def ensure_database(client: SupersetClient) -> int:
     items = client.get(f"/api/v1/database/?q={_query()}").get("result", [])
@@ -166,10 +181,15 @@ def cleanup_old_resources(client: SupersetClient) -> None:
     for c in charts:
         if c.get("slice_name", "").startswith("DLH –"):
             try:
-                client.session.delete(f"{BASE_URL}/api/v1/chart/{c['id']}", headers=client.headers, timeout=30)
+                client.session.delete(
+                    f"{BASE_URL}/api/v1/chart/{c['id']}",
+                    headers=client.headers,
+                    timeout=30,
+                )
                 print(f"Deleted old chart: {c['slice_name']}")
             except Exception:
                 pass
+
 
 def ensure_dataset(
     client: SupersetClient,
@@ -183,7 +203,11 @@ def ensure_dataset(
     dataset_id = None
     for item in items:
         db = item.get("database") or {}
-        if db.get("id") == database_id and item.get("schema") == SCHEMA and item.get("table_name") == table_name:
+        if (
+            db.get("id") == database_id
+            and item.get("schema") == SCHEMA
+            and item.get("table_name") == table_name
+        ):
             dataset_id = int(item["id"])
             break
 
@@ -196,19 +220,21 @@ def ensure_dataset(
         created = client.post("/api/v1/dataset/", payload)
         dataset_raw_id = created.get("id") or (created.get("result") or {}).get("id")
         if not dataset_raw_id:
-            raise RuntimeError(f"Could not parse dataset id from Superset response: {created}")
+            raise RuntimeError(
+                f"Could not parse dataset id from Superset response: {created}"
+            )
         dataset_id = int(dataset_raw_id)
 
     # Fetch full dataset metadata to get existing metrics and columns
     ds_data = client.get(f"/api/v1/dataset/{dataset_id}")["result"]
     existing_metrics = ds_data.get("metrics", [])
-    
+
     update_payload: Dict[str, Any] = {
         "database_id": database_id,
         "schema": SCHEMA,
         "table_name": table_name,
     }
-    
+
     if datetime_col:
         update_payload["main_dttm_col"] = datetime_col
 
@@ -226,13 +252,13 @@ def ensure_dataset(
                     break
             if not found:
                 new_metrics.append(m)
-        
+
         # We also need to keep other existing metrics that aren't in our 'metrics' list
         # but for this demo script, we prefer to have only what we define.
         update_payload["metrics"] = new_metrics
-        
+
     client.put(f"/api/v1/dataset/{dataset_id}", update_payload)
-    
+
     # Ensure the datetime column is marked as is_dttm
     if datetime_col:
         # Re-fetch as put might have changed things
@@ -254,7 +280,11 @@ def ensure_dashboard(client: SupersetClient) -> int:
     for item in items:
         if item.get("dashboard_title") == DASHBOARD_TITLE:
             return int(item["id"])
-    payload = {"dashboard_title": DASHBOARD_TITLE, "slug": DASHBOARD_SLUG, "published": True}
+    payload = {
+        "dashboard_title": DASHBOARD_TITLE,
+        "slug": DASHBOARD_SLUG,
+        "published": True,
+    }
     created = client.post("/api/v1/dashboard/", payload)
     return int(created["id"])
 
@@ -267,6 +297,7 @@ def _simple_metric(column_name: str, aggregate: str, label: str) -> Dict[str, An
         "label": label,
     }
 
+
 def _time_filter(column: str, time_range: str = "No filter") -> Dict[str, Any]:
     return {
         "expressionType": "SIMPLE",
@@ -275,6 +306,7 @@ def _time_filter(column: str, time_range: str = "No filter") -> Dict[str, Any]:
         "comparator": time_range,
         "clause": "WHERE",
     }
+
 
 def ensure_chart(
     client: SupersetClient,
@@ -287,7 +319,7 @@ def ensure_chart(
 ) -> int:
     # Ensure params contains datasource
     params["datasource"] = f"{dataset_id}__table"
-    
+
     items = client.get(f"/api/v1/chart/?q={_query()}").get("result", [])
     for item in items:
         if item.get("slice_name") == slice_name:
@@ -318,6 +350,7 @@ def ensure_chart(
 # Dashboard layout builder
 # ---------------------------------------------------------------------------
 
+
 def build_layout(chart_ids: Dict[str, int]) -> Dict[str, Any]:
     """
     Improved layout structure:
@@ -330,7 +363,12 @@ def build_layout(chart_ids: Dict[str, int]) -> Dict[str, Any]:
       - Row 4: Details (Table)
     """
     layout: Dict[str, Any] = {
-        "ROOT_ID": {"id": "ROOT_ID", "type": "ROOT", "children": ["GRID_ID"], "parents": []},
+        "ROOT_ID": {
+            "id": "ROOT_ID",
+            "type": "ROOT",
+            "children": ["GRID_ID"],
+            "parents": [],
+        },
         "GRID_ID": {
             "id": "GRID_ID",
             "type": "GRID",
@@ -342,7 +380,7 @@ def build_layout(chart_ids: Dict[str, int]) -> Dict[str, Any]:
                 "DIVIDER-2",
                 "ROW-line",
                 "ROW-table",
-                "ROW-region-bar"
+                "ROW-region-bar",
             ],
             "parents": ["ROOT_ID"],
         },
@@ -357,7 +395,9 @@ def build_layout(chart_ids: Dict[str, int]) -> Dict[str, Any]:
             "meta": {"background": "BACKGROUND_TRANSPARENT"},
         }
 
-    def _chart_cell(cell_id: str, row_id: str, chart_id: int, width: int = 4, height: int = 50) -> Dict[str, Any]:
+    def _chart_cell(
+        cell_id: str, row_id: str, chart_id: int, width: int = 4, height: int = 50
+    ) -> Dict[str, Any]:
         return {
             "id": cell_id,
             "type": "CHART",
@@ -366,7 +406,9 @@ def build_layout(chart_ids: Dict[str, int]) -> Dict[str, Any]:
             "meta": {"chartId": chart_id, "width": width, "height": height},
         }
 
-    def _markdown_cell(cell_id: str, row_id: str, code: str, width: int = 12, height: int = 20) -> Dict[str, Any]:
+    def _markdown_cell(
+        cell_id: str, row_id: str, code: str, width: int = 12, height: int = 20
+    ) -> Dict[str, Any]:
         return {
             "id": cell_id,
             "type": "MARKDOWN",
@@ -395,31 +437,51 @@ def build_layout(chart_ids: Dict[str, int]) -> Dict[str, Any]:
     layout["MD-header"] = _markdown_cell("MD-header", "ROW-header", header_md, 12, 25)
 
     # Row 1 – KPI
-    layout["ROW-kpi"] = _row("ROW-kpi", ["CHART-kpi-revenue", "CHART-kpi-orders", "CHART-kpi-avg"])
-    layout["CHART-kpi-revenue"] = _chart_cell("CHART-kpi-revenue", "ROW-kpi", chart_ids["kpi_revenue"], 4, 30)
-    layout["CHART-kpi-orders"] = _chart_cell("CHART-kpi-orders", "ROW-kpi", chart_ids["kpi_orders"], 4, 30)
-    layout["CHART-kpi-avg"] = _chart_cell("CHART-kpi-avg", "ROW-kpi", chart_ids["kpi_avg"], 4, 30)
+    layout["ROW-kpi"] = _row(
+        "ROW-kpi", ["CHART-kpi-revenue", "CHART-kpi-orders", "CHART-kpi-avg"]
+    )
+    layout["CHART-kpi-revenue"] = _chart_cell(
+        "CHART-kpi-revenue", "ROW-kpi", chart_ids["kpi_revenue"], 4, 30
+    )
+    layout["CHART-kpi-orders"] = _chart_cell(
+        "CHART-kpi-orders", "ROW-kpi", chart_ids["kpi_orders"], 4, 30
+    )
+    layout["CHART-kpi-avg"] = _chart_cell(
+        "CHART-kpi-avg", "ROW-kpi", chart_ids["kpi_avg"], 4, 30
+    )
 
     # Dividers
     layout["DIVIDER-1"] = _divider("DIVIDER-1")
     layout["DIVIDER-2"] = _divider("DIVIDER-2")
 
     # Row 2 – Bar + Pie
-    layout["ROW-cat-region"] = _row("ROW-cat-region", ["CHART-bar-cat", "CHART-pie-region"])
-    layout["CHART-bar-cat"] = _chart_cell("CHART-bar-cat", "ROW-cat-region", chart_ids["bar_category"], 7, 60)
-    layout["CHART-pie-region"] = _chart_cell("CHART-pie-region", "ROW-cat-region", chart_ids["pie_region"], 5, 60)
+    layout["ROW-cat-region"] = _row(
+        "ROW-cat-region", ["CHART-bar-cat", "CHART-pie-region"]
+    )
+    layout["CHART-bar-cat"] = _chart_cell(
+        "CHART-bar-cat", "ROW-cat-region", chart_ids["bar_category"], 7, 60
+    )
+    layout["CHART-pie-region"] = _chart_cell(
+        "CHART-pie-region", "ROW-cat-region", chart_ids["pie_region"], 5, 60
+    )
 
     # Row 3 – Trends
     layout["ROW-line"] = _row("ROW-line", ["CHART-line-daily"])
-    layout["CHART-line-daily"] = _chart_cell("CHART-line-daily", "ROW-line", chart_ids["line_daily"], 12, 60)
+    layout["CHART-line-daily"] = _chart_cell(
+        "CHART-line-daily", "ROW-line", chart_ids["line_daily"], 12, 60
+    )
 
     # Row 4 – Details
     layout["ROW-table"] = _row("ROW-table", ["CHART-table-daily"])
-    layout["CHART-table-daily"] = _chart_cell("CHART-table-daily", "ROW-table", chart_ids["table_daily"], 12, 80)
+    layout["CHART-table-daily"] = _chart_cell(
+        "CHART-table-daily", "ROW-table", chart_ids["table_daily"], 12, 80
+    )
 
     # Row 5 – Region Bar (Secondary)
     layout["ROW-region-bar"] = _row("ROW-region-bar", ["CHART-bar-region"])
-    layout["CHART-bar-region"] = _chart_cell("CHART-bar-region", "ROW-region-bar", chart_ids["bar_region"], 12, 50)
+    layout["CHART-bar-region"] = _chart_cell(
+        "CHART-bar-region", "ROW-region-bar", chart_ids["bar_region"], 12, 50
+    )
 
     return layout
 
@@ -427,6 +489,7 @@ def build_layout(chart_ids: Dict[str, int]) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     print(f"Connecting to Superset at {BASE_URL} …")
@@ -439,23 +502,78 @@ def main() -> None:
 
     # Standard metrics with 'm_' prefix to avoid collision with column names
     metrics_daily = [
-        {"metric_name": "m_total_revenue", "expression": "SUM(total_revenue)", "d3format": ",.2f", "metric_type": "sum"},
-        {"metric_name": "m_order_count", "expression": "SUM(order_count)", "d3format": ",", "metric_type": "sum"},
-        {"metric_name": "m_avg_order_value", "expression": "SUM(total_revenue) / SUM(order_count)", "d3format": ",.2f", "metric_type": "other"},
+        {
+            "metric_name": "m_total_revenue",
+            "expression": "SUM(total_revenue)",
+            "d3format": ",.2f",
+            "metric_type": "sum",
+        },
+        {
+            "metric_name": "m_order_count",
+            "expression": "SUM(order_count)",
+            "d3format": ",",
+            "metric_type": "sum",
+        },
+        {
+            "metric_name": "m_avg_order_value",
+            "expression": "SUM(total_revenue) / SUM(order_count)",
+            "d3format": ",.2f",
+            "metric_type": "other",
+        },
     ]
     metrics_region = [
-        {"metric_name": "m_total_revenue", "expression": "SUM(total_revenue)", "d3format": ",.2f", "metric_type": "sum"},
-        {"metric_name": "m_order_count", "expression": "SUM(order_count)", "d3format": ",", "metric_type": "sum"},
+        {
+            "metric_name": "m_total_revenue",
+            "expression": "SUM(total_revenue)",
+            "d3format": ",.2f",
+            "metric_type": "sum",
+        },
+        {
+            "metric_name": "m_order_count",
+            "expression": "SUM(order_count)",
+            "d3format": ",",
+            "metric_type": "sum",
+        },
     ]
     metrics_category = [
-        {"metric_name": "m_total_revenue", "expression": "SUM(total_revenue)", "d3format": ",.2f", "metric_type": "sum"},
-        {"metric_name": "m_order_count", "expression": "SUM(order_count)", "d3format": ",", "metric_type": "sum"},
+        {
+            "metric_name": "m_total_revenue",
+            "expression": "SUM(total_revenue)",
+            "d3format": ",.2f",
+            "metric_type": "sum",
+        },
+        {
+            "metric_name": "m_order_count",
+            "expression": "SUM(order_count)",
+            "d3format": ",",
+            "metric_type": "sum",
+        },
     ]
 
-    ds_daily = ensure_dataset(client, db_id, "gold_demo_daily", datetime_col="order_date", metrics=metrics_daily)
-    ds_region = ensure_dataset(client, db_id, "gold_demo_by_region", datetime_col="report_date", metrics=metrics_region)
-    ds_category = ensure_dataset(client, db_id, "gold_demo_by_category", datetime_col="report_date", metrics=metrics_category)
-    ds_silver = ensure_dataset(client, db_id, "silver_demo", datetime_col="_silver_processed_at")
+    ds_daily = ensure_dataset(
+        client,
+        db_id,
+        "gold_demo_daily",
+        datetime_col="order_date",
+        metrics=metrics_daily,
+    )
+    ds_region = ensure_dataset(
+        client,
+        db_id,
+        "gold_demo_by_region",
+        datetime_col="report_date",
+        metrics=metrics_region,
+    )
+    ds_category = ensure_dataset(
+        client,
+        db_id,
+        "gold_demo_by_category",
+        datetime_col="report_date",
+        metrics=metrics_category,
+    )
+    ds_silver = ensure_dataset(
+        client, db_id, "silver_demo", datetime_col="_silver_processed_at"
+    )
     dashboard_id = ensure_dashboard(client)
 
     print(f"Dashboard id: {dashboard_id}  Creating / verifying charts …")
@@ -572,9 +690,13 @@ def main() -> None:
             "type": "table",
             "params": {
                 "all_columns": [
-                    "order_date", "order_count", "total_revenue",
-                    "avg_order_value", "total_quantity",
-                    "unique_customers", "unique_regions",
+                    "order_date",
+                    "order_count",
+                    "total_revenue",
+                    "avg_order_value",
+                    "total_quantity",
+                    "unique_customers",
+                    "unique_regions",
                 ],
                 "metrics": [],
                 "adhoc_filters": [_time_filter("order_date")],
@@ -585,8 +707,14 @@ def main() -> None:
                 "show_cell_bars": True,
                 "table_timestamp_format": "smart_date",
                 "column_config": {
-                    "total_revenue": {"d3NumberFormat": ",.2f", "horizontalAlign": "right"},
-                    "avg_order_value": {"d3NumberFormat": ",.2f", "horizontalAlign": "right"},
+                    "total_revenue": {
+                        "d3NumberFormat": ",.2f",
+                        "horizontalAlign": "right",
+                    },
+                    "avg_order_value": {
+                        "d3NumberFormat": ",.2f",
+                        "horizontalAlign": "right",
+                    },
                     "order_count": {"horizontalAlign": "center"},
                     "order_date": {"columnWidth": 120},
                 },
@@ -630,15 +758,15 @@ def main() -> None:
         f"/api/v1/dashboard/{dashboard_id}",
         {
             "position_json": _to_params(layout),
-            "json_metadata": _to_params({
-                "color_scheme": "d3Category10",
-                "refresh_frequency": 60,
-                "filter_scopes": {},
-                "native_filter_configuration": [],
-                "global_chart_configuration": {
-                    "crossFilters": {"enabled": True}
+            "json_metadata": _to_params(
+                {
+                    "color_scheme": "d3Category10",
+                    "refresh_frequency": 60,
+                    "filter_scopes": {},
+                    "native_filter_configuration": [],
+                    "global_chart_configuration": {"crossFilters": {"enabled": True}},
                 }
-            }),
+            ),
             "published": True,
         },
     )

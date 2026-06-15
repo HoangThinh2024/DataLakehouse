@@ -35,7 +35,7 @@ METADATA = {
             "layer": "silver",
             "pipeline": "etl_postgres_to_lakehouse",
             "description": "Cleaned, typed rows extracted from the PostgreSQL source table. "
-                           "Each row represents one order/record with lineage metadata.",
+            "Each row represents one order/record with lineage metadata.",
             "columns": {
                 "id": "Unique row identifier (from source)",
                 "name": "Record name or customer name",
@@ -129,7 +129,7 @@ METADATA = {
             "layer": "monitoring",
             "pipeline": "all",
             "description": "Execution log for all ETL pipeline runs. "
-                           "Used by Grafana monitoring dashboard.",
+            "Used by Grafana monitoring dashboard.",
             "columns": {
                 "run_id": "UUID identifying the pipeline run",
                 "pipeline_name": "Name of the Mage pipeline",
@@ -146,7 +146,7 @@ METADATA = {
             "layer": "silver",
             "pipeline": "etl_excel_to_lakehouse",
             "description": "Detailed task rows from the 12 uploaded Excel project reports. "
-                           "Use this table to look up task status, assigned person, and urgency.",
+            "Use this table to look up task status, assigned person, and urgency.",
             "columns": {
                 "_source_file_key": "Project name or original Excel filename",
                 "Mã công việc (ID)": "Unique task identifier within the project",
@@ -189,7 +189,7 @@ METADATA = {
             "layer": "silver",
             "pipeline": "etl_csv_upload_to_reporting",
             "description": "Cleaned and normalised rows from CSV file uploads. "
-                           "Schema varies based on the uploaded CSV columns.",
+            "Schema varies based on the uploaded CSV columns.",
             "columns": {
                 "_source_file_key": "Original CSV filename",
                 "_db_processed_at": "Timestamp when this row was loaded into ClickHouse",
@@ -212,7 +212,7 @@ METADATA = {
         {
             "description": "Find staff with the most overdue tasks",
             "sql": (
-                "SELECT \"Người thực hiện\", overdue_tasks, task_count "
+                'SELECT "Người thực hiện", overdue_tasks, task_count '
                 "FROM analytics.gold_workload_report "
                 "ORDER BY overdue_tasks DESC LIMIT 10"
             ),
