@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cổng Tải Dữ Liệu - DataLakehouse Portal</title>
+    <!-- Google Fonts Inter & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        heading: ['Outfit', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom Glassmorphism Styles -->
+    <style>
+        body {
+            background: radial-gradient(circle at top right, #1e1b4b, #0f172a 60%);
+            min-height: 100vh;
+        }
+        .glass-card {
+            background: rgba(30, 41, 59, 0.45);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        .glow-border:hover {
+            border-color: rgba(99, 102, 241, 0.4);
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.15);
+        }
+        .text-glow {
+            text-shadow: 0 0 10px rgba(129, 140, 248, 0.3);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.3);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(99, 102, 241, 0.4);
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(99, 102, 241, 0.6);
+        }
+    </style>
+</head>
+<body class="text-slate-100 font-sans pb-12 antialiased">
+    <!-- Header/Navbar -->
+    <header class="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-gradient-to-tr from-indigo-500 to-cyan-400 p-2 rounded-xl shadow-lg shadow-indigo-500/20">
+                    <i class="fa-solid fa-database text-white text-xl"></i>
+                </div>
+                <div>
+                    <span class="font-heading font-extrabold text-xl bg-gradient-to-r from-indigo-200 to-cyan-300 bg-clip-text text-transparent">DataLakehouse</span>
+                    <span class="text-xs block text-slate-400 font-medium tracking-wide">CỔNG TẢI DỮ LIỆU NHÂN VIÊN</span>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-6">
+                <!-- User Profile & Settings/Logout -->
+                <div class="flex items-center space-x-3 border-r border-slate-800 pr-6">
+                    <div class="text-right">
+                        <span class="block text-sm font-semibold text-slate-200">{{ username }}</span>
+                        {% if role == 'admin' %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                            ADMINISTRATOR
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                            STAFF
+                        </span>
+                        {% endif %}
+                    </div>
+                    <!-- Self Password Change Trigger -->
+                    <button onclick="openChangePasswordModal()" class="p-2.5 bg-slate-800 hover:bg-indigo-500/20 text-slate-400 hover:text-indigo-400 rounded-xl transition-all duration-300" title="Đổi mật khẩu của tôi">
+                        <i class="fa-solid fa-key"></i>
+                    </button>
+                    <!-- Logout Trigger -->
+                    <a href="{{ url_for('logout') }}" class="p-2.5 bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-xl transition-all duration-300" title="Đăng xuất">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                    </a>
+                </div>
+                
+                <span class="hidden md:inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <span class="w-1.5 h-1.5 mr-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
+                    Hệ thống hoạt động
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+        <!-- Tab Navigation and Links Grid -->
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <!-- Tabs -->
+            <div class="flex space-x-1 bg-slate-950/40 p-1.5 rounded-2xl border border-slate-800 max-w-md">
+                <button onclick="switchTab('tab-upload')" id="btn-tab-upload" class="px-4 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all duration-200 bg-indigo-500 text-white shadow-md shadow-indigo-500/10">
+                    <i class="fa-solid fa-file-arrow-up mr-1.5"></i>Tải Tệp & Quản Lý
+                </button>
+                <button onclick="switchTab('tab-history')" id="btn-tab-history" class="px-4 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all duration-200 text-slate-400 hover:text-slate-200">
+                    <i class="fa-solid fa-clock-rotate-left mr-1.5"></i>Lịch Sử Đồng Bộ
+                </button>
+                {% if role == 'admin' %}
+                <button onclick="switchTab('tab-users')" id="btn-tab-users" class="px-4 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all duration-200 text-slate-400 hover:text-slate-200">
+                    <i class="fa-solid fa-users-gear mr-1.5"></i>Quản Trị Users
+                </button>
+                {% endif %}
+            </div>
+
+            <!-- External Links Dashboard -->
+            <div class="flex flex-wrap gap-2 text-xs">
+                <a href="#" id="link-superset" target="_blank" class="glass-card hover:bg-indigo-500/10 px-3.5 py-2 rounded-xl flex items-center space-x-2 transition-all duration-300">
+                    <i class="fa-solid fa-chart-pie text-blue-400"></i>
+                    <span class="font-bold text-slate-300">Báo cáo Superset</span>
+                </a>
+                {% if role == 'admin' %}
+                <a href="#" id="link-mage" target="_blank" class="glass-card hover:bg-indigo-500/10 px-3.5 py-2 rounded-xl flex items-center space-x-2 transition-all duration-300">
+                    <i class="fa-solid fa-wand-magic-sparkles text-purple-400"></i>
+                    <span class="font-bold text-slate-300">Mage ETL</span>
+                </a>
+                <a href="#" id="link-grafana" target="_blank" class="glass-card hover:bg-indigo-500/10 px-3.5 py-2 rounded-xl flex items-center space-x-2 transition-all duration-300">
+                    <i class="fa-solid fa-gauge-high text-orange-400"></i>
+                    <span class="font-bold text-slate-300">Grafana</span>
+                </a>
+                <a href="#" id="link-cloudbeaver" target="_blank" class="glass-card hover:bg-indigo-500/10 px-3.5 py-2 rounded-xl flex items-center space-x-2 transition-all duration-300">
+                    <i class="fa-solid fa-terminal text-cyan-400"></i>
+                    <span class="font-bold text-slate-300">SQL Client</span>
+                </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- TAB 1: UPLOAD & FILE MANAGEMENT -->
+        <!-- ============================================== -->
+        <div id="tab-upload" class="tab-content grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <!-- Left Panel: Multi-file Upload Form -->
+            <div class="lg:col-span-5 space-y-6">
+                <div class="glass-card rounded-3xl p-6 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl"></div>
+                    <h2 class="font-heading font-extrabold text-2xl mb-2 text-slate-200 text-glow flex items-center">
+                        <i class="fa-solid fa-upload mr-2.5 text-indigo-400"></i>Tải Lên Nhiều Tệp
+                    </h2>
+                    <p class="text-xs text-slate-400 mb-6 leading-relaxed">
+                        Bạn có thể chọn hoặc kéo thả nhiều tệp Excel (.xlsx) hoặc CSV cùng lúc để gửi vào hồ chứa dữ liệu (Bronze). Các tệp này sẽ nằm ở trạng thái chờ và tổng hợp sau.
+                    </p>
+
+                    <!-- Multiple Files Dropzone -->
+                    <form id="upload-form" enctype="multipart/form-data">
+                        <div id="dropzone" class="border-2 border-dashed border-slate-700 hover:border-indigo-500/50 rounded-2xl p-6 text-center cursor-pointer transition-all duration-300 bg-slate-950/20 flex flex-col items-center justify-center min-h-[180px]">
+                            <input type="file" id="file-input" name="files" accept=".csv,.xlsx" multiple class="hidden">
+                            
+                            <div id="dropzone-prompt" class="space-y-3">
+                                <div class="w-14 h-14 bg-slate-800/50 rounded-2xl flex items-center justify-center text-slate-400 mx-auto">
+                                    <i class="fa-solid fa-cloud-arrow-up text-2xl text-indigo-400"></i>
+                                </div>
+                                <div>
+                                    <p class="font-bold text-slate-200 text-sm">Kéo & thả nhiều tệp vào đây</p>
+                                    <p class="text-xs text-slate-400 mt-1">hoặc <span class="text-indigo-400 hover:underline">nhấp để chọn tệp</span></p>
+                                </div>
+                                <div class="flex justify-center space-x-3 text-[10px] text-slate-500 pt-1">
+                                    <span><i class="fa-regular fa-file-excel mr-1 text-emerald-500"></i>Excel (.xlsx)</span>
+                                    <span>•</span>
+                                    <span><i class="fa-solid fa-file-csv mr-1 text-sky-500"></i>CSV (.csv)</span>
+                                </div>
+                            </div>
+
+                            <div id="files-list" class="hidden w-full text-left space-y-2 max-h-[180px] overflow-y-auto custom-scrollbar pr-1">
+                                <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Tệp đã chọn:</p>
+                                <div id="selected-files-container" class="space-y-1.5"></div>
+                                <div class="pt-2 text-right">
+                                    <button type="button" id="btn-change-file" class="text-xs text-rose-400 hover:text-rose-300 font-medium underline">Hủy tất cả</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 space-y-2">
+                            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Tự động phân vùng đích</label>
+                            <p class="text-[10px] text-slate-500 leading-normal">Hệ thống sẽ tự phân chia: các tệp Excel (.xlsx) sẽ chuyển vào <b>excel_uploads/</b>, các tệp CSV sẽ chuyển vào <b>csv_upload/</b>.</p>
+                        </div>
+
+                        <button type="submit" id="btn-submit" class="w-full mt-6 py-3.5 px-4 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-bold rounded-xl transition-all duration-300 shadow-lg shadow-indigo-600/20 active:scale-[0.98] flex items-center justify-center space-x-2">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                            <span>Tải tệp lên hồ chứa (Bronze)</span>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Live status indicator -->
+                <div id="status-card" class="hidden glass-card rounded-2xl p-5 border-l-4 border-indigo-500">
+                    <div class="flex items-start space-x-3">
+                        <div id="status-spinner" class="text-indigo-400 mt-1">
+                            <i class="fa-solid fa-circle-notch animate-spin text-xl"></i>
+                        </div>
+                        <div id="status-icon" class="hidden text-2xl"></div>
+                        <div class="flex-1 min-w-0">
+                            <h4 id="status-title" class="font-bold text-sm text-slate-200">Đang tải tệp lên</h4>
+                            <p id="status-desc" class="text-xs text-slate-400 mt-1 leading-relaxed"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Schedule Card Info -->
+                <div class="glass-card rounded-2xl p-5 border border-indigo-500/10">
+                    <h4 class="font-heading font-bold text-xs uppercase tracking-wider text-slate-400 mb-2 flex items-center">
+                        <i class="fa-regular fa-clock mr-2 text-indigo-400"></i>Lịch trình tổng hợp tự động
+                    </h4>
+                    <p class="text-xs text-slate-400 leading-relaxed">
+                        Hệ thống đã được lập lịch tự động tổng hợp dữ liệu từ Data Lake gửi về ClickHouse <b>sau mỗi 6 tiếng</b>. Việc tải tệp mới lên sẽ KHÔNG lập tức chạy ETL để tránh lãng phí hiệu năng.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Right Panel: Pending Files Table & Admin control -->
+            <div class="lg:col-span-7 space-y-6">
+                <!-- Pending Files Card -->
+                <div class="glass-card rounded-3xl p-6">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                        <div>
+                            <h2 class="font-heading font-extrabold text-2xl text-slate-200 text-glow flex items-center">
+                                <i class="fa-solid fa-folder-open mr-2.5 text-indigo-400"></i>Tệp Chờ Xử Lý
+                            </h2>
+                            <p class="text-xs text-slate-400 mt-1">Các tệp đang nằm trong hồ chứa dữ liệu (Bronze) và chưa được tổng hợp</p>
+                        </div>
+                        
+                        <div class="flex items-center space-x-2">
+                            <button id="btn-delete-selected" class="hidden px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-xl transition-colors text-xs font-bold border border-rose-500/20 flex items-center space-x-1.5">
+                                <i class="fa-solid fa-trash-can"></i>
+                                <span>Xóa tệp chọn</span>
+                            </button>
+                            <button id="btn-refresh-files" class="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl transition-colors">
+                                <i class="fa-solid fa-rotate"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Pending Files Table -->
+                    <div class="overflow-x-auto custom-scrollbar">
+                        <table class="w-full text-left text-sm">
+                            <thead class="text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800/80">
+                                <tr>
+                                    <th class="pb-3 w-8">
+                                        <input type="checkbox" id="check-all-files" class="rounded border-slate-700 bg-slate-900 focus:ring-indigo-500">
+                                    </th>
+                                    <th class="pb-3 font-semibold">Tên tệp tin</th>
+                                    <th class="pb-3 font-semibold">Thư mục</th>
+                                    <th class="pb-3 font-semibold">Kích thước</th>
+                                    <th class="pb-3 font-semibold">Thời gian tải</th>
+                                    <th class="pb-3 font-semibold text-right">Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody id="files-table-body" class="divide-y divide-slate-800/40 text-slate-300">
+                                <tr>
+                                    <td colspan="6" class="py-8 text-center text-slate-500">
+                                        <i class="fa-solid fa-circle-notch animate-spin mr-2"></i>Đang tải danh sách tệp chờ...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Admin Action Console -->
+                {% if role == 'admin' %}
+                <div class="glass-card rounded-3xl p-6 border border-indigo-500/20 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-xl"></div>
+                    <h3 class="font-heading font-bold text-lg text-slate-200 text-glow mb-2 flex items-center">
+                        <i class="fa-solid fa-toolbox mr-2 text-indigo-400"></i>Bảng điều khiển Admin - Chạy ETL Thủ Công
+                    </h3>
+                    <p class="text-xs text-slate-400 mb-6">
+                        Là Quản trị viên, bạn có quyền ghi đè thời gian chờ 6 tiếng và yêu cầu Mage chạy tiến trình tổng hợp và gửi dữ liệu về Clickhouse ngay lập tức.
+                    </p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="p-4 bg-slate-950/30 rounded-2xl border border-slate-800/80 flex flex-col justify-between">
+                            <div>
+                                <span class="text-xs font-bold text-emerald-400 flex items-center mb-1">
+                                    <i class="fa-regular fa-file-excel mr-1.5"></i>EXCEL PIPELINE
+                                </span>
+                                <h4 class="font-bold text-sm text-slate-200 mb-1">etl_excel_to_lakehouse</h4>
+                                <p class="text-[10px] text-slate-400 leading-normal">Tổng hợp các tệp trong excel_uploads/ để vẽ Dashboard Superset Công Việc & Dự Án.</p>
+                            </div>
+                            <button onclick="triggerETL('etl_excel_to_lakehouse')" class="mt-4 w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all duration-300 shadow-md">
+                                <i class="fa-solid fa-play mr-1"></i> Chạy Excel ETL Ngay
+                            </button>
+                        </div>
+                        
+                        <div class="p-4 bg-slate-950/30 rounded-2xl border border-slate-800/80 flex flex-col justify-between">
+                            <div>
+                                <span class="text-xs font-bold text-sky-400 flex items-center mb-1">
+                                    <i class="fa-solid fa-file-csv mr-1.5"></i>CSV PIPELINE
+                                </span>
+                                <h4 class="font-bold text-sm text-slate-200 mb-1">etl_csv_upload_to_reporting</h4>
+                                <p class="text-[10px] text-slate-400 leading-normal">Xử lý làm sạch và chuyển dữ liệu trong csv_upload/ vào Clickhouse reporting tables.</p>
+                            </div>
+                            <button onclick="triggerETL('etl_csv_upload_to_reporting')" class="mt-4 w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all duration-300 shadow-md">
+                                <i class="fa-solid fa-play mr-1"></i> Chạy CSV ETL Ngay
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- TAB 2: SYNC HISTORY -->
+        <!-- ============================================== -->
+        <div id="tab-history" class="tab-content hidden glass-card rounded-3xl p-6">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h2 class="font-heading font-extrabold text-2xl text-slate-200 text-glow flex items-center">
+                        <i class="fa-solid fa-clock-rotate-left mr-2.5 text-indigo-400"></i>Lịch Sử Đồng Bộ
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1">Danh sách 15 lần tải lên gần nhất từ ClickHouse</p>
+                </div>
+                <button id="btn-refresh-history" class="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl transition-colors">
+                    <i class="fa-solid fa-rotate"></i>
+                </button>
+            </div>
+
+            <div class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-left text-sm">
+                    <thead class="text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800/80">
+                        <tr>
+                            <th class="pb-3 font-semibold">Tên tệp</th>
+                            <th class="pb-3 font-semibold">Loại</th>
+                            <th class="pb-3 font-semibold">Kích thước</th>
+                            <th class="pb-3 font-semibold">Thời gian chạy</th>
+                            <th class="pb-3 font-semibold">Số dòng</th>
+                            <th class="pb-3 font-semibold">Trạng thái</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table-body" class="divide-y divide-slate-800/40 text-slate-300"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- TAB 3: USER MANAGEMENT (Admin Only) -->
+        <!-- ============================================== -->
+        {% if role == 'admin' %}
+        <div id="tab-users" class="tab-content hidden grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <!-- Left: Add New User Form -->
+            <div class="lg:col-span-5">
+                <div class="glass-card rounded-3xl p-6 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-xl"></div>
+                    <h2 class="font-heading font-extrabold text-2xl mb-2 text-slate-200 text-glow flex items-center">
+                        <i class="fa-solid fa-user-plus mr-2.5 text-indigo-400"></i>Thêm Người Dùng
+                    </h2>
+                    <p class="text-xs text-slate-400 mb-6 leading-normal">
+                        Tạo tài khoản mới để cấp quyền truy cập hệ thống. Role <b>Admin</b> được quyền chạy ETL thủ công, Role <b>Staff</b> chỉ được upload và xóa file.
+                    </p>
+
+                    <form id="create-user-form" class="space-y-4">
+                        <div class="space-y-1">
+                            <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Tên đăng nhập</label>
+                            <input type="text" id="new-username" required placeholder="Ví dụ: hoangthinh" class="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3.5 py-2.5 text-sm focus:outline-none text-slate-200 focus:border-indigo-500">
+                        </div>
+
+                        <div class="space-y-1">
+                            <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Mật khẩu</label>
+                            <input type="password" id="new-password" required placeholder="Nhập mật khẩu" class="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3.5 py-2.5 text-sm focus:outline-none text-slate-200 focus:border-indigo-500">
+                        </div>
+
+                        <div class="space-y-1">
+                            <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Vai trò hệ thống</label>
+                            <select id="new-role" class="w-full rounded-xl border border-slate-800 bg-slate-950 px-3.5 py-2.5 text-sm focus:outline-none text-slate-200 focus:border-indigo-500">
+                                <option value="staff">Nhân viên (Staff)</option>
+                                <option value="admin">Quản trị viên (Admin)</option>
+                            </select>
+                        </div>
+
+                        <button type="submit" class="w-full py-3 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-bold rounded-xl transition-all duration-300 shadow-md">
+                            Tạo tài khoản
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Right: Users List -->
+            <div class="lg:col-span-7">
+                <div class="glass-card rounded-3xl p-6">
+                    <h2 class="font-heading font-extrabold text-2xl mb-6 text-slate-200 text-glow flex items-center">
+                        <i class="fa-solid fa-users mr-2.5 text-indigo-400"></i>Danh Sách Người Dùng
+                    </h2>
+
+                    <div class="overflow-x-auto custom-scrollbar">
+                        <table class="w-full text-left text-sm">
+                            <thead class="text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800/80">
+                                <tr>
+                                    <th class="pb-3 font-semibold">Tên đăng nhập</th>
+                                    <th class="pb-3 font-semibold">Vai trò</th>
+                                    <th class="pb-3 font-semibold text-right">Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody id="users-table-body" class="divide-y divide-slate-800/40 text-slate-300"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </main>
+
+    <!-- Change Password Modal (Self) -->
+    <div id="modal-change-password" class="hidden fixed inset-0 z-50 overflow-auto bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="glass-card rounded-3xl p-6 w-full max-w-md relative">
+            <h3 class="font-heading font-bold text-lg text-slate-200 text-glow mb-4 flex items-center">
+                <i class="fa-solid fa-key mr-2 text-indigo-400"></i>Đổi mật khẩu của tôi
+            </h3>
+            
+            <form id="change-pass-self-form" class="space-y-4">
+                <div class="space-y-1">
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Mật khẩu hiện tại</label>
+                    <input type="password" id="self-old-pass" required placeholder="Nhập mật khẩu hiện tại" class="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3.5 py-2.5 text-sm focus:outline-none text-slate-200 focus:border-indigo-500">
+                </div>
+                <div class="space-y-1">
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Mật khẩu mới</label>
+                    <input type="password" id="self-new-pass" required placeholder="Tối thiểu 5 ký tự" class="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3.5 py-2.5 text-sm focus:outline-none text-slate-200 focus:border-indigo-500">
+                </div>
+                <div class="space-y-1">
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Xác nhận mật khẩu mới</label>
+                    <input type="password" id="self-confirm-pass" required placeholder="Xác nhận mật khẩu mới" class="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3.5 py-2.5 text-sm focus:outline-none text-slate-200 focus:border-indigo-500">
+                </div>
+                
+                <div class="flex items-center space-x-3 pt-2">
+                    <button type="button" onclick="closeChangePasswordModal()" class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl transition-all text-sm">
+                        Hủy
+                    </button>
+                    <button type="submit" class="flex-1 py-2.5 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-bold rounded-xl transition-all shadow-md text-sm">
+                        Đổi mật khẩu
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Admin Reset User Password Modal -->
+    <div id="modal-admin-reset-pass" class="hidden fixed inset-0 z-50 overflow-auto bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="glass-card rounded-3xl p-6 w-full max-w-md relative">
+            <h3 class="font-heading font-bold text-lg text-slate-200 text-glow mb-2 flex items-center">
+                <i class="fa-solid fa-lock-open mr-2 text-indigo-400"></i>Đặt lại mật khẩu cho User
+            </h3>
+            <p class="text-xs text-slate-400 mb-4">Đặt lại mật khẩu cho user: <span id="admin-reset-target-user" class="font-bold text-slate-200"></span></p>
+            
+            <form id="admin-reset-pass-form" class="space-y-4">
+                <input type="hidden" id="admin-reset-username">
+                <div class="space-y-1">
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Mật khẩu mới</label>
+                    <input type="password" id="admin-reset-new-pass" required placeholder="Tối thiểu 5 ký tự" class="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3.5 py-2.5 text-sm focus:outline-none text-slate-200 focus:border-indigo-500">
+                </div>
+                <div class="space-y-1">
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Xác nhận mật khẩu mới</label>
+                    <input type="password" id="admin-reset-confirm-pass" required placeholder="Xác nhận mật khẩu mới" class="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3.5 py-2.5 text-sm focus:outline-none text-slate-200 focus:border-indigo-500">
+                </div>
+                <p class="text-[10px] text-amber-400 leading-normal"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Lưu ý: User này sẽ bị bắt buộc đổi mật khẩu mới ở lần đăng nhập tiếp theo.</p>
+                
+                <div class="flex items-center space-x-3 pt-2">
+                    <button type="button" onclick="closeAdminResetModal()" class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl transition-all text-sm">
+                        Hủy
+                    </button>
+                    <button type="submit" class="flex-1 py-2.5 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-bold rounded-xl transition-all shadow-md text-sm">
+                        Cập nhật
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- JS script -->
+    <script>
+        // Setup Dynamic Service Links
+        const supersetPort = "{{ superset_port }}";
+        const grafanaPort = "{{ grafana_port }}";
+        const magePort = "26789";
+        const cloudbeaverPort = "{{ cloudbeaver_port }}";
+
+        const linkSuperset = document.getElementById('link-superset');
+        const linkMage = document.getElementById('link-mage');
+        const linkGrafana = document.getElementById('link-grafana');
+        const linkCloudbeaver = document.getElementById('link-cloudbeaver');
+
+        if (linkSuperset) linkSuperset.href = 'https://superset.hoancauit.duckdns.org';
+        if (linkMage) linkMage.href = 'https://mage.hoancauit.duckdns.org';
+        if (linkGrafana) linkGrafana.href = 'https://grafana.hoancauit.duckdns.org';
+        if (linkCloudbeaver) linkCloudbeaver.href = 'https://cloudbeaver.hoancauit.duckdns.org';
+
+        // Tab Switch logic
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(tabId).classList.remove('hidden');
+
+            document.querySelectorAll('[id^="btn-tab-"]').forEach(btn => {
+                btn.className = "px-4 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all duration-200 text-slate-400 hover:text-slate-200";
+            });
+            const activeBtn = document.getElementById('btn-' + tabId);
+            activeBtn.className = "px-4 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all duration-200 bg-indigo-500 text-white shadow-md shadow-indigo-500/10";
+            
+            if (tabId === 'tab-upload') {
+                loadPendingFiles();
+            } else if (tabId === 'tab-history') {
+                loadHistory();
+            } else if (tabId === 'tab-users') {
+                loadUsers();
+            }
+        }
+
+        // Modal Controls
+        function openChangePasswordModal() {
+            document.getElementById('modal-change-password').classList.remove('hidden');
+        }
+        function closeChangePasswordModal() {
+            document.getElementById('modal-change-password').classList.add('hidden');
+            document.getElementById('change-pass-self-form').reset();
+        }
+        function openAdminResetModal(username) {
+            document.getElementById('admin-reset-username').value = username;
+            document.getElementById('admin-reset-target-user').textContent = username;
+            document.getElementById('modal-admin-reset-pass').classList.remove('hidden');
+        }
+        function closeAdminResetModal() {
+            document.getElementById('modal-admin-reset-pass').classList.add('hidden');
+            document.getElementById('admin-reset-pass-form').reset();
+        }
+
+        // Change password self submit
+        document.getElementById('change-pass-self-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const old_password = document.getElementById('self-old-pass').value;
+            const new_password = document.getElementById('self-new-pass').value;
+            const confirm = document.getElementById('self-confirm-pass').value;
+
+            if (new_password !== confirm) {
+                alert('Mật khẩu xác nhận không khớp.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/change-password-self', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ old_password, new_password })
+                });
+                const result = await response.json();
+                alert(result.message);
+                if (response.ok) {
+                    closeChangePasswordModal();
+                }
+            } catch (err) {
+                alert('Lỗi: ' + err.message);
+            }
+        });
+
+        // Admin reset pass submit
+        document.getElementById('admin-reset-pass-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('admin-reset-username').value;
+            const new_password = document.getElementById('admin-reset-new-pass').value;
+            const confirm = document.getElementById('admin-reset-confirm-pass').value;
+
+            if (new_password !== confirm) {
+                alert('Mật khẩu xác nhận không khớp.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/users/change-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, new_password })
+                });
+                const result = await response.json();
+                alert(result.message);
+                if (response.ok) {
+                    closeAdminResetModal();
+                }
+            } catch (err) {
+                alert('Lỗi: ' + err.message);
+            }
+        });
+
+        // --- FILE UPLOADER LOGIC ---
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('file-input');
+        const dropzonePrompt = document.getElementById('dropzone-prompt');
+        const filesList = document.getElementById('files-list');
+        const selectedFilesContainer = document.getElementById('selected-files-container');
+        const btnChangeFile = document.getElementById('btn-change-file');
+
+        let selectedFiles = [];
+
+        ['dragenter', 'dragover'].forEach(name => {
+            dropzone.addEventListener(name, (e) => {
+                e.preventDefault();
+                dropzone.classList.add('border-indigo-500', 'bg-indigo-950/10');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(name => {
+            dropzone.addEventListener(name, (e) => {
+                e.preventDefault();
+                dropzone.classList.remove('border-indigo-500', 'bg-indigo-950/10');
+            });
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+            const files = e.dataTransfer.files;
+            if (files.length) {
+                selectedFiles = Array.from(files);
+                renderSelectedFiles();
+            }
+        });
+
+        dropzone.addEventListener('click', () => {
+            if (selectedFiles.length === 0) {
+                fileInput.click();
+            }
+        });
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) {
+                selectedFiles = Array.from(fileInput.files);
+                renderSelectedFiles();
+            }
+        });
+
+        btnChangeFile.addEventListener('click', (e) => {
+            e.stopPropagation();
+            clearSelectedFiles();
+        });
+
+        function clearSelectedFiles() {
+            selectedFiles = [];
+            fileInput.value = '';
+            filesList.classList.add('hidden');
+            dropzonePrompt.classList.remove('hidden');
+        }
+
+        function renderSelectedFiles() {
+            selectedFilesContainer.innerHTML = '';
+            selectedFiles.forEach((file) => {
+                const ext = file.name.split('.').pop().toLowerCase();
+                const icon = ext === 'csv'
+                    ? '<i class="fa-solid fa-file-csv text-sky-400 mr-2"></i>'
+                    : '<i class="fa-regular fa-file-excel text-emerald-400 mr-2"></i>';
+                
+                const size = file.size > 1024 * 1024
+                    ? (file.size / (1024*1024)).toFixed(2) + ' MB'
+                    : (file.size / 1024).toFixed(1) + ' KB';
+
+                selectedFilesContainer.innerHTML += `
+                    <div class="flex items-center justify-between text-xs bg-slate-900/40 p-2 rounded-lg border border-slate-800/80">
+                        <div class="flex items-center min-w-0 pr-3">
+                            ${icon}
+                            <span class="truncate font-medium text-slate-200" title="${file.name}">${file.name}</span>
+                        </div>
+                        <span class="text-slate-500 text-[10px] shrink-0 font-mono">${size}</span>
+                    </div>
+                `;
+            });
+            dropzonePrompt.classList.add('hidden');
+            filesList.classList.remove('hidden');
+        }
+
+        const uploadForm = document.getElementById('upload-form');
+        const statusCard = document.getElementById('status-card');
+        const statusSpinner = document.getElementById('status-spinner');
+        const statusIcon = document.getElementById('status-icon');
+        const statusTitle = document.getElementById('status-title');
+        const statusDesc = document.getElementById('status-desc');
+        const btnSubmit = document.getElementById('btn-submit');
+
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (selectedFiles.length === 0) {
+                alert('Vui lòng chọn tệp để tải lên.');
+                return;
+            }
+
+            const formData = new FormData();
+            selectedFiles.forEach(file => {
+                formData.append('files', file);
+            });
+
+            statusCard.classList.remove('hidden');
+            statusCard.className = "glass-card rounded-2xl p-5 border-l-4 border-indigo-500";
+            statusSpinner.classList.remove('hidden');
+            statusIcon.classList.add('hidden');
+            statusTitle.textContent = "Đang tải tệp lên...";
+            statusDesc.textContent = `Đang đồng bộ ${selectedFiles.length} tệp tin lên Data Lake (Bronze). Quá trình này diễn ra hoàn toàn tự động...`;
+            btnSubmit.disabled = true;
+            btnSubmit.classList.add('opacity-55', 'cursor-not-allowed');
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                
+                statusSpinner.classList.add('hidden');
+                statusIcon.classList.remove('hidden');
+                
+                if (result.status === 'success') {
+                    statusCard.className = "glass-card rounded-2xl p-5 border-l-4 border-emerald-500";
+                    statusIcon.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-400"></i>';
+                    statusTitle.textContent = "Tải lên thành công!";
+                    statusDesc.textContent = result.message;
+                    clearSelectedFiles();
+                } else if (result.status === 'warning') {
+                    statusCard.className = "glass-card rounded-2xl p-5 border-l-4 border-amber-500";
+                    statusIcon.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-amber-400"></i>';
+                    statusTitle.textContent = "Tải lên có lỗi xảy ra";
+                    statusDesc.textContent = result.message;
+                } else {
+                    statusCard.className = "glass-card rounded-2xl p-5 border-l-4 border-rose-500";
+                    statusIcon.innerHTML = '<i class="fa-solid fa-circle-xmark text-rose-400"></i>';
+                    statusTitle.textContent = "Thất bại";
+                    statusDesc.textContent = result.message;
+                }
+            } catch (err) {
+                statusSpinner.classList.add('hidden');
+                statusIcon.classList.remove('hidden');
+                statusCard.className = "glass-card rounded-2xl p-5 border-l-4 border-rose-500";
+                statusIcon.innerHTML = '<i class="fa-solid fa-circle-xmark text-rose-400"></i>';
+                statusTitle.textContent = "Lỗi kết nối";
+                statusDesc.textContent = "Không thể gửi dữ liệu lên server: " + err.message;
+            } finally {
+                btnSubmit.disabled = false;
+                btnSubmit.classList.remove('opacity-55', 'cursor-not-allowed');
+                loadPendingFiles();
+            }
+        });
+
+        // --- PENDING FILES LIST & DELETE LOGIC ---
+        const filesTableBody = document.getElementById('files-table-body');
+        const checkAllFiles = document.getElementById('check-all-files');
+        const btnDeleteSelected = document.getElementById('btn-delete-selected');
+
+        async function loadPendingFiles() {
+            try {
+                const response = await fetch('/files');
+                const data = await response.json();
+                
+                checkAllFiles.checked = false;
+                toggleDeleteSelectedButton();
+
+                if (data.length === 0) {
+                    filesTableBody.innerHTML = `
+                        <tr>
+                            <td colspan="6" class="py-8 text-center text-slate-500">
+                                Không có tệp nào đang chờ xử lý trong hồ chứa dữ liệu (Bronze).
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                filesTableBody.innerHTML = data.map(file => {
+                    const size = file.size_bytes > 1024 * 1024
+                        ? (file.size_bytes / (1024 * 1024)).toFixed(2) + ' MB'
+                        : (file.size_bytes / 1024).toFixed(1) + ' KB';
+
+                    const icon = file.type === 'Excel'
+                        ? '<i class="fa-regular fa-file-excel text-emerald-500 mr-2"></i>'
+                        : '<i class="fa-solid fa-file-csv text-sky-500 mr-2"></i>';
+
+                    const dirBadge = file.type === 'Excel'
+                        ? '<span class="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono border border-emerald-500/10">excel_uploads/</span>'
+                        : '<span class="text-[10px] bg-sky-500/10 text-sky-400 px-2 py-0.5 rounded font-mono border border-sky-500/10">csv_upload/</span>';
+
+                    return `
+                        <tr class="hover:bg-slate-900/30 transition-colors group">
+                            <td class="py-3">
+                                <input type="checkbox" name="file-select" value="${file.key}" class="rounded border-slate-700 bg-slate-950/40 focus:ring-indigo-500">
+                            </td>
+                            <td class="py-3 font-medium max-w-[180px] truncate" title="${file.filename}">
+                                <div class="flex items-center">
+                                    ${icon}
+                                    <span class="truncate group-hover:text-white transition-colors">${file.filename}</span>
+                                </div>
+                            </td>
+                            <td class="py-3">${dirBadge}</td>
+                            <td class="py-3 text-xs text-slate-400 font-mono">${size}</td>
+                            <td class="py-3 text-xs text-slate-400">${file.last_modified}</td>
+                            <td class="py-3 text-right">
+                                <button onclick="deleteSingleFile('${file.key}')" class="p-1.5 hover:bg-rose-500/20 text-slate-500 hover:text-rose-400 rounded-lg transition-colors" title="Xóa tệp khỏi Bronze Layer">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+                document.querySelectorAll('input[name="file-select"]').forEach(cb => {
+                    cb.addEventListener('change', toggleDeleteSelectedButton);
+                });
+
+            } catch (err) {
+                filesTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="py-8 text-center text-rose-500">
+                            Không thể tải danh sách tệp chờ: ${err.message}
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        checkAllFiles.addEventListener('change', () => {
+            document.querySelectorAll('input[name="file-select"]').forEach(cb => {
+                cb.checked = checkAllFiles.checked;
+            });
+            toggleDeleteSelectedButton();
+        });
+
+        function toggleDeleteSelectedButton() {
+            const checkedCount = document.querySelectorAll('input[name="file-select"]:checked').length;
+            if (checkedCount > 0) {
+                btnDeleteSelected.classList.remove('hidden');
+            } else {
+                btnDeleteSelected.classList.add('hidden');
+            }
+        }
+
+        async function deleteSingleFile(key) {
+            if (!confirm('Bạn có chắc chắn muốn xóa tệp này khỏi Data Lake không? Dữ liệu chưa đồng bộ sẽ bị mất.')) {
+                return;
+            }
+            performDelete([key]);
+        }
+
+        btnDeleteSelected.addEventListener('click', () => {
+            const checkedBoxes = document.querySelectorAll('input[name="file-select"]:checked');
+            const keys = Array.from(checkedBoxes).map(cb => cb.value);
+            
+            if (keys.length === 0) return;
+            if (!confirm(`Bạn có chắc muốn xóa ${keys.length} tệp đã chọn khỏi Data Lake không?`)) {
+                return;
+            }
+            performDelete(keys);
+        });
+
+        async function performDelete(keys) {
+            try {
+                const response = await fetch('/delete-files', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ keys })
+                });
+                const result = await response.json();
+                alert(result.message);
+                loadPendingFiles();
+            } catch (err) {
+                alert('Không thể xóa tệp: ' + err.message);
+            }
+        }
+
+        // --- ADMIN TRIGGER ETL LOGIC ---
+        async function triggerETL(pipelineName) {
+            if (!confirm(`Xác nhận chạy luồng tổng hợp dữ liệu (${pipelineName}) ngay lập tức?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/run-etl', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pipeline: pipelineName })
+                });
+                const result = await response.json();
+                alert(result.message);
+                switchTab('tab-history');
+            } catch (err) {
+                alert('Không thể kích hoạt ETL: ' + err.message);
+            }
+        }
+
+        // --- TAB 2: SYNC HISTORY LOADING ---
+        const historyTableBody = document.getElementById('history-table-body');
+        
+        async function loadHistory() {
+            try {
+                const response = await fetch('/history');
+                const data = await response.json();
+                
+                if (data.length === 0) {
+                    historyTableBody.innerHTML = `
+                        <tr>
+                            <td colspan="6" class="py-8 text-center text-slate-500">
+                                Chưa có sự kiện đồng bộ nào được thực hiện trong ClickHouse.
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                historyTableBody.innerHTML = data.map(item => {
+                    const size = item.size_bytes > 1024 * 1024
+                        ? (item.size_bytes / (1024 * 1024)).toFixed(2) + ' MB'
+                        : (item.size_bytes / 1024).toFixed(1) + ' KB';
+
+                    let badgeClass = '';
+                    let statusLabel = '';
+                    if (item.status === 'success') {
+                        badgeClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+                        statusLabel = 'Thành công';
+                    } else if (item.status === 'running' || item.status === 'processing') {
+                        badgeClass = 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20 animate-pulse';
+                        statusLabel = 'Đang chạy';
+                    } else {
+                        badgeClass = 'bg-rose-500/10 text-rose-400 border-rose-500/20';
+                        statusLabel = 'Thất bại';
+                    }
+
+                    const icon = item.type === 'Excel'
+                        ? '<i class="fa-regular fa-file-excel text-emerald-500 mr-2"></i>'
+                        : '<i class="fa-solid fa-file-csv text-sky-500 mr-2"></i>';
+
+                    return `
+                        <tr class="hover:bg-slate-900/30 transition-colors">
+                            <td class="py-3.5 pr-2 font-medium max-w-[200px] truncate" title="${item.filename}">
+                                <div class="flex items-center">
+                                    ${icon}
+                                    <span class="truncate">${item.filename}</span>
+                                </div>
+                            </td>
+                            <td class="py-3.5 text-xs text-slate-400 font-semibold">${item.type}</td>
+                            <td class="py-3.5 text-xs text-slate-400">${size}</td>
+                            <td class="py-3.5 text-xs text-slate-400 font-mono">${item.processed_at}</td>
+                            <td class="py-3.5 text-xs font-semibold text-slate-200">${item.rows.toLocaleString()}</td>
+                            <td class="py-3.5">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${badgeClass}" title="${item.error || ''}">
+                                    ${statusLabel}
+                                </span>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (err) {
+                historyTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="py-8 text-center text-rose-500">
+                            Không thể tải lịch sử đồng bộ: ${err.message}
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        // --- TAB 3: USER MANAGEMENT LOGIC (Admin Only) ---
+        const usersTableBody = document.getElementById('users-table-body');
+        const createUserForm = document.getElementById('create-user-form');
+
+        async function loadUsers() {
+            if (!usersTableBody) return;
+            
+            try {
+                const response = await fetch('/users');
+                const data = await response.json();
+                
+                usersTableBody.innerHTML = data.map(user => {
+                    const roleBadge = user.role === 'admin'
+                        ? '<span class="text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2.5 py-0.5 rounded-full">ADMIN</span>'
+                        : '<span class="text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2.5 py-0.5 rounded-full">STAFF</span>';
+
+                    const actionHtml = user.username === "{{ username }}"
+                        ? '<span class="text-xs text-slate-500 italic pr-4">Tài khoản hiện tại</span>'
+                        : `
+                            <div class="flex items-center justify-end space-x-2">
+                                <button onclick="openAdminResetModal('${user.username}')" class="px-2.5 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 text-indigo-400 text-xs font-bold rounded-lg transition-colors">
+                                    <i class="fa-solid fa-lock-open mr-1"></i>Đổi Pass
+                                </button>
+                                <button onclick="deleteUser('${user.username}')" class="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 text-xs font-bold rounded-lg transition-colors">
+                                    Xóa
+                                </button>
+                            </div>
+                        `;
+
+                    return `
+                        <tr class="hover:bg-slate-900/30 transition-colors">
+                            <td class="py-3 font-semibold text-slate-200">${user.username}</td>
+                            <td class="py-3">${roleBadge}</td>
+                            <td class="py-3 text-right">${actionHtml}</td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (err) {
+                usersTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="3" class="py-8 text-center text-rose-500">
+                            Không thể lấy danh sách user: ${err.message}
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        if (createUserForm) {
+            createUserForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const username = document.getElementById('new-username').value.trim();
+                const password = document.getElementById('new-password').value.trim();
+                const role = document.getElementById('new-role').value;
+
+                try {
+                    const response = await fetch('/users', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password, role })
+                    });
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        alert(result.message);
+                        createUserForm.reset();
+                        loadUsers();
+                    } else {
+                        alert('Lỗi: ' + result.message);
+                    }
+                } catch (err) {
+                    alert('Lỗi gửi yêu cầu: ' + err.message);
+                }
+            });
+        }
+
+        async function deleteUser(username) {
+            if (!confirm(`Bạn có chắc muốn xóa người dùng '${username}' khỏi hệ thống không?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/users/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username })
+                });
+                const result = await response.json();
+                alert(result.message);
+                loadUsers();
+            } catch (err) {
+                alert('Không thể xóa user: ' + err.message);
+            }
+        }
+
+        // Global Event Listeners
+        document.getElementById('btn-refresh-files').addEventListener('click', loadPendingFiles);
+        document.getElementById('btn-refresh-history').addEventListener('click', loadHistory);
+
+        // Initial loading on start
+        loadPendingFiles();
+    </script>
+</body>
+</html>

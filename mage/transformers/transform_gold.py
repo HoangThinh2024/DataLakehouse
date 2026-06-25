@@ -21,6 +21,12 @@ def transform_gold(data, *args, **kwargs):
     run_id = data.get("pipeline_run_id", "unknown")
     gold_ts = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
 
+    # Ensure aggregate dependency columns exist to prevent KeyErrors
+    if "Trạng thái" not in df.columns:
+        df["Trạng thái"] = None
+    if "Khẩn cấp" not in df.columns:
+        df["Khẩn cấp"] = None
+
     # 0. Robust Column Normalization for Assignee
     assignee_col = "Người thực hiện"
     fallback_col = "Người giao việc"

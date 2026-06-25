@@ -2,9 +2,9 @@ triggers:
 - description: null
   envs: []
   last_enabled_at: 2026-04-18 09:48:57.724475+00:00
-  name: every_5_minutes_csv_upload
+  name: six_hourly_csv_upload
   pipeline_uuid: etl_csv_upload_to_reporting
-  schedule_interval: '*/5 * * * *'
+  schedule_interval: '0 */6 * * *'
   schedule_type: time
   settings:
     allow_blocks_to_fail: false

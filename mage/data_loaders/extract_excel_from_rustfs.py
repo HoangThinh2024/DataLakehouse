@@ -91,7 +91,7 @@ def load_data(*args, **kwargs):
 
     objects = []
     try:
-        response = s3_client.list_objects_v2(Bucket=bucket, MaxKeys=max_scan)
+        response = s3_client.list_objects_v2(Bucket=bucket, Prefix="excel_uploads/", MaxKeys=max_scan)
         objects = [
             obj
             for obj in response.get("Contents", [])

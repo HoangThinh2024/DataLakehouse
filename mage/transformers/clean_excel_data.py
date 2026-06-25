@@ -43,7 +43,13 @@ def transform_excel(data, *args, **kwargs):
     for col in df.select_dtypes(include=["object"]).columns:
         df[col] = _clean_string(df[col])
 
-    # 2. Add silver metadata
+    # 2. Ensure 'Mã công việc (ID)' exists to prevent clickhouse deduplication collapsing
+    id_col = "Mã công việc (ID)"
+    if id_col not in df.columns:
+        print(f"[clean_excel_data] Column '{id_col}' is missing. Generating fallback sequential IDs.")
+        df[id_col] = [f"ROW_{i+1}" for i in range(len(df))]
+
+    # 3. Add silver metadata
     df["_silver_processed_at"] = (
         dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
     )

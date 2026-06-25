@@ -537,6 +537,47 @@ services:
   # Reverse proxy is managed externally via Zoraxy.
   # ----------------------------------------------------------
 
+  # ==========================================================
+  # UPLOAD PORTAL: Web interface for staff to upload Excel/CSV files
+  # ==========================================================
+  upload-portal:
+    build:
+      context: ./portal
+      dockerfile: Dockerfile
+    container_name: dlh-upload-portal
+    restart: always
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      RUSTFS_ENDPOINT_URL: http://rustfs:9000
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      RUSTFS_BRONZE_BUCKET: ${RUSTFS_BRONZE_BUCKET:-bronze}
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-analytics}
+      POSTGRES_HOST: dlh-postgres
+      POSTGRES_DB: ${POSTGRES_DB:-datalakehouse}
+      POSTGRES_USER: ${POSTGRES_USER:-dlh_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DLH_SUPERSET_PORT: ${DLH_SUPERSET_PORT:-28088}
+      DLH_GRAFANA_PORT: ${DLH_GRAFANA_PORT:-23001}
+      DLH_CLOUDBEAVER_PORT: ${DLH_CLOUDBEAVER_PORT:-28978}
+    ports:
+      - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:28000:8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - web_network
+    depends_on:
+      rustfs:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      mage:
+        condition: service_healthy
+
+
     # --- MONITORING LAYER ---
   
   # Node Exporter: Thu thập thông số phần cứng từ máy chủ (Host)

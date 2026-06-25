@@ -2,9 +2,9 @@ triggers:
 - description: null
   envs: []
   last_enabled_at: 2026-04-28 03:19:53.864006+00:00
-  name: auto_trigger_bronze_watcher
+  name: six_hourly_excel_upload
   pipeline_uuid: etl_excel_to_lakehouse
-  schedule_interval: '*/5 * * * *'
+  schedule_interval: '0 */6 * * *'
   schedule_type: time
   settings: {}
   sla: null

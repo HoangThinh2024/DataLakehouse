@@ -1,369 +1,151 @@
-# DataLakehouse
+# Hệ thống Modern Data Lakehouse (Local-First)
 
-A production-ready, local-first **Data Lakehouse** stack built entirely with Docker Compose.
-Implements the Medallion Architecture (Bronze → Silver → Gold), automated ETL pipelines,
-OLAP analytics, and business intelligence dashboards — all on a single host.
+Hệ thống **Data Lakehouse** hoàn chỉnh phục vụ lưu trữ, xử lý và phân tích dữ liệu tập trung, được thiết kế và đóng gói chạy local thông qua Docker Compose. Dự án áp dụng kiến trúc Medallion (Bronze → Silver → Gold), tích hợp luồng dữ liệu thời gian thực (CDC) và luồng tải tệp định kỳ (Batch ETL) để phục vụ báo cáo và phân tích BI hiệu năng cao.
 
-![DataLakehouse architecture](docs/assets/datalakehouse-architecture.svg)
+![Kiến trúc DataLakehouse](docs/assets/datalakehouse-architecture.svg)
 
 ---
 
-## Stack at a Glance
+## 1. Thành phần của Stack Công nghệ
 
-| Layer | Component | Role |
-|-------|-----------|------|
-| **Ingest (Real-time)** | Redpanda Connect (Go) | Ultra-light CDC from PostgreSQL to Redpanda/ClickHouse |
-| **Ingest (Batch)** | RustFS Console, scripts | Source data entry for Excel/CSV |
-| **Broker** | Redpanda (v26.1.7) | Kafka-compatible broker with Tiered Storage (S3) |
-| **Storage (Lake)** | RustFS (S3-compatible) | Medallion Lake (Bronze/Silver/Gold) + CDC Archival |
-| **Process (ETL)** | Mage.ai | Orchestrates batch pipelines and dbt transformations |
-| **Warehouse** | ClickHouse | Columnar OLAP engine for serving and real-time ingestion |
-| **Dashboards** | Apache Superset | Business intelligence dashboards |
-| **Monitoring** | Grafana | Pipeline operational monitoring |
-| **Cache** | Redis 8 | Shared high-performance cache and queue |
-| **GUI (Redis)** | Redis Insight | Web-based management for Redis (Port 25540) |
-| **SQL IDE** | CloudBeaver | Web-based SQL client |
-| **Proxy** | Zoraxy | Reverse proxy |
-
----
-
-## Service URLs (default ports)
-
-| Service | URL | Credentials |
-|---------|-----|-------------|
-| Redpanda Console | http://localhost:29080 | (No auth by default) |
-| RustFS Console | http://localhost:29101 | `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY` |
-| Mage | http://localhost:26789 | `MAGE_DEFAULT_OWNER_USERNAME` / `MAGE_DEFAULT_OWNER_PASSWORD` |
-| Superset | http://localhost:28088 | `SUPERSET_ADMIN_USER` / `SUPERSET_ADMIN_PASSWORD` |
-| Grafana | http://localhost:23001 | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` |
-| Redis Insight | http://localhost:25540 | (configured on first login) |
-| CloudBeaver | http://localhost:28978 | (configured on first login) |
-| PostgreSQL | localhost:25432 | `POSTGRES_USER` / `POSTGRES_PASSWORD` |
-| ClickHouse HTTP | http://localhost:28123 | `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` |
-| Redpanda Kafka | localhost:29092 | (No auth by default) |
-
-> **Redis Insight** is provided as a separate service (`dlh-redis-insight`). 
-> On first visit, add a connection to `dlh-redis:6379` with your `REDIS_PASSWORD`.
-
-All credentials are set in `.env`. Default values are for local development only —
-**rotate all passwords before production use.**
+| Phân lớp | Công nghệ | Vai trò trong hệ thống |
+| :--- | :--- | :--- |
+| **Ingest (Thời gian thực)** | Redpanda Connect (Go) | Thu thập dữ liệu CDC siêu nhẹ từ PostgreSQL sang Redpanda và ClickHouse |
+| **Ingest (Theo lô/Tệp)** | Upload Portal (Flask), Watcher | Cổng tải tệp Excel/CSV cho nhân sự và cơ chế tự động theo dõi sự kiện tệp mới |
+| **Event Broker** | Redpanda (v26.1.7) | Hệ thống hàng đợi tương thích Kafka, hỗ trợ lưu trữ dài hạn (Tiered Storage) lên Lake |
+| **Storage (Data Lake)** | RustFS (S3-compatible) | Lưu trữ phân tầng Medallion (Bronze/Silver/Gold) dưới định dạng tệp Parquet |
+| **Process (ETL)** | Mage.ai & dbt | Điều phối tiến trình làm sạch dữ liệu batch và biến đổi dbt models |
+| **Warehouse (OLAP)** | ClickHouse | Động cơ cơ sở dữ liệu dạng cột (Columnar OLAP) cho phân tích hiệu năng cao |
+| **Dashboards (BI)** | Apache Superset | Giao diện trực quan hóa dữ liệu và xây dựng báo cáo BI |
+| **Monitoring** | Grafana & Prometheus | Giám sát trạng thái hoạt động của server và tiến trình ETL |
+| **Cache & Queue** | Redis 8 | Hệ thống cache kết quả Superset và phân phối hàng đợi |
+| **GUI SQL IDE** | CloudBeaver | Trình duyệt quản trị SQL trực tiếp trên web |
+| **Reverse Proxy** | Zoraxy | Điều phối tên miền và định tuyến dịch vụ ngoài docker |
 
 ---
 
-## Quick Start
+## 2. Danh sách dịch vụ và Cổng kết nối (Ports)
 
-### Prerequisites
+| Dịch vụ | Tên Container | Cổng kết nối mặc định | Thông tin đăng nhập |
+| :--- | :--- | :--- | :--- |
+| **Upload Portal** | `dlh-upload-portal` | `28000` | Quản trị bằng tài khoản cấp trong PostgreSQL |
+| **Redpanda Console** | `dlh-redpanda-console` | `29080` | Không yêu cầu xác thực mặc định |
+| **RustFS Console** | `dlh-rustfs` | `29101` | `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY` |
+| **Mage UI** | `dlh-mage` | `26789` | `MAGE_DEFAULT_OWNER_USERNAME` / `MAGE_DEFAULT_OWNER_PASSWORD` |
+| **Superset UI** | `dlh-superset` | `28088` | `SUPERSET_ADMIN_USER` / `SUPERSET_ADMIN_PASSWORD` |
+| **Grafana UI** | `dlh-grafana` | `23001` | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` |
+| **CloudBeaver IDE** | `dlh-cloudbeaver` | `28978` | Cấu hình trong lần đăng nhập đầu tiên |
+| **Redis Insight** | `dlh-redis-insight` | `25540` | Kết nối tới `dlh-redis:6379` bằng `REDIS_PASSWORD` |
+| **PostgreSQL DB** | `dlh-postgres` | `25432` | `POSTGRES_USER` / `POSTGRES_PASSWORD` |
+| **ClickHouse HTTP** | `dlh-clickhouse` | `28123` | `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` |
 
-- Linux / macOS / WSL host
-- Docker Engine + Docker Compose plugin
-- [`uv`](https://github.com/astral-sh/uv) (host-side Python runner)
+---
 
-```bash
-docker --version
-docker compose version
-uv --version
-```
+## 3. Khởi động nhanh (Quick Start)
 
-### 1. Clone and install host dependencies
+### Yêu cầu hệ thống
+* Hệ điều hành: Linux (Ubuntu/Debian khuyến nghị) hoặc WSL2 trên Windows.
+* Docker Engine + Docker Compose plugin.
+* Trình quản lý thư viện Python [**`uv`**](https://github.com/astral-sh/uv) cài đặt sẵn trên máy Host.
 
+### Bước 1: Đồng bộ mã nguồn và thư viện
 ```bash
 git clone https://github.com/vuhuudo/DataLakehouse.git
 cd DataLakehouse
 uv sync --all-groups
 ```
 
-### 2. Run guided setup (recommended for first deployment)
-
+### Bước 2: Thiết lập hệ thống (Guided Setup)
+Chạy script thiết lập tương tác để kiểm tra xung đột cổng, sinh file cấu hình `.env` bảo mật và khởi chạy toàn bộ container:
 ```bash
 bash scripts/setup.sh
 ```
 
-`setup.sh` will:
-1.  **Run pre-flight checks** for `docker` and `uv`.
-2.  **Check for port conflicts** and suggest alternatives.
-3.  Prompt for all configuration values (or accept defaults).
-4.  Write a complete, cross-platform-safe `.env` file.
-5.  Create the `web_network` Docker network.
-6.  Start all services with `docker compose up -d`.
-7.  Optionally run the ETL pipeline and provision Superset dashboards.
-
-### 3. Verify stack health
-
+### Bước 3: Kiểm tra sức khỏe hệ thống
+Kiểm tra xem toàn bộ các thành phần dịch vụ đã khởi động và hoạt động ổn định chưa:
 ```bash
-bash scripts/stackctl.sh diagnose     # analyze logs and port conflicts
-bash scripts/stackctl.sh health       # deep health checks
-```
-
-All services should report healthy within 2–3 minutes of startup.
-
-### 4. (Optional) Load sample data and run ETL
-
-```bash
-# Interactive
-uv run python scripts/run_etl_and_dashboard.py
-
-# Non-interactive (CI mode)
-uv run python scripts/run_etl_and_dashboard.py --auto
+bash scripts/stackctl.sh health       # Kiểm tra kết nối sâu
+bash scripts/stackctl.sh diagnose     # Chẩn đoán xung đột cổng và lỗi logs
 ```
 
 ---
 
-## Data Flow
+## 4. Cổng Tải dữ liệu (Upload Portal) & Quản lý Người dùng
 
-```
-PostgreSQL / Excel / CSV
-        │
-        ▼ [Mage ETL]
- RustFS Bronze  →  Silver  →  Gold   (Parquet, partitioned by date)
-        │
-        ▼ [Serving Layer]
-    ClickHouse analytics DB
-        │
-        ├──▶ Superset  (business dashboards)
-        └──▶ Grafana   (pipeline monitoring)
-```
+Để phục vụ nhu cầu nghiệp vụ của các nhân viên không có kiến thức kỹ thuật, hệ thống tích hợp dịch vụ **Upload Portal** (được viết bằng Flask tại thư mục `/portal` và chạy tại cổng `28000`).
 
-The system enforces a **strict Medallion architecture** where all data must reside in the RustFS object store (the **single source of truth**) before any transformation. intermediate states (Silver/Gold) are persisted as Parquet files, allowing ClickHouse to be fully rebuilt from the lake at any time.
-
-Redis  →  Superset cache/results
+### Các tính năng cốt lõi:
+* **Phân quyền và bảo mật:**
+  * Toàn bộ thông tin tài khoản được lưu trữ mã hóa (sử dụng mật khẩu băm pbkdf2:sha256) trong bảng `portal_users` trên PostgreSQL.
+  * Chỉ tài khoản có quyền `admin` mới được truy cập các tính năng quản trị người dùng và kích hoạt thủ công tiến trình ETL. Nhân sự thông thường (`staff`) chỉ có quyền upload tệp và xem lịch sử tải lên.
+* **Quy trình Đổi mật khẩu bắt buộc:** Khi Admin tạo một tài khoản mới, tài khoản đó sẽ bị bắt buộc phải tự đổi mật khẩu ngay lần đầu tiên đăng nhập để bảo mật thông tin.
+* **Tải lên nhiều tệp (Multi-file upload):** Hỗ trợ kéo thả và chọn đồng thời nhiều tệp `.csv` hoặc `.xlsx` tải lên S3 Bronze bucket.
+* **Xóa tệp chờ xử lý:** Cho phép chọn và xóa các tệp đã tải lên khỏi S3 Bronze bucket để quản lý không gian lưu trữ trước khi hệ thống chạy tổng hợp.
+* **Cơ chế Quên mật khẩu an toàn:** Khi nhân sự bấm quên mật khẩu, hệ thống sẽ tự sinh mã OTP gồm 6 chữ số ghi trực tiếp vào container logs của Portal để IT/Admin có thể lấy và cấp lại/reset mật khẩu cho người dùng.
 
 ---
 
-## Lifecycle Management
+## 5. Múi giờ hoạt động và Xử lý tệp Excel
 
-All day-2 operations go through `scripts/stackctl.sh`:
+### Đồng bộ giờ Việt Nam (`Asia/Ho_Chi_Minh`)
+* Toàn bộ hệ thống chạy đồng bộ theo giờ Việt Nam. Các server ClickHouse, PostgreSQL và múi giờ hệ thống của Docker containers đều cấu hình mặc định là `Asia/Ho_Chi_Minh`.
+* Thời gian sửa đổi file trên S3 và thời gian thực thi ETL hiển thị trên Cổng Tải lên đều đã được định dạng và chuyển đổi chính xác từ UTC sang GMT+7 trước khi hiển thị cho người dùng.
 
-```bash
-bash scripts/stackctl.sh up                  # start all services
-bash scripts/stackctl.sh down                # stop all services
-bash scripts/stackctl.sh redeploy            # pull images + recreate containers
-bash scripts/stackctl.sh redeploy --safe     # backup volumes before recreating
-bash scripts/stackctl.sh redeploy --with-etl # redeploy + run ETL automatically
-bash scripts/stackctl.sh status              # container status
-bash scripts/stackctl.sh health              # deep health checks
-bash scripts/stackctl.sh diagnose            # check for port conflicts and errors
-bash scripts/stackctl.sh logs all            # stream all logs
-bash scripts/stackctl.sh logs dlh-mage       # single service logs
-bash scripts/stackctl.sh validate-env        # validate .env (port conflicts, blanks)
-bash scripts/stackctl.sh reset               # soft reset (keep volumes)
-bash scripts/stackctl.sh reset --hard        # hard reset (delete volumes)
-bash scripts/stackctl.sh check-system        # architecture validation
-```
-
-See [`scripts/README.md`](scripts/README.md) for the full script reference.
+### Đảm bảo không bị nuốt dữ liệu khi Upload Excel tùy chỉnh
+Bảng đích lưu trữ kết quả Excel trong ClickHouse (`analytics.project_reports`) được thiết kế theo cấu trúc `ReplacingMergeTree` sắp xếp theo khóa `(_source_file_key, Mã công việc (ID))`.
+* **Cơ chế cũ:** Nếu người dùng upload các tệp Excel không có cột `Mã công việc (ID)` (như danh sách nhân sự hay bảng chấm công), Clickhouse sẽ gán ID mặc định là rỗng `""`. Điều này làm Clickhouse hiểu nhầm toàn bộ các dòng trong tệp là trùng lặp và gộp (collapse) lại chỉ giữ lại **duy nhất 1 dòng**.
+* **Cơ chế mới (Đã sửa đổi):** Khi tệp Excel được nạp vào, block `clean_excel_data` của Mage sẽ tự động kiểm tra sự tồn tại của cột `Mã công việc (ID)`. Nếu tệp tải lên không có cột này, hệ thống sẽ **tự động sinh mã dòng tuần tự** (`ROW_1`, `ROW_2`,...) gắn theo tệp nguồn. Cơ chế này đảm bảo mọi bản ghi của bất kỳ tệp Excel nào tải lên cũng có định danh duy nhất, **không bao giờ bị mất mát dữ liệu** khi nạp vào ClickHouse, đồng thời bảng `project_reports` cũng tự động tiến hóa schema (Evolve schema) để bổ sung thêm các cột mới có trong tệp Excel của bạn.
 
 ---
 
-## Sao luu va khoi phuc nhanh
+## 6. Lệnh điều phối vòng đời hệ thống (Day-2 Ops)
 
-De snapshot toan bo stack (ma nguon + du lieu Docker volumes), dung cac script co san:
+Mọi thao tác quản trị vòng đời ứng dụng đều được thực hiện thông qua script `scripts/stackctl.sh`:
 
-```bash
-# Tao ban sao luu (tu dong stop stack truoc khi dong goi)
-bash scripts/backup.sh
-```
-
-File sao luu duoc luu tai thu muc backup duoi repo, ten file theo mau:
-
-```
-DataLakehouse_backup_YYYYMMDD_HHMM.tar.gz
-```
-
-```bash
-# Khoi phuc tu file backup (co the truyen them thu muc cha dich)
-bash scripts/restore.sh /path/to/DataLakehouse_backup_YYYYMMDD_HHMM.tar.gz [target_parent_dir]
-
-# Khoi dong lai stack
-docker compose up -d
-```
-
-Luu y: backup bo qua thu muc virtual env va thu muc git de giam dung luong.
-
----
-
-## Project Structure
-
-```
-DataLakehouse/
-├── docker-compose.yaml         # Full stack definition
-├── .env.example                # Environment variable template
-├── pyproject.toml              # Host-side Python dependencies (uv)
-│
-├── clickhouse/                 # ClickHouse init SQL (schema DDL)
-├── grafana/                    # Grafana provisioning (datasources, dashboards)
-├── mage/                       # Mage.ai project: pipelines, blocks, utilities
-├── postgres/                   # PostgreSQL init scripts (roles, schemas, sample data)
-├── superset/                   # Superset configuration (superset_config.py)
-├── samples/                    # Sample Excel/CSV files for testing ETL pipelines
-│
-├── scripts/                    # Operational scripts
-│   ├── lib_env.sh              # Core environment library (logging, env loading)
-│   ├── setup.sh                # Guided initial setup
-│   ├── stackctl.sh             # Lifecycle management (up/down/health/logs/reset)
-│   ├── run_etl_and_dashboard.py        # ETL trigger + Superset provisioning
-│   ├── create_superset_demo_dashboard.py  # Superset dashboard creation via API
-│   ├── demo_to_lakehouse.py    # Sample data loader
-│   ├── verify_lakehouse_architecture.py   # End-to-end architecture validator
-│   ├── maintenance_tasks.py    # ClickHouse backup + RustFS cleanup
-│   ├── realtime_watcher.sh     # File-upload event watcher (monitors S3) → ETL trigger
-│   ├── cleanup_lakehouse_data.py # Lakehouse purge and clean reload
-│   ├── durability_test.py      # Watcher & pipeline stability/load test
-│   ├── test_individual_services.py # Stack container and services diagnostics check
-│   ├── backup.sh / restore.sh  # Stack backup and restore scripts
-│   └── setup_ufw_docker.sh     # Docker-aware UFW firewall management
-│
-└── docs/
-    ├── ARCHITECTURE.md         # Full architecture reference (layers, flow, schema)
-    ├── DEPLOYMENT_GUIDE.md     # Step-by-step deployment and operations guide
-    ├── PIPELINE_GUIDE.md       # Detailed ETL pipeline block documentation
-    ├── VARIABLES_REFERENCE.md  # All .env variables with descriptions and defaults
-    ├── OPERATIONS.md           # Day-2 ops: health, backup, restore, Redis
-    ├── RUSTFS_LAYER_READER_GUIDE.md  # Developer guide for reading RustFS lake layers
-    ├── TESTING_CHECKLIST.md    # End-to-end deployment verification checklist
-    ├── ai_context.py           # Semantic metadata for AI assistants (Gemini, Copilot)
-    └── assets/
-        └── datalakehouse-architecture.svg
-```
+* **Khởi động và Dừng hệ thống:**
+  ```bash
+  bash scripts/stackctl.sh up             # Khởi chạy stack compose
+  bash scripts/stackctl.sh down           # Dừng stack compose (giữ lại dữ liệu)
+  ```
+* **Triển khai lại và cập nhật:**
+  ```bash
+  bash scripts/stackctl.sh redeploy       # Kéo image mới và dựng lại các container
+  bash scripts/stackctl.sh redeploy --safe # Triển khai lại có backup dữ liệu trước
+  ```
+* **Sao lưu và Khôi phục nhanh:**
+  Dùng các script đóng gói toàn bộ mã nguồn và dữ liệu docker volumes để lưu trữ phòng ngừa thảm họa:
+  ```bash
+  bash scripts/backup.sh                  # Tự động dừng stack và đóng gói file .tar.gz
+  bash scripts/restore.sh /đường/dẫn/file_backup.tar.gz # Khôi phục dữ liệu
+  ```
+* **Reset sạch dữ liệu:**
+  ```bash
+  bash scripts/stackctl.sh reset --hard   # Xóa sạch toàn bộ docker volumes (Xóa DB/Lake)
+  ```
 
 ---
 
-## Documentation
+## 7. Báo cáo kiểm tra Bảo mật thông tin (Security Audit)
 
-| Document | Description |
-|----------|-------------|
-| [ARCHITECTURE.md](docs/Architecture.md) | System layers, component catalog, data flow, ETL pipelines, ClickHouse schema |
-| [DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) | Step-by-step deployment and operations guide |
-| [PIPELINE_GUIDE.md](docs/PIPELINE_GUIDE.md) | Every ETL block explained: variables used, logic, customisation guide |
-| [VARIABLES_REFERENCE.md](docs/VARIABLES_REFERENCE.md) | Complete `.env` variable reference with descriptions and example values |
-| [OPERATIONS.md](docs/Operations.md) | Lifecycle commands, health monitoring, backup/restore, Redis ops |
-| [RUSTFS_LAYER_READER_GUIDE.md](docs/RUSTFS_LAYER_READER_GUIDE.md) | Developer API for reading Bronze/Silver/Gold layers from Python |
-| [TESTING_CHECKLIST.md](docs/TESTING_CHECKLIST.md) | Step-by-step verification checklist after deployment or changes |
+Trước khi đẩy mã nguồn dự án lên GitHub, hãy chú ý các điểm kiểm tra an toàn thông tin sau:
 
----
-
-## Firewall and LAN Access
-
-Apply Docker-aware UFW rules:
-
-```bash
-bash scripts/setup_ufw_docker.sh
-```
-
-Recommended `.env` settings for a split-access setup:
-
-```ini
-# UI apps stay local (behind reverse proxy)
-DLH_APP_BIND_IP=127.0.0.1
-
-# Database/API ports accessible from LAN
-DLH_DATA_BIND_IP=0.0.0.0
-UFW_ALLOW_DATA_PORTS=true
-DLH_LAN_CIDR=192.168.1.0/24
-```
-
-If using Zoraxy reverse proxy:
-1. Attach the Zoraxy container to the `web_network` Docker network.
-2. Configure proxy hosts in the Zoraxy WebUI using the DataLakehouse service names as upstream targets: `dlh-mage:6789`, `dlh-superset:8088`, `dlh-grafana:3000`, etc.
+1. **Tệp cấu hình môi trường `.env`:**
+   * Tệp `.env` chứa mật khẩu kết nối cơ sở dữ liệu (`HoancauIT2026`), access key của S3, và mã bí mật Superset.
+   * **Trạng thái:** Tệp `.env` hiện tại đã được liệt kê trong `.gitignore` (dòng 147) và **KHÔNG** bị theo dõi (untracked) trong commit hiện tại.
+2. **Lịch sử Git (Git History):**
+   * **CẢNH BÁO:** Kiểm tra lịch sử commit cho thấy tệp `.env` **đã từng bị commit nhầm** trong quá khứ tại các commit cũ (như commit `f9c87a6` và `b31cae5`) trước khi nó bị loại bỏ khỏi version control ở commit `75047c3`.
+   * **Khuyến nghị bảo mật:** Nếu bạn muốn đưa kho chứa mã nguồn này lên một GitHub repository **Công khai (Public)**, các mật khẩu trong quá khứ vẫn có thể bị người khác tìm thấy thông qua lịch sử Git. Bạn nên:
+     * **Cách 1 (Khuyến nghị):** Thay đổi toàn bộ mật khẩu kết nối trong `.env` trên môi trường production khác với mật khẩu đang có trong lịch sử git.
+     * **Cách 2:** Sử dụng công cụ `git-filter-repo` hoặc `BFG Repo-Cleaner` để quét sạch lịch sử commit của tệp `.env` trước khi push lên github:
+       ```bash
+       pip install git-filter-repo
+       git filter-repo --path .env --invert-paths
+       ```
+3. **Mã nguồn ứng dụng và Cổng Portal (`/portal`):**
+   * Mã nguồn ứng dụng Cổng Portal hoàn toàn không chứa bất kỳ khóa API bí mật hoặc thông tin mật khẩu cứng (hardcoded credentials). Mọi giá trị mật khẩu kết nối đều được Portal đọc động từ biến môi trường (`os.getenv`), đảm bảo tuân thủ tiêu chuẩn an toàn bảo mật 12-factor app.
 
 ---
 
-## ETL Pipeline Reference
+## 8. Giấy phép
 
-Three pipelines are included:
-
-| Pipeline | Schedule | Source | Output |
-|----------|----------|--------|--------|
-| `etl_postgres_to_lakehouse` | Every 6 h | PostgreSQL table | RustFS Bronze/Silver/Gold + ClickHouse |
-| `etl_excel_to_lakehouse` | Manual / watcher | Excel files in RustFS | ClickHouse project dashboard tables |
-| `etl_csv_upload_to_reporting` | Every 5 min | CSV files in RustFS | ClickHouse `csv_clean_rows` |
-
-Run any pipeline immediately:
-
-```bash
-# Via stackctl
-bash scripts/stackctl.sh redeploy --with-etl
-
-# Via Python script
-uv run python scripts/run_etl_and_dashboard.py --auto
-
-# Via Mage UI
-# http://localhost:26789 → Pipelines → [pipeline name] → Run Now
-```
-
-See [`mage/README.md`](mage/README.md) and [`docs/PIPELINE_GUIDE.md`](docs/PIPELINE_GUIDE.md) for details.
-
----
-
-## Troubleshooting
-
-### Services not healthy
-
-```bash
-bash scripts/stackctl.sh diagnose
-bash scripts/stackctl.sh health
-bash scripts/stackctl.sh logs all
-```
-
-### Port conflicts
-
-```bash
-bash scripts/stackctl.sh diagnose
-bash scripts/stackctl.sh sync-env
-bash scripts/stackctl.sh redeploy
-```
-
-### Full rebuild
-
-```bash
-bash scripts/stackctl.sh reset --hard
-bash scripts/setup.sh
-```
-
-### WSL/.env Encoding Errors
-
-This issue is **automatically resolved** by the refactored script layer.
-
-All operational scripts use a shared environment library (`scripts/lib_env.sh`)
-that safely reads `.env` files, automatically detecting and sanitizing UTF-8 BOM
-and CRLF line endings. **No manual steps are required.**
-
-### Redis Insight not accessible
-
-Redis Insight is served as a separate service `dlh-redis-insight` next to the core database `dlh-redis`. If the UI at `http://localhost:25540` is unreachable:
-
-```bash
-# Check that the containers are healthy and ports are mapped
-docker compose ps dlh-redis dlh-redis-insight
-docker compose logs dlh-redis-insight --tail 50
-```
-
-On first visit, you can add a Redis connection. Use:
-- **Host**: `dlh-redis` (the container name) or `127.0.0.1` (if connecting from the host machine using port `26379`)
-- **Port**: `6379`
-- **Password**: value of `REDIS_PASSWORD` in your `.env`
-
-### ClickHouse data missing
-
-ClickHouse schema init only runs once (on first volume creation). To re-apply:
-
-```bash
-bash scripts/stackctl.sh reset --hard && bash scripts/setup.sh
-```
-
-See [docs/Operations.md](docs/Operations.md) for the full recovery procedures reference.
-
----
-
-## Security Notes
-
-- Rotate **all** `change-*` and `replace-*` passwords in `.env` before production.
-- Pin image versions to specific tags (avoid `latest`) in `.env`.
-- Use TLS via Zoraxy for internet-exposed deployments.
-- Restrict `DLH_BIND_IP` and `DLH_LAN_CIDR` to trusted addresses.
-- Back up PostgreSQL, ClickHouse, RustFS, and Redis volumes regularly.
-
----
-
-## License
-
-MIT
+Dự án phát hành dưới giấy phép mã nguồn mở **MIT License**.

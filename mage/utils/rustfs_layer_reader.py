@@ -288,6 +288,13 @@ def read_latest_excel_gold_workload(date_str: Optional[str] = None) -> pd.DataFr
         return pd.DataFrame()
 
     df = df_silver.copy()
+    
+    # Ensure columns exist to prevent KeyErrors on dynamic aggregation
+    if "Mã công việc (ID)" not in df.columns:
+        df["Mã công việc (ID)"] = [f"ROW_{i+1}" for i in range(len(df))]
+    if "Khẩn cấp" not in df.columns:
+        df["Khẩn cấp"] = None
+
     assignee_col = "Người thực hiện"
     fallback_col = "Người giao việc"
 
