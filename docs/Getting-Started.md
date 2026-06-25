@@ -122,7 +122,6 @@ Once the stack is up, open these URLs in your browser:
 | Grafana (Monitoring) | http://localhost:23001 |
 | RustFS Console (Object store) | http://localhost:29101 |
 | CloudBeaver (SQL IDE) | http://localhost:28978 |
-| Dockhand (Docker UI) | http://localhost:23000 |
 | Redis Insight | http://localhost:25540 |
 
 Default credentials for each service are set in `.env`. See the [Configuration](Configuration.md) page.

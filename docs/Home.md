@@ -35,9 +35,8 @@ and business intelligence dashboards — all on a single host.
 | **Warehouse** | ClickHouse | Columnar OLAP engine — serves analytics queries |
 | **Dashboards** | Apache Superset | Business intelligence dashboards |
 | **Monitoring** | Grafana | Pipeline operational monitoring |
-| **Cache / GUI** | Redis Stack | Shared cache/queue + built-in Redis Insight UI |
+| **Cache / GUI** | Redis 8 & Redis Insight | Shared cache/queue and Redis Insight management interface |
 | **SQL IDE** | CloudBeaver | Web-based SQL client for PostgreSQL and ClickHouse |
-| **Docker Mgmt** | Dockhand | Lightweight web-based Docker management UI |
 | **Proxy** | Zoraxy | Reverse proxy |
 
 ---
@@ -51,7 +50,6 @@ and business intelligence dashboards — all on a single host.
 | Superset | http://localhost:28088 | `SUPERSET_ADMIN_USER` / `SUPERSET_ADMIN_PASSWORD` |
 | Grafana | http://localhost:23001 | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` |
 | CloudBeaver | http://localhost:28978 | Configured on first login |
-| Dockhand | http://localhost:23000 | No auth by default |
 | Zoraxy | http://localhost:8000 | Configured on first login |
 | PostgreSQL | localhost:25432 | `POSTGRES_USER` / `POSTGRES_PASSWORD` |
 | ClickHouse HTTP | http://localhost:28123 | `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` |

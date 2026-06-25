@@ -23,23 +23,6 @@ x-dlh-runtime: &dlh-runtime
 x-dlh-timezone: &dlh-timezone
   TZ: ${TZ:-Asia/Ho_Chi_Minh}
 
-x-authentik-env: &authentik-env
-  TZ: ${TZ:-Asia/Ho_Chi_Minh}
-  AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-change-this-authentik-secret-key}
-  AUTHENTIK_ERROR_REPORTING_ENABLED: "false"
-  AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
-  AUTHENTIK__REDIS_HOST: ${REDIS_HOST:-dlh-redis}
-  AUTHENTIK__REDIS_PORT: 6379
-  AUTHENTIK__REDIS_PASSWORD: ${REDIS_PASSWORD:-change-this-redis-password}
-  AUTHENTIK__REDIS_DB: ${REDIS_AUTHENTIK_DB:-1}
-  AUTHENTIK_POSTGRESQL__HOST: ${POSTGRES_HOST:-dlh-postgres}
-  AUTHENTIK_POSTGRESQL__PORT: 5432
-  AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_DB_NAME:-${POSTGRES_DB:-postgres}}
-  AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_DB_USER:-${POSTGRES_USER:-postgres}}
-  AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_DB_PASSWORD:-${POSTGRES_PASSWORD:-postgres}}
-  AUTHENTIK_SESSION_ENGINE: django.contrib.sessions.backends.cache
-  AUTHENTIK_CACHE__BACKEND: redis
-
 services:
   # ==========================================================
   # LAYER 1: INGESTION (Real-time CDC - Resource Optimized)
@@ -48,6 +31,7 @@ services:
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:v26.1.7
     container_name: dlh-redpanda
+    user: root
     restart: always
     command:
       - redpanda
@@ -103,9 +87,9 @@ services:
       CONSOLE_CONFIG_FILE: |
         kafka:
           brokers: ["redpanda:9092"]
-          schemaRegistry:
-            enabled: true
-            urls: ["http://redpanda:8081"]
+        schemaRegistry:
+          enabled: true
+          urls: ["http://redpanda:8081"]
         redpanda:
           adminApi:
             enabled: true
@@ -116,8 +100,8 @@ services:
         #   oidc:
         #     enabled: true
         #     clientId: "dlh-redpanda-console"
-        #     clientSecret: "${REDPANDA_CONSOLE_OIDC_CLIENT_SECRET}"
-        #     issuerUrl: "https://${AUTHENTIK_HOST}/application/o/redpanda-console/"
+        #     clientSecret: "${REDPANDA_CONSOLE_OIDC_CLIENT_SECRET:-}"
+        #     issuerUrl: "https://${AUTHENTIK_HOST:-}/application/o/redpanda-console/"
         #     userIdentifyingClaimKey: "email"
     ports:
       - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_REDPANDA_CONSOLE_PORT:-29080}:8080"
@@ -228,6 +212,7 @@ services:
     <<: *dlh-runtime
     image: rustfs/rustfs:${RUSTFS_IMAGE_VERSION:-latest}
     container_name: dlh-rustfs
+    user: root
     deploy:
       resources:
         limits:
@@ -314,40 +299,39 @@ services:
       retries: 5
       start_period: 30s
 
-  # Redis – shared cache/queue backend for platform services
-  # redis/redis-stack bundles Redis server + Redis Stack modules + Redis Insight GUI (port 8001)
-# Redis 8 Server - Core database
+  # Redis 8 Server - Core database / shared cache/queue backend for platform services
   dlh-redis:
     <<: *dlh-runtime
-    image: redis:8.6.3 # Hoặc redis:8-alpine khi bản chính thức ổn định
+    image: redis:${REDIS_IMAGE_VERSION:-8.6.3} # Hoặc redis:8-alpine khi bản chính thức ổn định
     container_name: dlh-redis
-    command: >
+    command: 
       redis-server 
       --requirepass ${REDIS_PASSWORD:-change-this-redis-password}
       --maxmemory ${REDIS_MAXMEMORY:-512mb}
       --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
       --appendonly ${REDIS_APPENDONLY:-yes}
-    env_file:
-      - .env
-    environment:
-      <<: *dlh-timezone
+      --protected-mode ${REDIS_PROTECTED_MODE:-yes}
     ports:
       - "${REDIS_BIND_IP:-127.0.0.1}:${DLH_REDIS_PORT:-26379}:6379"
     volumes:
       - ./data/redis:/data
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-change-this-redis-password} ping | grep -q PONG"]
-      interval: 15s
+      interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   # Redis Insight - GUI Management (Tách riêng)
   dlh-redis-insight:
     <<: *dlh-runtime
-    image: redis/redisinsight:latest
+    image: redis/redisinsight:${REDIS_INSIGHT_IMAGE_VERSION:-latest}
     container_name: dlh-redis-insight
-    restart: "no"
+    user: root
     environment:
       <<: *dlh-timezone
     ports:
@@ -369,7 +353,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 6G
     env_file:
       - .env
     environment:
@@ -478,10 +462,6 @@ services:
       SUPERSET_REDIS_CACHE_DB: ${SUPERSET_REDIS_CACHE_DB:-2}
       SUPERSET_REDIS_RESULTS_DB: ${SUPERSET_REDIS_RESULTS_DB:-3}
       _PIP_ADDITIONAL_REQUIREMENTS: psycopg2-binary==2.9.9 clickhouse-connect==0.8.3 Authlib==1.3.1
-      # OIDC Config
-      SUPERSET_OIDC_CLIENT_ID: ${SUPERSET_OIDC_CLIENT_ID}
-      SUPERSET_OIDC_CLIENT_SECRET: ${SUPERSET_OIDC_CLIENT_SECRET}
-      SUPERSET_OIDC_DISCOVERY_URL: ${SUPERSET_OIDC_DISCOVERY_URL}
     ports:
       - "${DLH_APP_BIND_IP:-${DLH_BIND_IP:-127.0.0.1}}:${DLH_SUPERSET_PORT:-28088}:8088"
     volumes:
@@ -518,6 +498,7 @@ services:
     <<: *dlh-runtime
     image: grafana/grafana:${GRAFANA_IMAGE_VERSION:-latest}
     container_name: dlh-grafana
+    user: root
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
       GF_SERVER_ROOT_URL: https://grafana.datahcg.duckdns.org
@@ -556,24 +537,6 @@ services:
   # Reverse proxy is managed externally via Zoraxy.
   # ----------------------------------------------------------
 
-  # ==========================================================
-  # INFRA: DOCKER MANAGEMENT (Dockhand)
-  # ==========================================================
-  dockhand:
-    image: fnsys/dockhand:latest
-    container_name: dlh-dockhand
-    restart: unless-stopped
-    environment:
-      TZ: ${TZ:-Asia/Ho_Chi_Minh}
-    ports:
-      - "${DLH_APP_BIND_IP:-127.0.0.1}:${DLH_DOCKHAND_PORT:-23000}:3000"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./data/dockhand:/app/data
-      - /mnt/d:/mnt/d # Optional: bind-mount host directory for Dockhand to manage
-      - /home/johndoe:/home/johndoe
-    networks:
-      - web_network
     # --- MONITORING LAYER ---
   
   # Node Exporter: Thu thập thông số phần cứng từ máy chủ (Host)

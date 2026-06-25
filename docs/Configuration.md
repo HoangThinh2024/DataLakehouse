@@ -142,7 +142,8 @@ Pin all images to specific tags for reproducible deployments:
 | `MAGE_IMAGE_VERSION` | `0.9.76` |
 | `SUPERSET_IMAGE_VERSION` | `4.1.2` |
 | `GRAFANA_IMAGE_VERSION` | `12.0.0` |
-| `REDIS_STACK_IMAGE_VERSION` | `7.4.2-v3` |
+| `REDIS_IMAGE_VERSION` | `8.6.3` |
+| `REDIS_INSIGHT_IMAGE_VERSION` | `latest` |
 | `MINIO_MC_IMAGE_VERSION` | `RELEASE.2025-04-16T18-13-26Z` |
 
 ### Service ports (default)
@@ -162,7 +163,6 @@ All ports are in the `2xxxx` range to avoid conflicts with common system service
 | `DLH_CLOUDBEAVER_PORT` | `28978` | CloudBeaver |
 | `DLH_REDIS_PORT` | `26379` | Redis |
 | `DLH_REDIS_GUI_PORT` | `25540` | Redis Insight |
-| `DLH_DOCKHAND_PORT` | `23000` | Dockhand |
 
 ### Firewall
 

@@ -151,15 +151,15 @@ seamless cross-platform compatibility.
 
 ### Steps
 
-Redis Insight is **built into** the `redis/redis-stack` image — there is no separate container. Verify the `dlh-redis` container is healthy and the port is mapped:
+Redis Insight is deployed as a separate service `dlh-redis-insight` next to standard Redis 8 (`dlh-redis`). Verify the containers are healthy and the port is mapped:
 
 ```bash
-docker compose ps dlh-redis        # should show port 0.0.0.0:25540->8001/tcp
-docker compose logs dlh-redis --tail 30
+docker compose ps dlh-redis dlh-redis-insight
+docker compose logs dlh-redis-insight --tail 30
 ```
 
-On first visit add a connection:
-- **Host:** `127.0.0.1`
+On first visit, add a connection:
+- **Host:** `dlh-redis` (the container name) or `127.0.0.1` (if connecting from host machine using mapped port `26379`)
 - **Port:** `6379`
 - **Password:** value of `REDIS_PASSWORD` in `.env`
 

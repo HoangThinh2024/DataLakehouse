@@ -23,7 +23,6 @@ OLAP analytics, and business intelligence dashboards — all on a single host.
 | **Cache** | Redis 8 | Shared high-performance cache and queue |
 | **GUI (Redis)** | Redis Insight | Web-based management for Redis (Port 25540) |
 | **SQL IDE** | CloudBeaver | Web-based SQL client |
-| **Docker Mgmt** | Dockhand | Web-based Docker management UI |
 | **Proxy** | Zoraxy | Reverse proxy |
 
 ---
@@ -39,7 +38,6 @@ OLAP analytics, and business intelligence dashboards — all on a single host.
 | Grafana | http://localhost:23001 | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` |
 | Redis Insight | http://localhost:25540 | (configured on first login) |
 | CloudBeaver | http://localhost:28978 | (configured on first login) |
-| Dockhand | http://localhost:23000 | (no auth by default) |
 | PostgreSQL | localhost:25432 | `POSTGRES_USER` / `POSTGRES_PASSWORD` |
 | ClickHouse HTTP | http://localhost:28123 | `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` |
 | Redpanda Kafka | localhost:29092 | (No auth by default) |
@@ -331,17 +329,16 @@ and CRLF line endings. **No manual steps are required.**
 
 ### Redis Insight not accessible
 
-Redis Insight is served by the `dlh-redis` container itself (built into `redis/redis-stack`).
-It is **not** a separate container. If the UI at `http://localhost:25540` is unreachable:
+Redis Insight is served as a separate service `dlh-redis-insight` next to the core database `dlh-redis`. If the UI at `http://localhost:25540` is unreachable:
 
 ```bash
-# Check that dlh-redis is healthy and port 8001 is mapped
-docker compose ps dlh-redis
-docker compose logs dlh-redis --tail 50
+# Check that the containers are healthy and ports are mapped
+docker compose ps dlh-redis dlh-redis-insight
+docker compose logs dlh-redis-insight --tail 50
 ```
 
-On first visit you will be prompted to add a Redis connection. Use:
-- **Host**: `127.0.0.1` (or the container hostname `dlh-redis` from within the stack)
+On first visit, you can add a Redis connection. Use:
+- **Host**: `dlh-redis` (the container name) or `127.0.0.1` (if connecting from the host machine using port `26379`)
 - **Port**: `6379`
 - **Password**: value of `REDIS_PASSWORD` in your `.env`
 

@@ -36,7 +36,6 @@ and business intelligence dashboards — all on a single host.
 | **Cache** | Redis 8 | Shared high-performance cache and queue |
 | **GUI (Redis)** | Redis Insight | Web-based management for Redis |
 | **SQL IDE** | CloudBeaver | Web-based SQL client for PostgreSQL and ClickHouse |
-| **Docker Mgmt** | Dockhand | Lightweight web-based Docker management UI |
 | **Proxy** | Zoraxy | Reverse proxy |
 
 ---
@@ -50,7 +49,6 @@ and business intelligence dashboards — all on a single host.
 | Superset | http://localhost:28088 | `SUPERSET_ADMIN_USER` / `SUPERSET_ADMIN_PASSWORD` |
 | Grafana | http://localhost:23001 | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` |
 | CloudBeaver | http://localhost:28978 | Configured on first login |
-| Dockhand | http://localhost:23000 | No auth by default |
 | Zoraxy | http://localhost:8000 | Configured on first login |
 | PostgreSQL | localhost:25432 | `POSTGRES_USER` / `POSTGRES_PASSWORD` |
 | ClickHouse HTTP | http://localhost:28123 | `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` |

@@ -3,11 +3,11 @@ dbt_lakehouse:
   outputs:
     dev:
       type: clickhouse
-      host: dlh-clickhouse
+      host: "{{ env_var('CLICKHOUSE_HOST', 'dlh-clickhouse') }}"
       port: 8123
-      user: doe
-      password: "Do12345678910.."
-      schema: analytics
+      user: "{{ env_var('CLICKHOUSE_USER') }}"
+      password: "{{ env_var('CLICKHOUSE_PASSWORD') }}"
+      schema: "{{ env_var('CLICKHOUSE_DB', 'analytics') }}"
       secure: False
       verify: False
       connect_timeout: 10
