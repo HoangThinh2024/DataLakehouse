@@ -35,7 +35,6 @@ SUPERSET_PORT = os.getenv("DLH_SUPERSET_PORT", "28088")
 GRAFANA_PORT = os.getenv("DLH_GRAFANA_PORT", "23001")
 REDPANDA_CONSOLE_PORT = os.getenv("DLH_REDPANDA_CONSOLE_PORT", "29080")
 CLOUDBEAVER_PORT = os.getenv("DLH_CLOUDBEAVER_PORT", "28978")
-DOCKHAND_PORT = os.getenv("DLH_DOCKHAND_PORT", "23000")
 
 # Database credentials
 POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
@@ -191,7 +190,6 @@ def main():
         "dlh-redis-insight",
         "dlh-prometheus",
         "dlh-node-exporter",
-        "dlh-dockhand",
         "dlh-cloudbeaver",
         "zoraxy",
     ]
@@ -247,7 +245,6 @@ def main():
         ("Grafana Health", f"http://127.0.0.1:{GRAFANA_PORT}/api/health"),
         ("Redpanda Console UI", f"http://127.0.0.1:{REDPANDA_CONSOLE_PORT}/"),
         ("CloudBeaver Database", f"http://127.0.0.1:{CLOUDBEAVER_PORT}/"),
-        ("Dockhand Docker GUI", f"http://127.0.0.1:{DOCKHAND_PORT}/"),
     ]
 
     for label, url in web_services:

@@ -25,7 +25,7 @@ if [[ -d "${TARGET_DIR}/data" ]]; then
   sudo chown -R 65534:65534 "${TARGET_DIR}/data/prometheus" 2>/dev/null || true
   sudo chown -R 472:0 "${TARGET_DIR}/data/grafana" 2>/dev/null || true
   sudo chown -R 1000:1000 "${TARGET_DIR}/data/superset" 2>/dev/null || true
-  sudo chown -R 0:0 "${TARGET_DIR}/data/dockhand" "${TARGET_DIR}/data/cloudbeaver" 2>/dev/null || true
+  sudo chown -R 0:0 "${TARGET_DIR}/data/cloudbeaver" 2>/dev/null || true
 fi
 
 echo "Restore complete at: ${TARGET_DIR}"

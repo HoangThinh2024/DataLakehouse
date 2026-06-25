@@ -39,7 +39,8 @@ bash scripts/stackctl.sh validate-env
 | `MAGE_IMAGE_VERSION` | Mage image tag | `latest` |
 | `SUPERSET_IMAGE_VERSION` | Superset image tag | `latest` |
 | `GRAFANA_IMAGE_VERSION` | Grafana image tag | `latest` |
-| `REDIS_STACK_IMAGE_VERSION` | Redis Stack image tag | `7.4.2-v3` |
+| `REDIS_IMAGE_VERSION` | Redis server image tag | `8.6.3` |
+| `REDIS_INSIGHT_IMAGE_VERSION` | Redis Insight image tag | `latest` |
 
 ## 2.1 Redpanda (Event Broker)
 
@@ -142,13 +143,7 @@ bash scripts/stackctl.sh validate-env
 |---|---|---|
 | `DLH_CLOUDBEAVER_PORT` | Host port for CloudBeaver web SQL IDE | `28978` |
 
-## 10. Dockhand
-
-| Variable | Description | Example |
-|---|---|---|
-| `DLH_DOCKHAND_PORT` | Host port for Dockhand (Docker Management UI) | `23000` |
-
-## 11. Superset
+## 10. Superset
 
 | Variable | Description | Example |
 |---|---|---|
@@ -163,7 +158,7 @@ bash scripts/stackctl.sh validate-env
 | `SUPERSET_PREFERRED_URL_SCHEME` | URL scheme behind proxy or direct | `http` |
 | `SUPERSET_PIP_REQUIREMENTS` | Extra Python packages installed at Superset startup (must be quoted if multiple packages are listed) | `"psycopg2-binary==2.9.9 clickhouse-connect==0.8.3"` |
 
-## 12. Grafana
+## 11. Grafana
 
 | Variable | Description | Example |
 |---|---|---|
@@ -175,7 +170,7 @@ bash scripts/stackctl.sh validate-env
 | `GRAFANA_ADMIN_PASSWORD` | Grafana admin password | `admin` |
 
 
-## 13. Validation Checklist
+## 12. Validation Checklist
 
 Before deploying, verify:
 

@@ -286,10 +286,10 @@ docker compose exec dlh-redis redis-cli -a "$REDIS_PASSWORD" ping   # expected: 
 
 ### Redis Insight GUI
 
-Redis Insight is built into the `redis/redis-stack` image (no separate container required).
+Redis Insight is deployed as a separate service `dlh-redis-insight` next to the core database container.
 
 Open http://localhost:25540. On first visit, add a connection:
-- **Host:** `127.0.0.1`
+- **Host:** `dlh-redis` (the container name) or `127.0.0.1` (if connecting from host machine using mapped port `26379`)
 - **Port:** `6379`
 - **Password:** value of `REDIS_PASSWORD` in `.env`
 
